@@ -1,0 +1,40 @@
+name: file_sharing
+description: "A new Flutter project."
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  archive: ^4.0.7
+  external_path: ^2.2.0
+  fast_file_picker: ^0.4.6
+  file_selector: ^1.0.3
+  flutter:
+    sdk: flutter
+  flutter_animate: ^4.5.2
+  flutter_m3shapes: ^1.0.0+2
+  heroine: ^0.4.0+1
+  loading_indicator_m3e: ^0.1.1
+  material_new_shapes: ^1.0.0
+  mobile_scanner: ^7.0.1
+  motor: ^1.0.1
+  ns_file_coordinator_util: ^0.25.0
+  open_file: ^3.5.10
+  path_provider: ^2.1.5
+  progress_border: ^0.1.5
+  progress_indicator_m3e: ^0.1.1
+  qr_flutter: ^4.1.0
+  saf_stream: ^0.11.2
+  saf_util: ^0.10.0
+  uri_to_file: ^1.0.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
