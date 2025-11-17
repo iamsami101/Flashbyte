@@ -1,3 +1,2 @@
 # file_sharing
-
-A new Flutter project.
+A simple local file sharing app.
