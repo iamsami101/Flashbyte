@@ -1,10 +1,8 @@
-import 'dart:io';
-
-import 'package:file_sharing/tcp_socket_pages/main_page.dart';
+import 'package:flashbyte/tcp_socket_pages/main_page.dart';
+import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_m3shapes/flutter_m3shapes.dart';
+import 'package:heroine/heroine.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
 
@@ -24,6 +22,7 @@ class MainApp extends StatelessWidget {
         colorSchemeSeed: Colors.green,
       ),
       home: StartPage(),
+      navigatorObservers: [HeroineController()],
     );
   }
 }
@@ -62,7 +61,7 @@ class _StartPageState extends State<StartPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "File\nSharing",
+                          "Flash\nByte",
                           style: TextStyle(
                             fontSize: 50,
                             color: Theme.of(context).colorScheme.primaryFixed,
@@ -74,7 +73,7 @@ class _StartPageState extends State<StartPage> {
                         Padding(
                           padding: const EdgeInsets.only(left: 5),
                           child: Text(
-                            "With TCP Sockets",
+                            "Local file sharing",
                             style: TextStyle(
                               fontSize: 18,
                               color: Theme.of(
@@ -197,13 +196,14 @@ class _StarWidgetState extends State<StarWidget>
       },
       onPanEnd: (details) {
         final v = details.velocity.pixelsPerSecond.dy;
+        final h = details.velocity.pixelsPerSecond.dx;
 
-        if (v >= 3500) {
+        if ((v >= 3500) || (h >= 3500)) {
           final newIndex = (current + 1) % shapeList.length;
           HapticFeedback.vibrate();
           goToShape(newIndex);
         }
-        if (v <= -3500) {
+        if ((v <= -3500) || (h <= -3500)) {
           final newIndex = (current - 1 + shapeList.length) % shapeList.length;
           HapticFeedback.vibrate();
           goToShape(newIndex);

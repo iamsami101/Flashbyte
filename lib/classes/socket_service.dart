@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui';
 
-import 'package:file_sharing/classes/file_send_receive.dart';
+import 'package:flashbyte/classes/file_send_receive.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
 

@@ -10,7 +10,6 @@ import 'package:uri_to_file/uri_to_file.dart';
 import 'package:uuid/uuid.dart';
 
 // iOS/macOS file coordinator for secure file access
-import 'package:ns_file_coordinator_util/ns_file_coordinator_util.dart';
 
 void fileReceiverIsolate(List<Object> args) {
   final toUiSendPort = args[0] as SendPort;
@@ -97,7 +96,6 @@ void fileReceiverIsolate(List<Object> args) {
   }
 
   fromUiReceivePort.listen((message) {
-    // Queue incoming commands to handle them sequentially
     commandQueue.add(message as Map<String, dynamic>);
     processCommandQueue();
   });
@@ -114,9 +112,11 @@ Future<void> _sendFileCommand(
 
   final stopwatch = Stopwatch()..start();
 
+  File? cachedFile;
+
   try {
     if (Platform.isAndroid) {
-      final cachedFile = await toFile(filePath);
+      cachedFile = await toFile(filePath);
       fileStream = cachedFile.openRead();
       final fileStats = await SafUtil().stat(filePath, false);
 
@@ -125,17 +125,7 @@ Future<void> _sendFileCommand(
         'name': fileStats!.name,
         'size': fileStats.length,
       };
-    }
-    // else if (Platform.isIOS || Platform.isMacOS) {
-    //   fileStream = await NsFileCoordinatorUtil().readFileStream(filePath);
-    //   final fileStats = await NsFileCoordinatorUtil().stat(filePath);
-    //   fileHeader = {
-    //     'uuid': Uuid().v4(),
-    //     'name': fileStats!.name,
-    //     'size': fileStats.length,
-    //   };
-    // }
-    else {
+    } else {
       fileStream = File(filePath).openRead();
       final fileStats = await File(filePath).stat();
 
@@ -160,6 +150,7 @@ Future<void> _sendFileCommand(
 
     toUiSendPort.send({
       'status': 'send_start',
+      'fileId': fileHeader['uuid'],
       'fileName': fileHeader['name'],
       'fileSize': fileHeader['size'],
       'filePath': command['filePath'],
@@ -186,6 +177,10 @@ Future<void> _sendFileCommand(
       'fileName': fileHeader['name'],
       'timeTaken': stopwatch.elapsed.inSeconds.toString(),
     });
+
+    try {
+      cachedFile?.delete();
+    } on Exception catch (_) {}
   } catch (e) {
     stopwatch.stop();
     toUiSendPort.send({
@@ -340,13 +335,11 @@ void _handleSocketConnection(Socket socket, SendPort toUiSendPort) {
 }
 
 String _generateUniqueFileName(String directory, String originalFileName) {
-  // Check if file already exists
   final originalFile = File("$directory/$originalFileName");
   if (!originalFile.existsSync()) {
     return originalFileName;
   }
 
-  // Split filename into name and extension
   final lastDotIndex = originalFileName.lastIndexOf('.');
   final name = lastDotIndex > 0
       ? originalFileName.substring(0, lastDotIndex)
@@ -355,7 +348,6 @@ String _generateUniqueFileName(String directory, String originalFileName) {
       ? originalFileName.substring(lastDotIndex)
       : '';
 
-  // Find a unique filename by appending (1), (2), etc.
   int counter = 1;
   while (true) {
     final newFileName = '$name ($counter)$extension';

@@ -6,18 +6,18 @@
     "configurations": [
         
         {
-            "name": "file_sharing",
+            "name": "flashbyte",
             "request": "launch",
             "type": "dart"
         },
         {
-            "name": "file_sharing (profile mode)",
+            "name": "flashbyte (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "file_sharing (release mode)",
+            "name": "flashbyte (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"

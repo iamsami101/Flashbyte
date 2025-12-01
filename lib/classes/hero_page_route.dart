@@ -1,20 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/src/foundation/change_notifier.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:heroine/heroine.dart';
+import 'package:motor/motor.dart';
 
-class HeroDialogRoute extends PageRoute<void> {
-  String heroTag;
-  Widget heroChild;
-  List<Widget>? actions;
+class HeroDialogRoute extends HeroinePageRoute {
+  final String heroTag;
+  final Widget heroChild;
+  final Color? fadeColor;
+  final Alignment? alignment;
+  final double? duration;
   final EdgeInsetsGeometry padding;
 
   HeroDialogRoute({
+    this.duration = .3,
     this.padding = EdgeInsetsGeometry.zero,
-    this.actions,
-    super.settings,
+    this.alignment,
+    this.fadeColor,
     required this.heroTag,
     required this.heroChild,
   });
+
+  @override
+  bool get fullscreenDialog => false;
 
   @override
   Color? get barrierColor => Colors.black.withAlpha(50);
@@ -23,7 +31,7 @@ class HeroDialogRoute extends PageRoute<void> {
   bool get opaque => false;
 
   @override
-  String? get barrierLabel => "Dialog Dismiss Barrier";
+  String? get barrierLabel => "Dialog Dismiss Area";
 
   @override
   Widget buildPage(
@@ -31,29 +39,40 @@ class HeroDialogRoute extends PageRoute<void> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Spacer(),
-        SizedBox(
-          width: MediaQuery.sizeOf(context).width * 0.7,
+    return GestureDetector(
+      onTap: () {
+        if (FocusManager.instance.primaryFocus != null) {
+          FocusManager.instance.primaryFocus!.unfocus();
+          return;
+        }
+        Navigator.pop(context);
+      },
+      child: Align(
+        alignment: alignment ?? Alignment.center,
+        child: Padding(
+          padding: EdgeInsetsGeometry.only(
+            left: padding.horizontal / 2,
+            right: padding.horizontal / 2,
+            top: padding.vertical / 2,
+            bottom:
+                MediaQuery.viewInsetsOf(context).bottom <= padding.vertical / 2
+                ? padding.vertical / 2
+                : MediaQuery.of(context).viewInsets.bottom +
+                      padding.horizontal / 2,
+          ),
           child: DragDismissable(
-            spring: Spring.bouncy,
-            child: Hero(
+            motion: CupertinoMotion.bouncy(),
+            child: Heroine(
+              motion: CupertinoMotion.bouncy(),
               tag: heroTag,
-              flightShuttleBuilder: FadeThroughShuttleBuilder(
-                  fadeColor: Theme.of(context).colorScheme.surface),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: heroChild,
-              ),
+              flightShuttleBuilder: fadeColor == null
+                  ? null
+                  : FadeThroughShuttleBuilder(fadeColor: fadeColor!),
+              child: heroChild,
             ),
           ),
         ),
-        const Spacer(),
-        if (actions != null) ...actions!,
-      ],
+      ),
     );
   }
 
@@ -64,5 +83,17 @@ class HeroDialogRoute extends PageRoute<void> {
   bool get maintainState => true;
 
   @override
-  Duration get transitionDuration => 500.ms;
+  Duration get transitionDuration => Duration(milliseconds: 300);
+
+  @override
+  ValueListenable<Offset> get dismissOffset => throw UnimplementedError();
+
+  @override
+  ValueListenable<double> get dismissProgress => throw UnimplementedError();
+
+  @override
+  void cancelDismiss() {}
+
+  @override
+  void updateDismiss(double progress, Offset offset) {}
 }

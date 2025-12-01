@@ -1,13 +1,11 @@
-// ignore_for_file: unnecessary_null_comparison
-
 import 'dart:async';
 import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
-import 'package:file_sharing/classes/socket_service.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/widgets/transfer_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:motor/motor.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class TcpChatPage extends StatefulWidget {
   const TcpChatPage({super.key});
@@ -19,6 +17,8 @@ class TcpChatPage extends StatefulWidget {
 class _TcpChatPageState extends State<TcpChatPage> {
   final ScrollController scrollController = ScrollController();
   final TextEditingController textFieldController = TextEditingController();
+
+  ValueNotifier<bool> isDisconnected = ValueNotifier(false);
 
   final ValueNotifier<List<TransferWidget>> _fileTransferWidgets =
       ValueNotifier([]);
@@ -47,12 +47,16 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'start':
             if (isSharingInProgress) break;
 
+            print("FILE UID = ${message['fileId']}");
+
             setState(() {
               isSharingInProgress = true;
             });
             addFileWidget(
+              filePath: message['filePath'],
               fileName: message['fileName'],
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
+              uuid: message['fileId'],
               isReceived: true,
             );
             break;
@@ -75,6 +79,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
             });
 
             addFileWidget(
+              filePath: message['filePath'],
+              uuid: message['fileId'],
               fileName: message['fileName'],
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
               isReceived: false,
@@ -93,17 +99,59 @@ class _TcpChatPageState extends State<TcpChatPage> {
             break;
 
           case 'error':
-            if (mounted) {
-              showGeneralDialog(
-                context: context,
-                barrierDismissible: true,
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    AlertDialog(
-                      title: Text('Error'),
-                      content: Text(message['message']),
+            isDisconnected.value = true;
+            showGeneralDialog(
+              context: context,
+              barrierDismissible: true,
+              barrierLabel: "Close Dialog",
+              pageBuilder:
+                  (
+                    context,
+                    animation,
+                    secondaryAnimation,
+                  ) => AlertDialog(
+                    title: Row(
+                      spacing: 10,
+                      children: [
+                        Icon(
+                          Icons.error_rounded,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onErrorContainer,
+                        ),
+                        Text('Error'),
+                      ],
                     ),
-              );
-            }
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 10,
+                      children: [
+                        Text(
+                          "Connection may have been disrupted\n\nError log:",
+                        ),
+                        Card(
+                          margin: EdgeInsets.all(0),
+                          child: Padding(
+                            padding: const EdgeInsets.all(
+                              10,
+                            ),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: 200,
+                              ),
+                              child: SingleChildScrollView(
+                                child: Text(
+                                  message['message'],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            );
             break;
         }
       },
@@ -136,62 +184,106 @@ class _TcpChatPageState extends State<TcpChatPage> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Expanded(
-                  child: ValueListenableBuilder(
-                    valueListenable: _fileTransferWidgets,
-                    builder: (context, widgets, child) => ListView(
-                      reverse: true,
-                      physics: const BouncingScrollPhysics(),
-                      controller: scrollController,
-                      children: widgets.reversed.toList(),
+                  child: ConstrainedBox(
+                    constraints: (Platform.isAndroid || Platform.isIOS)
+                        ? BoxConstraints()
+                        : BoxConstraints(maxWidth: 500),
+                    child: ValueListenableBuilder(
+                      valueListenable: _fileTransferWidgets,
+                      builder: (context, widgets, child) => ListView(
+                        reverse: true,
+                        physics: const BouncingScrollPhysics(),
+                        controller: scrollController,
+                        padding: EdgeInsets.only(bottom: 15),
+                        children: widgets.isEmpty
+                            ? [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 20,
+                                    horizontal: 20,
+                                  ),
+                                  child: Card(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(20),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        spacing: 10,
+                                        children: [
+                                          Icon(
+                                            Icons.error_outline_rounded,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.inverseSurface,
+                                          ),
+                                          Text("No files sent yet."),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ]
+                            : widgets.reversed.toList(),
+                      ),
                     ),
                   ),
                 ),
                 const Divider(height: 0),
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Card.outlined(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: isSharingInProgress == true
-                                ? null
-                                : () async {
-                                    final pickedFile =
-                                        await FastFilePicker.pickFile();
-                                    print(pickedFile?.path ?? "null");
-                                    if (pickedFile == null) {
-                                      return;
-                                    }
-                                    if (Platform.isAndroid &&
-                                        pickedFile.uri != null) {
-                                      SocketService.instance.sendFile(
-                                        pickedFile.uri!,
-                                      );
-                                    } else {
-                                      SocketService.instance.sendFile(
-                                        pickedFile.path!,
-                                      );
-                                    }
-                                  },
-                            child: Padding(
-                              padding: EdgeInsets.all(17),
-                              child: IntrinsicHeight(
-                                child: Row(
-                                  spacing: 10,
-                                  children: [
-                                    Icon(Icons.file_present_rounded),
-                                    Text("Pick File"),
-                                  ],
+                ConstrainedBox(
+                  constraints: (Platform.isAndroid || Platform.isIOS)
+                      ? BoxConstraints()
+                      : BoxConstraints(maxWidth: 500),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Card.outlined(
+                            child: ValueListenableBuilder(
+                              valueListenable: isDisconnected,
+                              builder: (context, value, child) => InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: value == true
+                                    ? null
+                                    : isSharingInProgress == true
+                                    ? null
+                                    : () async {
+                                        final pickedFile =
+                                            await FastFilePicker.pickFile();
+                                        print(pickedFile?.path ?? "null");
+                                        if (pickedFile == null) {
+                                          return;
+                                        }
+                                        if (Platform.isAndroid &&
+                                            pickedFile.uri != null) {
+                                          SocketService.instance.sendFile(
+                                            pickedFile.uri!,
+                                          );
+                                        } else {
+                                          SocketService.instance.sendFile(
+                                            pickedFile.path!,
+                                          );
+                                        }
+                                      },
+                                child: Padding(
+                                  padding: EdgeInsets.all(17),
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      spacing: 10,
+                                      children: [
+                                        Icon(Icons.file_present_rounded),
+                                        Text("Pick File"),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -203,30 +295,28 @@ class _TcpChatPageState extends State<TcpChatPage> {
   }
 
   void showScaffoldSnackbar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    }
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        dismissDirection: DismissDirection.horizontal,
+      ),
+    );
   }
 
   void _scrollToBottom() {
     if (scrollController.hasClients) {
-      scrollController.animateTo(
-        scrollController.position.minScrollExtent,
-        duration: const Duration(milliseconds: 1000),
-        curve: Curves.easeOutCirc,
+      Future.delayed(500.ms).then(
+        (value) {
+          scrollController.animateTo(
+            scrollController.position.minScrollExtent,
+            duration: const Duration(milliseconds: 1000),
+            curve: Curves.easeOutCirc,
+          );
+        },
       );
-    }
-  }
-
-  String _formatSpeed(double bytesPerSecond) {
-    if (bytesPerSecond < 1024) {
-      return '${bytesPerSecond.toStringAsFixed(0)} B';
-    } else if (bytesPerSecond < 1024 * 1024) {
-      return '${(bytesPerSecond / 1024).toStringAsFixed(1)} KB';
-    } else {
-      return '${(bytesPerSecond / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
   }
 
@@ -239,27 +329,33 @@ class _TcpChatPageState extends State<TcpChatPage> {
     _fileTransferWidgets.value = [
       ...tempList,
       TransferWidget(
+        filePath: lastWidget.filePath,
         fileName: lastWidget.fileName,
         fileSize: lastWidget.fileSize,
         isReceived: lastWidget.isReceived,
+        uuid: lastWidget.uuid,
         value: null,
       ),
     ];
   }
 
   void addFileWidget({
+    required String uuid,
     required String fileName,
     required String fileSize,
+    required String filePath,
     required bool isReceived,
   }) {
     _scrollToBottom();
     _fileTransferWidgets.value = [
       ..._fileTransferWidgets.value,
       TransferWidget(
+        filePath: filePath,
         fileName: fileName,
         fileSize: fileSize,
         value: _fileProgress,
         isReceived: isReceived,
+        uuid: uuid,
       ),
     ];
   }
@@ -288,124 +384,5 @@ class _TcpChatPageState extends State<TcpChatPage> {
     }
 
     return formatted;
-  }
-}
-
-class TransferWidget extends StatelessWidget {
-  final String fileName;
-  final String fileSize;
-
-  final bool isReceived;
-
-  final ValueListenable<double>? value;
-
-  const TransferWidget({
-    super.key,
-    required this.fileName,
-    required this.fileSize,
-    this.isReceived = true,
-    this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 5,
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.symmetric(
-              vertical: 10,
-              horizontal: 20,
-            ),
-            leading: SizedBox(
-              height: double.infinity,
-              child: FittedBox(child: Icon(Icons.file_copy)),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: BouncingScrollPhysics(),
-                    scrollDirection: Axis.horizontal,
-                    child: Text(
-                      fileName,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                    ),
-                  ),
-                ),
-                SizedBox(width: 10),
-                Row(
-                  spacing: 5,
-                  children: [
-                    Icon(
-                      isReceived
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
-                      fontWeight: FontWeight.w900,
-                      size: 15,
-                      color: Colors.white.withAlpha(100),
-                    ),
-                    Text(
-                      isReceived ? "Received" : "Sent",
-                      style: Theme.of(context).textTheme.labelSmall!.copyWith(
-                        color: Colors.white.withAlpha(100),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            subtitle: value == null
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 10,
-                    children: [
-                      Text(
-                        "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
-                      ),
-                      LinearProgressIndicator(
-                        value: 1,
-                        year2023: false,
-                        stopIndicatorRadius: 1,
-                        stopIndicatorColor: Theme.of(
-                          context,
-                        ).colorScheme.secondary,
-                      ),
-                    ],
-                  )
-                : ValueListenableBuilder(
-                    valueListenable: value!,
-                    builder: (context, pvalue, child) => SingleMotionBuilder(
-                      value: pvalue,
-                      motion: MaterialSpringMotion.expressiveEffectsDefault(),
-                      builder: (context, value, child) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: 10,
-                        children: [
-                          Text(
-                            "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
-                          ),
-                          LinearProgressIndicator(
-                            value: value,
-                            year2023: false,
-                            stopIndicatorRadius: 1,
-                            stopIndicatorColor: Theme.of(
-                              context,
-                            ).colorScheme.secondary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-            dense: true,
-          ),
-        ],
-      ),
-    );
   }
 }

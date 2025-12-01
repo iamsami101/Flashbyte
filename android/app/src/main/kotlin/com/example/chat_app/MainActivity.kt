@@ -1,4 +1,4 @@
-package com.example.file_sharing
+package com.example.flashbyte
 
 import io.flutter.embedding.android.FlutterActivity
 

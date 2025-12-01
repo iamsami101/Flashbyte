@@ -1,4 +1,4 @@
-import 'package:file_sharing/classes/hero_page_route.dart';
+import 'package:flashbyte/classes/hero_page_route.dart';
 import 'package:flutter/material.dart';
 
 void showHeroDialog({
@@ -13,7 +13,6 @@ void showHeroDialog({
     HeroDialogRoute(
       padding: padding,
       heroTag: tag,
-      actions: actions,
       heroChild: child,
     ),
   );

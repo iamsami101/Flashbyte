@@ -15,8 +15,6 @@ PODS:
   - ns_file_coordinator_util (0.0.1):
     - Flutter
     - FlutterMacOS
-  - open_file_mac (0.0.1):
-    - FlutterMacOS
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -29,7 +27,6 @@ DEPENDENCIES:
   - macos_file_picker (from `Flutter/ephemeral/.symlinks/plugins/macos_file_picker/macos`)
   - mobile_scanner (from `Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin`)
   - ns_file_coordinator_util (from `Flutter/ephemeral/.symlinks/plugins/ns_file_coordinator_util/darwin`)
-  - open_file_mac (from `Flutter/ephemeral/.symlinks/plugins/open_file_mac/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
 
 EXTERNAL SOURCES:
@@ -47,8 +44,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin
   ns_file_coordinator_util:
     :path: Flutter/ephemeral/.symlinks/plugins/ns_file_coordinator_util/darwin
-  open_file_mac:
-    :path: Flutter/ephemeral/.symlinks/plugins/open_file_mac/macos
   path_provider_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
 
@@ -60,7 +55,6 @@ SPEC CHECKSUMS:
   macos_file_picker: 5caffd98b04c0d9b378c27bbc487f91c21b0cdf8
   mobile_scanner: 77265f3dc8d580810e91849d4a0811a90467ed5e
   ns_file_coordinator_util: 51e968b13b70b05b8cde050d0ef1d9100bde1808
-  open_file_mac: 0e554648e2a87ce59e9438e3e5ca3e552e90d89a
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
 
 PODFILE CHECKSUM: 346bfb2deb41d4a6ebd6f6799f92188bde2d246f

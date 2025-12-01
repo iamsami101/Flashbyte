@@ -1,2 +1,2 @@
-# file_sharing
+# flashbyte
 A simple local file sharing app.

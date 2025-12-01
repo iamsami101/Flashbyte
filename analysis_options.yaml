@@ -5,3 +5,4 @@ formatter:
 analyzer:
   errors:
     avoid_print: ignore
+    deprecated_member_use: ignore

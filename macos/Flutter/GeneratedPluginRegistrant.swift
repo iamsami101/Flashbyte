@@ -11,7 +11,6 @@ import file_selector_macos
 import macos_file_picker
 import mobile_scanner
 import ns_file_coordinator_util
-import open_file_mac
 import path_provider_foundation
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
@@ -21,6 +20,5 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   MacosFilePickerPlugin.register(with: registry.registrar(forPlugin: "MacosFilePickerPlugin"))
   MobileScannerPlugin.register(with: registry.registrar(forPlugin: "MobileScannerPlugin"))
   NsFileCoordinatorUtilPlugin.register(with: registry.registrar(forPlugin: "NsFileCoordinatorUtilPlugin"))
-  OpenFilePlugin.register(with: registry.registrar(forPlugin: "OpenFilePlugin"))
   PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
 }

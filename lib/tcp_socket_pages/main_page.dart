@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_sharing/classes/socket_service.dart';
-import 'package:file_sharing/tcp_socket_pages/qr_code_scan.dart';
-import 'package:file_sharing/tcp_socket_pages/tcp_chat_page.dart';
+import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
+import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
@@ -104,8 +104,11 @@ class _TcpSocketsState extends State<TcpSockets> {
           ),
           body: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: SizedBox.expand(
-              child: Center(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: (Platform.isAndroid || Platform.isIOS)
+                    ? BoxConstraints()
+                    : BoxConstraints(maxWidth: 500),
                 child: SingleChildScrollView(
                   child: Column(
                     spacing: 20,
@@ -136,7 +139,9 @@ class _TcpSocketsState extends State<TcpSockets> {
                                               )
                                             : QrImageView(
                                                 data: ipAddress!,
-                                                padding: EdgeInsets.all(20),
+                                                padding: EdgeInsets.all(
+                                                  20,
+                                                ),
                                                 backgroundColor: Colors.white,
                                               ),
                                       );
@@ -150,7 +155,9 @@ class _TcpSocketsState extends State<TcpSockets> {
                                               ? Divider()
                                               : QrImageView(
                                                   data: ipAddress!,
-                                                  padding: EdgeInsets.all(20),
+                                                  padding: EdgeInsets.all(
+                                                    20,
+                                                  ),
                                                   backgroundColor: Colors.white,
                                                 ),
                                         ),
@@ -203,10 +210,17 @@ class _TcpSocketsState extends State<TcpSockets> {
                                     MaterialPageRoute(
                                       builder: (context) => QrCodeScanPage(
                                         onScanned: (value) {
-                                          Navigator.pop(context);
-                                          SocketService.instance.connectToHost(
-                                            value,
-                                          );
+                                          try {
+                                            Navigator.pop(context);
+                                            SocketService.instance
+                                                .connectToHost(
+                                                  value,
+                                                );
+                                          } on Exception catch (_) {
+                                            showScaffoldSnackbar(
+                                              "Error connecting to user",
+                                            );
+                                          }
                                         },
                                       ),
                                     ),
@@ -232,12 +246,17 @@ class _TcpSocketsState extends State<TcpSockets> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () {
-                              if (controller.text.isNotEmpty) {
-                                SocketService.instance.connectToHost(
-                                  controller.text,
-                                );
-                              } else {
+                              final ip = controller.text;
+                              if (ip.isEmpty) {
                                 showScaffoldSnackbar("IP can't be empty");
+                                return;
+                              }
+                              try {
+                                SocketService.instance.connectToHost(ip);
+                              } on Exception catch (_) {
+                                showScaffoldSnackbar(
+                                  "Error connecting to user",
+                                );
                               }
                             },
                             child: Padding(
@@ -259,6 +278,7 @@ class _TcpSocketsState extends State<TcpSockets> {
   }
 
   void showScaffoldSnackbar(String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
