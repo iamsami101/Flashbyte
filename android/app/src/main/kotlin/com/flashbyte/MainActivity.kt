@@ -1,4 +1,4 @@
-package com.example.flashbyte
+package com.flashbyte
 
 import io.flutter.embedding.android.FlutterActivity
 

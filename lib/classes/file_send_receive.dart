@@ -9,8 +9,6 @@ import 'package:saf_util/saf_util.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 import 'package:uuid/uuid.dart';
 
-// iOS/macOS file coordinator for secure file access
-
 void fileReceiverIsolate(List<Object> args) {
   final toUiSendPort = args[0] as SendPort;
   final RootIsolateToken rootIsolateToken = args[1] as RootIsolateToken;
@@ -23,7 +21,6 @@ void fileReceiverIsolate(List<Object> args) {
   Socket? clientSocket;
   ServerSocket? serverSocket;
 
-  // Queue for handling concurrent file sends properly
   final List<Map<String, dynamic>> commandQueue = [];
   bool isProcessing = false;
 
@@ -144,7 +141,6 @@ Future<void> _sendFileCommand(
     clientSocket.add(lengthHeaderBytes.buffer.asUint8List());
     clientSocket.add(metadataBytes);
 
-    // Stream file with progress tracking
     int bytesSent = 0;
     final totalBytes = fileHeader['size'] as int;
 
@@ -160,7 +156,6 @@ Future<void> _sendFileCommand(
       clientSocket.add(chunk);
       bytesSent += chunk.length;
 
-      // Send progress update
       final progress = (bytesSent / totalBytes).clamp(0.0, 1.0);
 
       toUiSendPort.send({
@@ -238,7 +233,7 @@ void _handleSocketConnection(Socket socket, SendPort toUiSendPort) {
           }
         } catch (_) {}
         final String tempDirectory;
-        if (Platform.isAndroid || Platform.isIOS) {
+        if (Platform.isAndroid) {
           tempDirectory = await ExternalPath.getExternalStoragePublicDirectory(
             ExternalPath.DIRECTORY_DOWNLOAD,
           );

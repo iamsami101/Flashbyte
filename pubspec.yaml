@@ -19,7 +19,6 @@ dependencies:
   mime: ^2.0.0
   mobile_scanner: ^7.0.1
   motor: ^1.0.1
-  ns_file_coordinator_util: ^0.25.0
   open_filex: ^4.7.0
   path_provider: ^2.1.5
   process_run: ^1.2.4

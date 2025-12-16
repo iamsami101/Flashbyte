@@ -279,9 +279,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   }
 
   Future<void> openFile(String filePath) async {
-    print(filePath);
     final result = await OpenFilex.open(filePath);
-    print(result.message);
 
     switch (result.type) {
       case ResultType.error:

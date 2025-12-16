@@ -36,8 +36,6 @@ class _TcpChatPageState extends State<TcpChatPage> {
       (message) {
         final status = message['status'] ?? message['command'];
 
-        print(status);
-
         switch (status) {
           case 'disconnect':
             if (!mounted) return;

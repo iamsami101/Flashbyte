@@ -1,5 +1,4 @@
 import 'package:flashbyte/tcp_socket_pages/main_page.dart';
-import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:heroine/heroine.dart';
@@ -198,12 +197,14 @@ class _StarWidgetState extends State<StarWidget>
         final v = details.velocity.pixelsPerSecond.dy;
         final h = details.velocity.pixelsPerSecond.dx;
 
-        if ((v >= 3500) || (h >= 3500)) {
+        final isSpun = ((v + h) / 3500) >= 1;
+        final isSpunReverse = ((v + h) / 3500) <= -1;
+
+        if (isSpun) {
           final newIndex = (current + 1) % shapeList.length;
           HapticFeedback.vibrate();
           goToShape(newIndex);
-        }
-        if ((v <= -3500) || (h <= -3500)) {
+        } else if (isSpunReverse) {
           final newIndex = (current - 1 + shapeList.length) % shapeList.length;
           HapticFeedback.vibrate();
           goToShape(newIndex);
