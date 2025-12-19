@@ -1,7 +1,7 @@
 <div align="center">
     <img src="./media/app_icon.png" alt="Flashbyte Logo" width="200" height="200"/>
     <h1>⚡ Flashbyte</h1>
-    <h3>A Simple, local and fast file sharing app.</h3>
+    <h3>A Simple and fast local file sharing app.</h3>
 </div>
 
 
@@ -11,6 +11,7 @@
 - Does not use an external server (No internet required!!)
 - Transfer files to any device on your local network.
 - Open source & no data is collected!
+- Made with [Flutter](https://flutter.dev/)!
 
 
 ### How does this work?
