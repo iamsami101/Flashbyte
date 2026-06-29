@@ -86,6 +86,63 @@ class _TcpSocketsState extends State<TcpSockets> {
               ),
             );
             break;
+          case 'error':
+            showGeneralDialog(
+              context: context,
+              barrierDismissible: true,
+              barrierLabel: "Close Dialog",
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  AlertDialog(
+                title: Row(
+                  spacing: 10,
+                  children: [
+                    Icon(
+                      Icons.error_rounded,
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                    Text('Connection Error'),
+                  ],
+                ),
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 10,
+                  children: [
+                    Text(
+                      "Failed to establish connection.\n\nError log:",
+                    ),
+                    Card(
+                      margin: EdgeInsets.all(0),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: 200),
+                          child: SingleChildScrollView(
+                            child: Text(message['message'] ?? 'Unknown error'),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.pop(context),
+                          child: Padding(
+                            padding: const EdgeInsets.all(13),
+                            child: Center(child: Text("Dismiss")),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+            break;
         }
       },
     );
