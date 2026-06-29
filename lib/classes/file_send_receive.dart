@@ -92,8 +92,13 @@ void fileReceiverIsolate(List<Object> args) {
               (socket) {
                 savedClientSocket = socket;
                 clientSocket = socket;
-                toUiSendPort.send({'status': 'client_connected'});
-                _handleSocketConnection(savedClientSocket, toUiSendPort);
+                if (useTLS) {
+                  // TLS handshake already verified the client — notify UI immediately
+                  toUiSendPort.send({'status': 'client_connected'});
+                }
+                // Non-TLS servers wait for probe before sending client_connected
+                _handleSocketConnection(savedClientSocket, toUiSendPort,
+                    waitForProbe: !useTLS);
               },
               onError: (error) {
                 print('[SERVER_TLS] listen error: $error');
@@ -128,8 +133,6 @@ void fileReceiverIsolate(List<Object> args) {
               dynamic finalSocket;
               
               if (useTLS) {
-                // TLS: connect via plain Socket then upgrade with SecureSocket.
-                // The TLS handshake itself validates the server — no probe needed.
                 final rawSocket = await Socket.connect(command['host'], command['port']);
                 finalSocket = await SecureSocket.secure(
                   rawSocket,
@@ -137,8 +140,12 @@ void fileReceiverIsolate(List<Object> args) {
                   context: securityContext,
                 );
                 print('[CLIENT_TLS] connected successfully');
+                clientSocket = finalSocket;
+                toUiSendPort.send({'status': 'connected_to_host'});
+                _handleSocketConnection(clientSocket!, toUiSendPort);
               } else {
-                // Non-TLS: send a probe to verify the server also has TLS OFF.
+                // Non-TLS: send probe, then hand off to _handleSocketConnection
+                // which handles both the probe response and subsequent file transfers
                 finalSocket = await Socket.connect(command['host'], command['port']);
                 final probeMsg = jsonEncode({'type': 'probe', 'tls': false});
                 final probeBytes = utf8.encode(probeMsg);
@@ -148,20 +155,11 @@ void fileReceiverIsolate(List<Object> args) {
                 finalSocket.add(header.buffer.asUint8List());
                 finalSocket.add(probeBytes);
 
-                final resp = await _readProbeResponse(finalSocket);
-                if (resp['ok'] != true) {
-                  finalSocket.destroy();
-                  toUiSendPort.send({
-                    'status': 'error', 'fatal': 'true',
-                    'message': resp['error'] ?? 'Connection rejected',
-                  });
-                  return;
-                }
+                clientSocket = finalSocket;
+                // _handleSocketConnection will process the probe response as the
+                // first incoming message and send 'connected_to_host' when verified
+                _handleSocketConnection(clientSocket!, toUiSendPort, waitForProbe: true);
               }
-
-              clientSocket = finalSocket;
-              toUiSendPort.send({'status': 'connected_to_host'});
-              _handleSocketConnection(clientSocket!, toUiSendPort);
             } catch (e) {
               print('[CLIENT_TLS] connect error: $e');
               toUiSendPort.send({
@@ -304,52 +302,9 @@ Future<void> _sendFileCommand(
 
 
 
-// ---------- TLS probe helpers ----------
-
-Future<Map<String, dynamic>> _readProbeResponse(dynamic socket) async {
-  final completer = Completer<Map<String, dynamic>>();
-  final buffer = <int>[];
-  StreamSubscription? sub;
-
-  sub = socket.listen(
-    (data) {
-      buffer.addAll(data);
-      if (buffer.length >= 8 && !completer.isCompleted) {
-        final headerBytes = Uint8List.fromList(buffer.sublist(0, 8));
-        final headerData = ByteData.sublistView(headerBytes);
-        final jsonLen = headerData.getUint32(0, Endian.big);
-        final total = 8 + jsonLen;
-        if (buffer.length >= total) {
-          sub?.cancel();
-          final jsonStr = utf8.decode(buffer.sublist(8, total));
-          try {
-            completer.complete(jsonDecode(jsonStr) as Map<String, dynamic>);
-          } catch (e) {
-            completer.completeError(Exception('Invalid probe response: $e'));
-          }
-        }
-      }
-    },
-    onError: (e) {
-      sub?.cancel();
-      if (!completer.isCompleted) completer.completeError(e);
-    },
-    onDone: () {
-      sub?.cancel();
-      if (!completer.isCompleted) {
-        completer.completeError(Exception('Connection closed during probe'));
-      }
-    },
-  );
-
-  return completer.future;
-}
-
-void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
+void _handleSocketConnection(dynamic socket, SendPort toUiSendPort,
+    {bool waitForProbe = false}) {
   List<int> buffer = [];
-
-  // List<int> cachedChunks = [];
-  // const int chunkSize = 512 * 1024;
 
   int? headerLength;
   int? fileBytesLength;
@@ -361,6 +316,7 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
   final Stopwatch stopwatch = Stopwatch();
 
   Map<String, dynamic>? headerJson;
+  bool probeHandled = !waitForProbe;
 
   socket.listen(
     (data) async {
@@ -370,6 +326,7 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
       // Extracting the 8 Bytes Header
 
       if (headerLength == null || fileBytesLength == null) {
+        if (buffer.length < 8) return;
         final first8BytesInt = Uint8List.fromList(buffer.sublist(0, 8));
         final first8ByteData = ByteData.sublistView(first8BytesInt);
 
@@ -382,22 +339,35 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
       // Extracting the header JSON
 
       if (headerJson == null && buffer.length >= headerLength!) {
-        headerJson = jsonDecode(utf8.decode(buffer.sublist(0, headerLength)));
+        final jsonStr = utf8.decode(buffer.sublist(0, headerLength!));
+        buffer.removeRange(0, headerLength!);
+        headerJson = jsonDecode(jsonStr) as Map<String, dynamic>;
 
-        // Handle probe / disconnect meta-messages
-        try {
-          final j = headerJson!;
-          final type = j['type'] as String?;
-          if (type == 'disconnect') {
+        // Probe handling (first message when waitForProbe is true)
+        if (!probeHandled) {
+          probeHandled = true;
+          // Probe response (client side): has 'ok' field, no 'type'
+          final ok = headerJson!['ok'];
+          if (ok != null) {
+            if (ok == true) {
+              toUiSendPort.send({'status': 'connected_to_host'});
+              headerLength = null;
+              fileBytesLength = null;
+              headerJson = null;
+              return;
+            }
             socket.destroy();
-            toUiSendPort.send({'command': 'disconnect'});
+            toUiSendPort.send({
+              'status': 'error', 'fatal': 'true',
+              'message': headerJson!['error'] as String? ?? 'Connection rejected',
+            });
             return;
           }
-          if (type == 'probe') {
-            final clientWantsTls = j['tls'] == true;
+          // Probe request (server side): has 'type' = 'probe'
+          if (headerJson!['type'] == 'probe') {
+            final clientWantsTls = headerJson!['tls'] == true;
             Map<String, dynamic> resp;
             if (clientWantsTls) {
-              // Client wants TLS but server is non-TLS
               resp = {'ok': false, 'error': 'TLS mismatch: server does not use TLS, client has TLS enabled'};
             } else {
               resp = {'ok': true, 'tls': false};
@@ -417,14 +387,24 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
               });
               return;
             }
-            // Match — reset state for real file transfer messages
+            // Match — notify UI and reset for file transfers
+            toUiSendPort.send({'status': 'client_connected'});
             headerLength = null;
             fileBytesLength = null;
             headerJson = null;
             buffer.clear();
             return;
           }
-        } catch (_) {}
+        }
+
+        // disconnect handling
+        if (headerJson!['type'] == 'disconnect') {
+          socket.destroy();
+          toUiSendPort.send({'command': 'disconnect'});
+          return;
+        }
+
+        // ——— file transfer metadata ———
         final String tempDirectory;
         if (Platform.isAndroid) {
           tempDirectory = await ExternalPath.getExternalStoragePublicDirectory(
@@ -509,6 +489,12 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
       }
     },
     onDone: () {
+      if (!probeHandled) {
+        toUiSendPort.send({
+          'status': 'error', 'fatal': 'true',
+          'message': 'Connection closed. Ensure both devices have the same TLS setting.',
+        });
+      }
       socket.destroy();
     },
     onError: (e) {
