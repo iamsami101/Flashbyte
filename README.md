@@ -21,10 +21,9 @@ You can try out Flashbyte on the following platforms:
 
 | Platform | Status         | Download                                                                                     |
 |----------|----------------|----------------------------------------------------------------------------------------------|
-| Android  | Supported      | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v0.1.0/Flashbyte.0.1.0.apk) |
-| MacOS    | Supported      | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v0.1.0/Flashbyte.0.1.0.dmg) |
+| Android  | Supported      | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/Flashbyte.2.0.0.apk) |
+| Linux    | Supported      | [AppImage](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/Flashbyte.2.0.0.AppImage) |
 | iOS      | In development | N/A                                                                                          |
-| Linux    | In development | N/A                                                                                          |
 | Windows  | In development | N/A                                                                                          |
 
 If you find any bugs or issues or want to recommend any features, feel free to open an issue on github.
