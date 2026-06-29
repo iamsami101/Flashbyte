@@ -6,7 +6,7 @@ import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:process_run/process_run.dart';
-import 'package:uri_to_file/uri_to_file.dart';
+// import 'package:uri_to_file/uri_to_file.dart'; // Temporarily removed
 import 'package:widget_zoom/widget_zoom.dart';
 
 class FilePreviewWidget extends StatefulWidget {
@@ -65,7 +65,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     File file;
 
     if (widget.filePath.contains("://") && Platform.isAndroid) {
-      file = await toFile(widget.filePath);
+      file = File(widget.filePath);
       previewFileIsTemp = true; // mark as temp
     } else {
       file = File(widget.filePath);

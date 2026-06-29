@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
-import 'package:uri_to_file/uri_to_file.dart';
+// import 'package:uri_to_file/uri_to_file.dart'; // Temporarily removed
 import 'package:uuid/uuid.dart';
 
 void fileReceiverIsolate(List<Object> args) {
@@ -186,7 +186,8 @@ Future<void> _sendFileCommand(
 
   try {
     if (Platform.isAndroid) {
-      cachedFile = await toFile(filePath);
+      // Use File directly instead of uri_to_file
+      cachedFile = File(filePath);
       fileStream = cachedFile.openRead();
       final fileStats = await SafUtil().stat(filePath, false);
 
