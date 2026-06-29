@@ -19,8 +19,8 @@ void fileReceiverIsolate(List<Object> args) {
   final fromUiReceivePort = ReceivePort();
   toUiSendPort.send(fromUiReceivePort.sendPort);
 
-  SecureSocket? clientSocket;
-  SecureServerSocket? serverSocket;
+  dynamic clientSocket;
+  dynamic serverSocket;
 
   final List<Map<String, dynamic>> commandQueue = [];
   bool isProcessing = false;
