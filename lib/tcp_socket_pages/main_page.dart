@@ -79,7 +79,9 @@ class _TcpSocketsState extends State<TcpSockets> {
         switch (status) {
           case 'client_connected':
           case 'connected_to_host':
-            _isConnecting = false;
+            setState(() {
+              _isConnecting = false;
+            });
             Navigator.push(
               context,
               PageRouteBuilder(
@@ -89,7 +91,9 @@ class _TcpSocketsState extends State<TcpSockets> {
             );
             break;
           case 'error':
-            _isConnecting = false;
+            setState(() {
+              _isConnecting = false;
+            });
             showGeneralDialog(
               context: context,
               barrierDismissible: true,
