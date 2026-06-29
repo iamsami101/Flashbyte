@@ -65,8 +65,22 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     File file;
 
     if (widget.filePath.contains("://") && Platform.isAndroid) {
-      file = File(widget.filePath);
-      previewFileIsTemp = true; // mark as temp
+      // Handle content URIs for Android
+      if (widget.filePath.startsWith('content://')) {
+        try {
+          // Use SAF utility to resolve content URI
+          final resolvedPath = await SafUtil().getRealPathFromUri(widget.filePath);
+          file = File(resolvedPath);
+          previewFileIsTemp = false; // resolved file should not be deleted
+        } catch (e) {
+          // Fallback to original path if resolution fails
+          file = File(widget.filePath);
+          previewFileIsTemp = true; // mark as temp
+        }
+      } else {
+        file = File(widget.filePath);
+        previewFileIsTemp = true; // mark as temp
+      }
     } else {
       file = File(widget.filePath);
       previewFileIsTemp = false; // don't delete real files

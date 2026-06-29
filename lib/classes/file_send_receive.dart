@@ -186,10 +186,37 @@ Future<void> _sendFileCommand(
 
   try {
     if (Platform.isAndroid) {
-      // Use File directly instead of uri_to_file
-      cachedFile = File(filePath);
-      fileStream = cachedFile.openRead();
-      final fileStats = await SafUtil().stat(filePath, false);
+      // Handle content URIs for Android
+      if (filePath.startsWith('content://')) {
+        // For content URIs, we need to resolve them to actual file paths
+        try {
+          // Use SAF utility to resolve content URI
+          final resolvedPath = await SafUtil().getRealPathFromUri(filePath);
+          cachedFile = File(resolvedPath);
+          fileStream = cachedFile.openRead();
+          final fileStats = await SafUtil().stat(filePath, false);
+          
+          fileHeader = {
+            'uuid': Uuid().v4(),
+            'name': fileStats!.name,
+            'size': fileStats.length,
+          };
+        } catch (e) {
+          throw Exception('Failed to resolve content URI: ${e.toString()}');
+        }
+      } else {
+        // Regular file path
+        cachedFile = File(filePath);
+        fileStream = cachedFile.openRead();
+        final fileStats = await SafUtil().stat(filePath, false);
+
+        fileHeader = {
+          'uuid': Uuid().v4(),
+          'name': fileStats!.name,
+          'size': fileStats.length,
+        };
+      }
+    } else {
 
       fileHeader = {
         'uuid': Uuid().v4(),
