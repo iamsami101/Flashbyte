@@ -229,13 +229,6 @@ Future<void> _sendFileCommand(
         };
       }
     } else {
-
-      fileHeader = {
-        'uuid': Uuid().v4(),
-        'name': fileStats!.name,
-        'size': fileStats.length,
-      };
-    } else {
       fileStream = File(filePath).openRead();
       final fileStats = await File(filePath).stat();
 
