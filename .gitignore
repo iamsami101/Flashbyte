@@ -7,6 +7,10 @@
 .buildlog/
 .history
 
+# TLS private keys (generated locally, never committed)
+certificates/server.key
+assets/certificates/server.key
+
 
 
 # Flutter repo-specific
