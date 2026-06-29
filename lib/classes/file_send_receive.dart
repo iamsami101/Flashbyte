@@ -51,7 +51,7 @@ void fileReceiverIsolate(List<Object> args) {
             serverSocket = await SecureServerSocket.bind(
               "0.0.0.0",
               command['port'],
-              securityContext: securityContext,
+              securityContext,
               shared: true,
             );
             toUiSendPort.send({
@@ -59,28 +59,14 @@ void fileReceiverIsolate(List<Object> args) {
               'address': serverSocket!.address.address,
             });
             serverSocket!.listen((socket) {
-              clientSocket = socket as SecureSocket;
+              clientSocket = socket;
               toUiSendPort.send({'status': 'client_connected'});
               _handleSocketConnection(clientSocket!, toUiSendPort);
             });
           } else if (command['mode'] == 'client') {
-            final securityContext = SecurityContext(withTrustedRoots: false);
-            try {
-              securityContext.useCertificateChain('certificates/server.crt');
-              securityContext.usePrivateKey('certificates/server.key');
-            } catch (e) {
-              toUiSendPort.send({
-                'status': 'error',
-                'fatal': 'true',
-                'message': 'Failed to load certificate: ${e.toString()}',
-              });
-              return;
-            }
-            
             clientSocket = await SecureSocket.connect(
               command['host'],
               command['port'],
-              securityContext: securityContext,
             );
             toUiSendPort.send({'status': 'connected_to_host'});
             _handleSocketConnection(clientSocket!, toUiSendPort);
@@ -215,17 +201,7 @@ Future<void> _sendFileCommand(
   }
 }
 
-Future<List<String>> _loadCertificateChain() async {
-  // Load the certificate and key files
-  try {
-    final certificate = await File('certificates/server.crt').readAsString();
-    final key = await File('certificates/server.key').readAsString();
-    return [certificate, key];
-  } catch (e) {
-    // Fallback to self-signed certificate if files don't exist
-    return [];
-  }
-}
+
 
 void _handleSocketConnection(Socket socket, SendPort toUiSendPort) {
   List<int> buffer = [];
