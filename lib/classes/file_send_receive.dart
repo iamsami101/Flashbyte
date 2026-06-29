@@ -117,19 +117,15 @@ void fileReceiverIsolate(List<Object> args) {
               final securityContext = SecurityContext(withTrustedRoots: false);
               try {
                 final certPath = command['certPath'] as String?;
-                final keyPath = command['keyPath'] as String?;
                 
-                if (certPath != null && keyPath != null) {
-                  securityContext.useCertificateChain(certPath);
-                  securityContext.usePrivateKey(keyPath);
+                if (certPath != null) {
+                  securityContext.setTrustedCertificates(certPath);
                 } else {
                   // Fallback: try to load from default locations
                   final certFile = File('certificates/server.crt');
-                  final keyFile = File('certificates/server.key');
                   
-                  if (certFile.existsSync() && keyFile.existsSync()) {
-                    securityContext.useCertificateChain('certificates/server.crt');
-                    securityContext.usePrivateKey('certificates/server.key');
+                  if (certFile.existsSync()) {
+                    securityContext.setTrustedCertificates('certificates/server.crt');
                   }
                 }
               } catch (e) {
