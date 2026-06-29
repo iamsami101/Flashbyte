@@ -105,6 +105,21 @@ static void my_application_startup(GApplication* application) {
 
   // Perform any actions required at application startup.
 
+  // Set the default window icon.
+  g_autoptr(GError) error = nullptr;
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path != nullptr) {
+    g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+    g_autofree gchar* icon_path =
+        g_build_filename(exe_dir, "data", "flashbyte.png", nullptr);
+    if (g_file_test(icon_path, G_FILE_TEST_EXISTS)) {
+      gtk_window_set_default_icon_from_file(icon_path, &error);
+      if (error != nullptr) {
+        g_warning("Failed to set app icon: %s", error->message);
+      }
+    }
+  }
+
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 

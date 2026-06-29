@@ -112,6 +112,14 @@ install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
 
+# Install application icons to the hicolor icon theme (for system-wide installs).
+set(ICON_SIZES 16x16 32x32 64x64 128x128 256x256 512x512)
+foreach(ICON_SIZE ${ICON_SIZES})
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icons/hicolor/${ICON_SIZE}/apps/flashbyte.png"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/${ICON_SIZE}/apps"
+    COMPONENT Runtime)
+endforeach()
+
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
 set(FLUTTER_ASSET_DIR_NAME "flutter_assets")
