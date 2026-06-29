@@ -41,25 +41,25 @@ void fileReceiverIsolate(List<Object> args) {
             if (useTLS) {
               final securityContext = SecurityContext(withTrustedRoots: false);
               try {
-                // Check if certificate files exist, if not create them
-                final certFile = File('certificates/server.crt');
-                final keyFile = File('certificates/server.key');
+                final certPath = command['certPath'] as String?;
+                final keyPath = command['keyPath'] as String?;
                 
-                if (!certFile.existsSync() || !keyFile.existsSync()) {
-                  // Generate self-signed certificate for testing
-                  final process = await Process.run('openssl', [
-                    'req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'certificates/server.key',
-                    '-out', 'certificates/server.crt', '-days', '365', '-nodes',
-                    '-subj', '/CN=localhost'
-                  ]);
-                  if (process.exitCode != 0) {
-                    throw Exception('Failed to generate certificate: ${process.stderr}');
+                if (certPath != null && keyPath != null) {
+                  securityContext.useCertificateChain(certPath);
+                  securityContext.usePrivateKey(keyPath);
+                } else {
+                  // Fallback: try to load from default locations
+                  final certFile = File('certificates/server.crt');
+                  final keyFile = File('certificates/server.key');
+                  
+                  if (certFile.existsSync() && keyFile.existsSync()) {
+                    securityContext.useCertificateChain('certificates/server.crt');
+                    securityContext.usePrivateKey('certificates/server.key');
+                  } else {
+                    throw Exception('Certificate files not found. Use settings to enable TLS.');
                   }
                 }
                 
-                securityContext.setTrustedCertificates('certificates/server.crt');
-                securityContext.useCertificateChain('certificates/server.crt');
-                securityContext.usePrivateKey('certificates/server.key');
                 toUiSendPort.send({
                   'status': 'debug',
                   'message': 'Certificate loaded successfully',

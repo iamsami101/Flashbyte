@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
-import 'dart:ui';
 
 import 'package:flashbyte/classes/file_send_receive.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
 
@@ -37,6 +39,25 @@ class SocketService {
     );
   }
 
+  Future<String?> _copyCertToTemp(String assetPath) async {
+    try {
+      final data = await rootBundle.load(assetPath);
+      final tempDir = await getTemporaryDirectory();
+      final fileName = assetPath.split('/').last;
+      final tempFile = File('${tempDir.path}/$fileName');
+      await tempFile.writeAsBytes(data.buffer.asUint8List());
+      return tempFile.path;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, String?>> _prepareCertFiles() async {
+    final certPath = await _copyCertToTemp('assets/certificates/server.crt');
+    final keyPath = await _copyCertToTemp('assets/certificates/server.key');
+    return {'certPath': certPath, 'keyPath': keyPath};
+  }
+
   Future<void> _startIsolate({
     required String mode,
     String? host,
@@ -44,6 +65,14 @@ class SocketService {
     bool useTLS = false,
   }) async {
     stopConnection();
+
+    String? certPath;
+    String? keyPath;
+    if (useTLS) {
+      final paths = await _prepareCertFiles();
+      certPath = paths['certPath'];
+      keyPath = paths['keyPath'];
+    }
 
     final completer = Completer<SendPort>();
 
@@ -80,6 +109,8 @@ class SocketService {
       'host': host,
       'port': port,
       'useTLS': useTLS,
+      'certPath': certPath,
+      'keyPath': keyPath,
     });
   }
 
