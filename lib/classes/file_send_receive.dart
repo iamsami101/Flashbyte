@@ -44,18 +44,12 @@ void fileReceiverIsolate(List<Object> args) {
                 final certPath = command['certPath'] as String?;
                 final keyPath = command['keyPath'] as String?;
                 
-                toUiSendPort.send({
-                  'status': 'debug',
-                  'message': 'Server TLS: certPath=$certPath, keyPath=$keyPath',
-                });
+                print('[SERVER_TLS] certPath=$certPath, keyPath=$keyPath');
                 
                 if (certPath != null && keyPath != null) {
                   final certFile = File(certPath);
                   final keyFile = File(keyPath);
-                  toUiSendPort.send({
-                    'status': 'debug',
-                    'message': 'Server TLS: cert exists=${certFile.existsSync()}, key exists=${keyFile.existsSync()}',
-                  });
+                  print('[SERVER_TLS] cert exists=${certFile.existsSync()}, key exists=${keyFile.existsSync()}');
                   securityContext.useCertificateChain(certPath);
                   securityContext.usePrivateKey(keyPath);
                 } else {
@@ -71,10 +65,7 @@ void fileReceiverIsolate(List<Object> args) {
                   }
                 }
                 
-                toUiSendPort.send({
-                  'status': 'debug',
-                  'message': 'Certificate loaded successfully',
-                });
+                print('[SERVER_TLS] Certificate loaded successfully');
               } catch (e) {
                 toUiSendPort.send({
                   'status': 'error',
@@ -91,10 +82,7 @@ void fileReceiverIsolate(List<Object> args) {
                   securityContext,
                   shared: true,
                 );
-                toUiSendPort.send({
-                  'status': 'debug',
-                  'message': 'SecureServerSocket bound successfully',
-                });
+                print('[SERVER_TLS] SecureServerSocket bound successfully');
               } catch (e) {
                 toUiSendPort.send({
                   'status': 'error',
@@ -115,11 +103,22 @@ void fileReceiverIsolate(List<Object> args) {
               'status': 'hosting',
               'address': serverSocket!.address.address,
             });
-            serverSocket!.listen((socket) {
-              clientSocket = socket;
-              toUiSendPort.send({'status': 'client_connected'});
-              _handleSocketConnection(clientSocket!, toUiSendPort);
-            });
+            serverSocket!.listen(
+              (socket) async {
+                clientSocket = socket;
+                print('[SERVER_TLS] client connected, handshake completed');
+                toUiSendPort.send({'status': 'client_connected'});
+                _handleSocketConnection(clientSocket!, toUiSendPort);
+              },
+              onError: (error) {
+                print('[SERVER_TLS] listen error: $error');
+                toUiSendPort.send({
+                  'status': 'error',
+                  'fatal': 'false',
+                  'message': 'TLS connection error: $error',
+                });
+              },
+            );
           } else if (command['mode'] == 'client') {
             // Check if TLS mode is enabled
             final useTLS = command['useTLS'] ?? false;
@@ -131,10 +130,7 @@ void fileReceiverIsolate(List<Object> args) {
                 
                 if (certPath != null) {
                   final certFile = File(certPath);
-                  toUiSendPort.send({
-                    'status': 'debug',
-                    'message': 'Client TLS: cert path=$certPath, exists=${certFile.existsSync()}',
-                  });
+                  print('[CLIENT_TLS] cert path=$certPath, exists=${certFile.existsSync()}');
                   if (certFile.existsSync()) {
                     securityContext.setTrustedCertificates(certPath);
                   }
@@ -147,10 +143,7 @@ void fileReceiverIsolate(List<Object> args) {
                   }
                 }
               } catch (e) {
-                toUiSendPort.send({
-                  'status': 'debug',
-                  'message': 'Client TLS: cert load error: ${e.toString()}',
-                });
+                print('[CLIENT_TLS] cert load error: ${e.toString()}');
               }
               
               try {
@@ -159,10 +152,7 @@ void fileReceiverIsolate(List<Object> args) {
                   command['port'],
                   context: securityContext,
                 );
-                toUiSendPort.send({
-                  'status': 'debug',
-                  'message': 'Client TLS: connected successfully',
-                });
+                print('[CLIENT_TLS] connected successfully');
               } catch (e) {
                 toUiSendPort.send({
                   'status': 'error',
