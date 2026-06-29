@@ -21,6 +21,7 @@ class TcpSockets extends StatefulWidget {
 class _TcpSocketsState extends State<TcpSockets> {
   String? ipAddress;
   final TextEditingController controller = TextEditingController();
+  bool _isConnecting = false;
 
   StreamSubscription? messageSubscription;
 
@@ -78,6 +79,7 @@ class _TcpSocketsState extends State<TcpSockets> {
         switch (status) {
           case 'client_connected':
           case 'connected_to_host':
+            _isConnecting = false;
             Navigator.push(
               context,
               PageRouteBuilder(
@@ -87,6 +89,7 @@ class _TcpSocketsState extends State<TcpSockets> {
             );
             break;
           case 'error':
+            _isConnecting = false;
             showGeneralDialog(
               context: context,
               barrierDismissible: true,
@@ -215,7 +218,7 @@ class _TcpSocketsState extends State<TcpSockets> {
                                       return AnimatedSize(
                                         duration: 500.ms,
                                         curve: Easing.emphasizedDecelerate,
-                                        child: ipAddress == null
+                                        child: ipAddress == null || _isConnecting
                                             ? SizedBox(
                                                 width: double.infinity,
                                                 child: Center(
@@ -236,7 +239,7 @@ class _TcpSocketsState extends State<TcpSockets> {
                                         child: AnimatedSize(
                                           duration: 500.ms,
                                           curve: Easing.emphasizedDecelerate,
-                                          child: ipAddress == null
+                                          child: ipAddress == null || _isConnecting
                                               ? Divider()
                                               : QrImageView(
                                                   data: ipAddress!,
@@ -276,6 +279,7 @@ class _TcpSocketsState extends State<TcpSockets> {
                             flex: 2,
                             child: TextField(
                               controller: controller,
+                              enabled: !_isConnecting,
                               decoration: InputDecoration(
                                 label: const Text("192.168.xx.xx"),
                                 border: OutlineInputBorder(
@@ -288,7 +292,9 @@ class _TcpSocketsState extends State<TcpSockets> {
                             margin: EdgeInsets.zero,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(10),
-                                      onTap: () async {
+                                      onTap: _isConnecting
+                                          ? null
+                                          : () async {
                                         if (Platform.isAndroid || Platform.isIOS) {
                                           final useTLS = await _getTLSPreference();
                                           if (!context.mounted) return;
@@ -299,12 +305,18 @@ class _TcpSocketsState extends State<TcpSockets> {
                                                 onScanned: (value) async {
                                                   try {
                                                     Navigator.pop(context);
+                                                    setState(() {
+                                                      _isConnecting = true;
+                                                    });
                                                     SocketService.instance
                                                         .connectToHost(
                                                           value,
                                                           useTLS: useTLS,
                                                         );
                                                   } on Exception catch (_) {
+                                                    setState(() {
+                                                      _isConnecting = false;
+                                                    });
                                                     showScaffoldSnackbar(
                                                       "Error connecting to user",
                                                     );
@@ -313,12 +325,12 @@ class _TcpSocketsState extends State<TcpSockets> {
                                               ),
                                             ),
                                           );
-                                } else {
-                                  showScaffoldSnackbar(
-                                    "QR code scanning not supported on ${Platform.operatingSystem}",
-                                  );
-                                }
-                              },
+                                        } else {
+                                          showScaffoldSnackbar(
+                                            "QR code scanning not supported on ${Platform.operatingSystem}",
+                                          );
+                                        }
+                                      },
                               child: Padding(
                                 padding: const EdgeInsets.all(13),
                                 child: Icon(Icons.camera_alt),
@@ -333,19 +345,27 @@ class _TcpSocketsState extends State<TcpSockets> {
                           margin: EdgeInsets.zero,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
-                            onTap: () async {
+                            onTap: _isConnecting
+                                ? null
+                                : () async {
                               final ip = controller.text;
                               if (ip.isEmpty) {
                                 showScaffoldSnackbar("IP can't be empty");
                                 return;
                               }
                               final useTLS = await _getTLSPreference();
+                              setState(() {
+                                _isConnecting = true;
+                              });
                               try {
                                 SocketService.instance.connectToHost(
                                   ip,
                                   useTLS: useTLS,
                                 );
                               } on Exception catch (_) {
+                                setState(() {
+                                  _isConnecting = false;
+                                });
                                 showScaffoldSnackbar(
                                   "Error connecting to user",
                                 );
