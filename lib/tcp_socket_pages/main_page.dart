@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TcpSockets extends StatefulWidget {
   const TcpSockets({super.key});
@@ -52,10 +54,17 @@ class _TcpSocketsState extends State<TcpSockets> {
     }
   }
 
+  Future<bool> _getTLSPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('useTLS') ?? true;
+  }
+
   @override
   void initState() {
     super.initState();
-    SocketService.instance.startHost('0.0.0.0');
+    _getTLSPreference().then((useTLS) {
+      SocketService.instance.startHost('0.0.0.0', useTLS: useTLS);
+    });
     getIp();
 
     messageSubscription?.cancel();
@@ -101,6 +110,19 @@ class _TcpSocketsState extends State<TcpSockets> {
         child: Scaffold(
           appBar: AppBar(
             title: const Text("Connect"),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           body: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -203,28 +225,31 @@ class _TcpSocketsState extends State<TcpSockets> {
                             margin: EdgeInsets.zero,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(10),
-                              onTap: () {
-                                if (Platform.isAndroid || Platform.isIOS) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => QrCodeScanPage(
-                                        onScanned: (value) {
-                                          try {
-                                            Navigator.pop(context);
-                                            SocketService.instance
-                                                .connectToHost(
-                                                  value,
-                                                );
-                                          } on Exception catch (_) {
-                                            showScaffoldSnackbar(
-                                              "Error connecting to user",
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  );
+                                      onTap: () async {
+                                        if (Platform.isAndroid || Platform.isIOS) {
+                                          final useTLS = await _getTLSPreference();
+                                          if (!context.mounted) return;
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => QrCodeScanPage(
+                                                onScanned: (value) async {
+                                                  try {
+                                                    Navigator.pop(context);
+                                                    SocketService.instance
+                                                        .connectToHost(
+                                                          value,
+                                                          useTLS: useTLS,
+                                                        );
+                                                  } on Exception catch (_) {
+                                                    showScaffoldSnackbar(
+                                                      "Error connecting to user",
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          );
                                 } else {
                                   showScaffoldSnackbar(
                                     "QR code scanning not supported on ${Platform.operatingSystem}",
@@ -245,14 +270,18 @@ class _TcpSocketsState extends State<TcpSockets> {
                           margin: EdgeInsets.zero,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
-                            onTap: () {
+                            onTap: () async {
                               final ip = controller.text;
                               if (ip.isEmpty) {
                                 showScaffoldSnackbar("IP can't be empty");
                                 return;
                               }
+                              final useTLS = await _getTLSPreference();
                               try {
-                                SocketService.instance.connectToHost(ip);
+                                SocketService.instance.connectToHost(
+                                  ip,
+                                  useTLS: useTLS,
+                                );
                               } on Exception catch (_) {
                                 showScaffoldSnackbar(
                                   "Error connecting to user",
