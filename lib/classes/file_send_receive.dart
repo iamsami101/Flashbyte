@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
@@ -18,8 +19,8 @@ void fileReceiverIsolate(List<Object> args) {
   final fromUiReceivePort = ReceivePort();
   toUiSendPort.send(fromUiReceivePort.sendPort);
 
-  Socket? clientSocket;
-  ServerSocket? serverSocket;
+  SecureSocket? clientSocket;
+  SecureServerSocket? serverSocket;
 
   final List<Map<String, dynamic>> commandQueue = [];
   bool isProcessing = false;
@@ -34,9 +35,23 @@ void fileReceiverIsolate(List<Object> args) {
       try {
         if (command['command'] == 'connect') {
           if (command['mode'] == 'host') {
-            serverSocket = await ServerSocket.bind(
+            final securityContext = SecurityContext(withTrustedRoots: false);
+            try {
+              securityContext.useCertificateChain('certificates/server.crt');
+              securityContext.usePrivateKey('certificates/server.key');
+            } catch (e) {
+              toUiSendPort.send({
+                'status': 'error',
+                'fatal': 'true',
+                'message': 'Failed to load certificate: ${e.toString()}',
+              });
+              return;
+            }
+            
+            serverSocket = await SecureServerSocket.bind(
               "0.0.0.0",
               command['port'],
+              securityContext: securityContext,
               shared: true,
             );
             toUiSendPort.send({
@@ -44,14 +59,28 @@ void fileReceiverIsolate(List<Object> args) {
               'address': serverSocket!.address.address,
             });
             serverSocket!.listen((socket) {
-              clientSocket = socket;
+              clientSocket = socket as SecureSocket;
               toUiSendPort.send({'status': 'client_connected'});
               _handleSocketConnection(clientSocket!, toUiSendPort);
             });
           } else if (command['mode'] == 'client') {
-            clientSocket = await Socket.connect(
+            final securityContext = SecurityContext(withTrustedRoots: false);
+            try {
+              securityContext.useCertificateChain('certificates/server.crt');
+              securityContext.usePrivateKey('certificates/server.key');
+            } catch (e) {
+              toUiSendPort.send({
+                'status': 'error',
+                'fatal': 'true',
+                'message': 'Failed to load certificate: ${e.toString()}',
+              });
+              return;
+            }
+            
+            clientSocket = await SecureSocket.connect(
               command['host'],
               command['port'],
+              securityContext: securityContext,
             );
             toUiSendPort.send({'status': 'connected_to_host'});
             _handleSocketConnection(clientSocket!, toUiSendPort);
@@ -100,7 +129,7 @@ void fileReceiverIsolate(List<Object> args) {
 
 Future<void> _sendFileCommand(
   Map<String, dynamic> command,
-  Socket clientSocket,
+  SecureSocket clientSocket,
   SendPort toUiSendPort,
 ) async {
   final filePath = command['filePath'] as String;
@@ -183,6 +212,18 @@ Future<void> _sendFileCommand(
       'fatal': 'false',
       'message': 'File send error: ${e.toString()}',
     });
+  }
+}
+
+Future<List<String>> _loadCertificateChain() async {
+  // Load the certificate and key files
+  try {
+    final certificate = await File('certificates/server.crt').readAsString();
+    final key = await File('certificates/server.key').readAsString();
+    return [certificate, key];
+  } catch (e) {
+    // Fallback to self-signed certificate if files don't exist
+    return [];
   }
 }
 

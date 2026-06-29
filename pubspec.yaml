@@ -7,7 +7,6 @@ environment:
   sdk: ^3.8.1
 
 dependencies:
-  android_intent_plus: ^6.0.0
   external_path: ^2.2.0
   fast_file_picker: ^0.4.6
   flutter:
