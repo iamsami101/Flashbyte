@@ -114,9 +114,32 @@ void fileReceiverIsolate(List<Object> args) {
             final useTLS = command['useTLS'] ?? false;
             
             if (useTLS) {
+              final securityContext = SecurityContext(withTrustedRoots: false);
+              try {
+                final certPath = command['certPath'] as String?;
+                final keyPath = command['keyPath'] as String?;
+                
+                if (certPath != null && keyPath != null) {
+                  securityContext.useCertificateChain(certPath);
+                  securityContext.usePrivateKey(keyPath);
+                } else {
+                  // Fallback: try to load from default locations
+                  final certFile = File('certificates/server.crt');
+                  final keyFile = File('certificates/server.key');
+                  
+                  if (certFile.existsSync() && keyFile.existsSync()) {
+                    securityContext.useCertificateChain('certificates/server.crt');
+                    securityContext.usePrivateKey('certificates/server.key');
+                  }
+                }
+              } catch (e) {
+                // Continue with empty context if cert loading fails
+              }
+              
               clientSocket = await SecureSocket.connect(
                 command['host'],
                 command['port'],
+                context: securityContext,
               );
             } else {
               // Use regular Socket for backward compatibility
