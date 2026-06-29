@@ -35,58 +35,70 @@ void fileReceiverIsolate(List<Object> args) {
       try {
         if (command['command'] == 'connect') {
           if (command['mode'] == 'host') {
-            final securityContext = SecurityContext(withTrustedRoots: false);
-              securityContext.setTrustedCertificates('certificates/server.crt');
-            try {
-              // Check if certificate files exist, if not create them
-              final certFile = File('certificates/server.crt');
-              final keyFile = File('certificates/server.key');
-              
-              if (!certFile.existsSync() || !keyFile.existsSync()) {
-                // Generate self-signed certificate for testing
-                final process = await Process.run('openssl', [
-                  'req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'certificates/server.key',
-                  '-out', 'certificates/server.crt', '-days', '365', '-nodes',
-                  '-subj', '/CN=localhost'
-                ]);
-                if (process.exitCode != 0) {
-                  throw Exception('Failed to generate certificate: ${process.stderr}');
+            // Check if TLS mode is enabled
+            final useTLS = command['useTLS'] ?? false;
+            
+            if (useTLS) {
+              final securityContext = SecurityContext(withTrustedRoots: false);
+              try {
+                // Check if certificate files exist, if not create them
+                final certFile = File('certificates/server.crt');
+                final keyFile = File('certificates/server.key');
+                
+                if (!certFile.existsSync() || !keyFile.existsSync()) {
+                  // Generate self-signed certificate for testing
+                  final process = await Process.run('openssl', [
+                    'req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'certificates/server.key',
+                    '-out', 'certificates/server.crt', '-days', '365', '-nodes',
+                    '-subj', '/CN=localhost'
+                  ]);
+                  if (process.exitCode != 0) {
+                    throw Exception('Failed to generate certificate: ${process.stderr}');
+                  }
                 }
+                
+                securityContext.setTrustedCertificates('certificates/server.crt');
+                securityContext.useCertificateChain('certificates/server.crt');
+                securityContext.usePrivateKey('certificates/server.key');
+                toUiSendPort.send({
+                  'status': 'debug',
+                  'message': 'Certificate loaded successfully',
+                });
+              } catch (e) {
+                toUiSendPort.send({
+                  'status': 'error',
+                  'fatal': 'true',
+                  'message': 'Failed to load certificate: ${e.toString()}',
+                });
+                return;
               }
               
-              securityContext.useCertificateChain('certificates/server.crt');
-              securityContext.usePrivateKey('certificates/server.key');
-              toUiSendPort.send({
-                'status': 'debug',
-                'message': 'Certificate loaded successfully',
-              });
-            } catch (e) {
-              toUiSendPort.send({
-                'status': 'error',
-                'fatal': 'true',
-                'message': 'Failed to load certificate: ${e.toString()}',
-              });
-              return;
-            }
-            
-            try {
-              serverSocket = await SecureServerSocket.bind(
+              try {
+                serverSocket = await SecureServerSocket.bind(
+                  "0.0.0.0",
+                  command['port'],
+                  securityContext,
+                  shared: true,
+                );
+                toUiSendPort.send({
+                  'status': 'debug',
+                  'message': 'SecureServerSocket bound successfully',
+                });
+              } catch (e) {
+                toUiSendPort.send({
+                  'status': 'error',
+                  'fatal': 'true',
+                  'message': 'Failed to bind SecureServerSocket: ${e.toString()}',
+                });
+                return;
+              }
+            } else {
+              // Use regular ServerSocket for backward compatibility
+              serverSocket = await ServerSocket.bind(
                 "0.0.0.0",
                 command['port'],
-                securityContext,
                 shared: true,
               );
-              toUiSendPort.send({
-                'status': 'debug',
-                'message': 'SecureServerSocket bound successfully',
-              });
-            } catch (e) {
-              toUiSendPort.send({
-                'status': 'error',
-                'fatal': 'true',
-                'message': 'Failed to bind SecureServerSocket: ${e.toString()}',
-              });
-              return;
             }
             toUiSendPort.send({
               'status': 'hosting',
@@ -98,10 +110,22 @@ void fileReceiverIsolate(List<Object> args) {
               _handleSocketConnection(clientSocket!, toUiSendPort);
             });
           } else if (command['mode'] == 'client') {
-            clientSocket = await SecureSocket.connect(
-              command['host'],
-              command['port'],
-            );
+            // Check if TLS mode is enabled
+            final useTLS = command['useTLS'] ?? false;
+            
+            if (useTLS) {
+              clientSocket = await SecureSocket.connect(
+                command['host'],
+                command['port'],
+              );
+            } else {
+              // Use regular Socket for backward compatibility
+              clientSocket = await Socket.connect(
+                command['host'],
+                command['port'],
+              );
+            }
+            
             toUiSendPort.send({'status': 'connected_to_host'});
             _handleSocketConnection(clientSocket!, toUiSendPort);
           }
@@ -149,7 +173,7 @@ void fileReceiverIsolate(List<Object> args) {
 
 Future<void> _sendFileCommand(
   Map<String, dynamic> command,
-  SecureSocket clientSocket,
+  dynamic clientSocket,
   SendPort toUiSendPort,
 ) async {
   final filePath = command['filePath'] as String;
@@ -237,7 +261,7 @@ Future<void> _sendFileCommand(
 
 
 
-void _handleSocketConnection(Socket socket, SendPort toUiSendPort) {
+void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
   List<int> buffer = [];
 
   // List<int> cachedChunks = [];
