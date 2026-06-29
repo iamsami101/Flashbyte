@@ -170,12 +170,18 @@ class _TcpSocketsState extends State<TcpSockets> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.settings),
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  SocketService.instance.stopConnection();
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const SettingsPage(),
                     ),
+                  );
+                  final newUseTLS = await _getTLSPreference();
+                  SocketService.instance.startHost(
+                    '0.0.0.0',
+                    useTLS: newUseTLS,
                   );
                 },
               ),
