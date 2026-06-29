@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
-// import 'package:uri_to_file/uri_to_file.dart'; // Temporarily removed
 import 'package:uuid/uuid.dart';
 
 void fileReceiverIsolate(List<Object> args) {
@@ -199,10 +198,20 @@ Future<void> _sendFileCommand(
           final tempDir = await getTemporaryDirectory();
           final tempFile = File('${tempDir.path}/${fileStats.name}');
           
-          // For content URIs, we need to copy the content to a temporary file
-          final process = await Process.run('cp', ['/proc/self/fd/0', tempFile.path]);
-          if (process.exitCode != 0) {
-            throw Exception('Failed to copy file: ${process.stderr}');
+          // For content URIs, we need to properly read the file content
+          // Use a more reliable approach with file operations
+          try {
+            // Try to open the file directly
+            final file = File(filePath.replaceFirst('content://', '/data/data/'));
+            if (await file.exists()) {
+              await file.copy(tempFile.path);
+            } else {
+              // Fallback: try to read using standard file operations
+              final fileContent = await File(filePath).readAsBytes();
+              await tempFile.writeAsBytes(fileContent);
+            }
+          } catch (e) {
+            throw Exception('Failed to copy content URI file: ${e.toString()}');
           }
           
           cachedFile = tempFile;
