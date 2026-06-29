@@ -95,6 +95,9 @@ void fileReceiverIsolate(List<Object> args) {
                 if (useTLS) {
                   // TLS handshake already verified the client — notify UI immediately
                   toUiSendPort.send({'status': 'client_connected'});
+                } else {
+                  // Non-TLS: notify UI that a client is connecting (probe in progress)
+                  toUiSendPort.send({'status': 'client_connecting'});
                 }
                 // Non-TLS servers wait for probe before sending client_connected
                 _handleSocketConnection(savedClientSocket, toUiSendPort,

@@ -77,6 +77,11 @@ class _TcpSocketsState extends State<TcpSockets> {
         final status = message['status'];
 
         switch (status) {
+          case 'client_connecting':
+            setState(() {
+              _isConnecting = true;
+            });
+            break;
           case 'client_connected':
           case 'connected_to_host':
             setState(() {
