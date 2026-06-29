@@ -34,150 +34,143 @@ void fileReceiverIsolate(List<Object> args) {
 
       try {
         if (command['command'] == 'connect') {
+          final useTLS = command['useTLS'] ?? false;
+
           if (command['mode'] == 'host') {
-            // Check if TLS mode is enabled
-            final useTLS = command['useTLS'] ?? false;
-            
+            SecurityContext? securityContext;
             if (useTLS) {
-              final securityContext = SecurityContext(withTrustedRoots: false);
               try {
                 final certPath = command['certPath'] as String?;
                 final keyPath = command['keyPath'] as String?;
-                
                 print('[SERVER_TLS] certPath=$certPath, keyPath=$keyPath');
-                
+
                 if (certPath != null && keyPath != null) {
                   final certFile = File(certPath);
                   final keyFile = File(keyPath);
                   print('[SERVER_TLS] cert exists=${certFile.existsSync()}, key exists=${keyFile.existsSync()}');
+                  securityContext = SecurityContext(withTrustedRoots: false);
                   securityContext.useCertificateChain(certPath);
                   securityContext.usePrivateKey(keyPath);
                 } else {
-                  // Fallback: try to load from default locations
                   final certFile = File('certificates/server.crt');
                   final keyFile = File('certificates/server.key');
-                  
                   if (certFile.existsSync() && keyFile.existsSync()) {
+                    securityContext = SecurityContext(withTrustedRoots: false);
                     securityContext.useCertificateChain('certificates/server.crt');
                     securityContext.usePrivateKey('certificates/server.key');
                   } else {
-                    throw Exception('Certificate files not found. Use settings to enable TLS.');
+                    throw Exception('Certificate files not found.');
                   }
                 }
-                
                 print('[SERVER_TLS] Certificate loaded successfully');
               } catch (e) {
                 toUiSendPort.send({
-                  'status': 'error',
-                  'fatal': 'true',
+                  'status': 'error', 'fatal': 'true',
                   'message': 'Failed to load certificate: ${e.toString()}',
                 });
                 return;
               }
-              
-              try {
-                serverSocket = await SecureServerSocket.bind(
-                  "0.0.0.0",
-                  command['port'],
-                  securityContext,
-                  shared: true,
-                );
-                print('[SERVER_TLS] SecureServerSocket bound successfully');
-              } catch (e) {
-                toUiSendPort.send({
-                  'status': 'error',
-                  'fatal': 'true',
-                  'message': 'Failed to bind SecureServerSocket: ${e.toString()}',
-                });
-                return;
-              }
-            } else {
-              // Use regular ServerSocket for backward compatibility
-              serverSocket = await ServerSocket.bind(
-                "0.0.0.0",
-                command['port'],
-                shared: true,
-              );
             }
+
+            if (useTLS) {
+              serverSocket = await SecureServerSocket.bind(
+                "0.0.0.0", command['port'], securityContext!, shared: true);
+              print('[SERVER_TLS] SecureServerSocket bound successfully');
+            } else {
+              serverSocket = await ServerSocket.bind(
+                "0.0.0.0", command['port'], shared: true);
+            }
+
             toUiSendPort.send({
               'status': 'hosting',
               'address': serverSocket!.address.address,
             });
+
+            dynamic savedClientSocket;
+
             serverSocket!.listen(
-              (socket) async {
+              (socket) {
+                savedClientSocket = socket;
                 clientSocket = socket;
-                print('[SERVER_TLS] client connected, handshake completed');
                 toUiSendPort.send({'status': 'client_connected'});
-                _handleSocketConnection(clientSocket!, toUiSendPort);
+                _handleSocketConnection(savedClientSocket, toUiSendPort);
               },
               onError: (error) {
                 print('[SERVER_TLS] listen error: $error');
                 toUiSendPort.send({
-                  'status': 'error',
-                  'fatal': 'false',
+                  'status': 'error', 'fatal': 'false',
                   'message': 'TLS connection error: $error',
                 });
               },
             );
           } else if (command['mode'] == 'client') {
-            // Check if TLS mode is enabled
-            final useTLS = command['useTLS'] ?? false;
-            
+            SecurityContext? securityContext;
             if (useTLS) {
-              final securityContext = SecurityContext(withTrustedRoots: false);
               try {
                 final certPath = command['certPath'] as String?;
-                
-                if (certPath != null) {
-                  final certFile = File(certPath);
-                  print('[CLIENT_TLS] cert path=$certPath, exists=${certFile.existsSync()}');
-                  if (certFile.existsSync()) {
-                    securityContext.setTrustedCertificates(certPath);
-                  }
+                if (certPath != null && File(certPath).existsSync()) {
+                  print('[CLIENT_TLS] cert path=$certPath, exists=true');
+                  securityContext = SecurityContext(withTrustedRoots: false);
+                  securityContext.setTrustedCertificates(certPath);
                 } else {
-                  // Fallback: try to load from default locations
                   final certFile = File('certificates/server.crt');
-                  
                   if (certFile.existsSync()) {
+                    securityContext = SecurityContext(withTrustedRoots: false);
                     securityContext.setTrustedCertificates('certificates/server.crt');
                   }
                 }
               } catch (e) {
                 print('[CLIENT_TLS] cert load error: ${e.toString()}');
               }
+            }
+
+            try {
+              dynamic finalSocket;
               
-              try {
-                // Connect raw TCP first, then upgrade to TLS with 'localhost' hostname
-                // to match the self-signed cert's CN/SAN without hostname mismatch
-                final rawSocket = await Socket.connect(
-                  command['host'],
-                  command['port'],
-                );
-                clientSocket = await SecureSocket.secure(
+              if (useTLS) {
+                // TLS: connect via plain Socket then upgrade with SecureSocket.
+                // The TLS handshake itself validates the server — no probe needed.
+                final rawSocket = await Socket.connect(command['host'], command['port']);
+                finalSocket = await SecureSocket.secure(
                   rawSocket,
                   host: 'localhost',
                   context: securityContext,
                 );
                 print('[CLIENT_TLS] connected successfully');
-              } catch (e) {
-                print('[CLIENT_TLS] connect error: $e');
-                toUiSendPort.send({
-                  'status': 'error',
-                  'fatal': 'true',
-                  'message': 'TLS connect error: ${e.toString()}',
-                });
-                return;
+              } else {
+                // Non-TLS: send a probe to verify the server also has TLS OFF.
+                finalSocket = await Socket.connect(command['host'], command['port']);
+                final probeMsg = jsonEncode({'type': 'probe', 'tls': false});
+                final probeBytes = utf8.encode(probeMsg);
+                final header = ByteData(8);
+                header.setUint32(0, probeBytes.length, Endian.big);
+                header.setUint32(4, 0, Endian.big);
+                finalSocket.add(header.buffer.asUint8List());
+                finalSocket.add(probeBytes);
+
+                final resp = await _readProbeResponse(finalSocket);
+                if (resp['ok'] != true) {
+                  finalSocket.destroy();
+                  toUiSendPort.send({
+                    'status': 'error', 'fatal': 'true',
+                    'message': resp['error'] ?? 'Connection rejected',
+                  });
+                  return;
+                }
               }
-            } else {
-              // Use regular Socket for backward compatibility
-              clientSocket = await Socket.connect(
-                command['host'],
-                command['port'],
-              );
+
+              clientSocket = finalSocket;
+              toUiSendPort.send({'status': 'connected_to_host'});
+              _handleSocketConnection(clientSocket!, toUiSendPort);
+            } catch (e) {
+              print('[CLIENT_TLS] connect error: $e');
+              toUiSendPort.send({
+                'status': 'error', 'fatal': 'true',
+                'message': useTLS
+                    ? 'TLS connection failed: ${e.toString()}'
+                    : 'Could not connect. Try enabling TLS on both devices.',
+              });
             }
-            
-            toUiSendPort.send({'status': 'connected_to_host'});
-            _handleSocketConnection(clientSocket!, toUiSendPort);
           }
         } else if (command['command'] == 'send_file') {
           if (clientSocket == null) {
@@ -311,6 +304,47 @@ Future<void> _sendFileCommand(
 
 
 
+// ---------- TLS probe helpers ----------
+
+Future<Map<String, dynamic>> _readProbeResponse(dynamic socket) async {
+  final completer = Completer<Map<String, dynamic>>();
+  final buffer = <int>[];
+  StreamSubscription? sub;
+
+  sub = socket.listen(
+    (data) {
+      buffer.addAll(data);
+      if (buffer.length >= 8 && !completer.isCompleted) {
+        final headerBytes = Uint8List.fromList(buffer.sublist(0, 8));
+        final headerData = ByteData.sublistView(headerBytes);
+        final jsonLen = headerData.getUint32(0, Endian.big);
+        final total = 8 + jsonLen;
+        if (buffer.length >= total) {
+          sub?.cancel();
+          final jsonStr = utf8.decode(buffer.sublist(8, total));
+          try {
+            completer.complete(jsonDecode(jsonStr) as Map<String, dynamic>);
+          } catch (e) {
+            completer.completeError(Exception('Invalid probe response: $e'));
+          }
+        }
+      }
+    },
+    onError: (e) {
+      sub?.cancel();
+      if (!completer.isCompleted) completer.completeError(e);
+    },
+    onDone: () {
+      sub?.cancel();
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('Connection closed during probe'));
+      }
+    },
+  );
+
+  return completer.future;
+}
+
 void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
   List<int> buffer = [];
 
@@ -350,10 +384,44 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort) {
       if (headerJson == null && buffer.length >= headerLength!) {
         headerJson = jsonDecode(utf8.decode(buffer.sublist(0, headerLength)));
 
+        // Handle probe / disconnect meta-messages
         try {
-          if (headerJson!['type'] == 'disconnect') {
+          final j = headerJson!;
+          final type = j['type'] as String?;
+          if (type == 'disconnect') {
             socket.destroy();
             toUiSendPort.send({'command': 'disconnect'});
+            return;
+          }
+          if (type == 'probe') {
+            final clientWantsTls = j['tls'] == true;
+            Map<String, dynamic> resp;
+            if (clientWantsTls) {
+              // Client wants TLS but server is non-TLS
+              resp = {'ok': false, 'error': 'TLS mismatch: server does not use TLS, client has TLS enabled'};
+            } else {
+              resp = {'ok': true, 'tls': false};
+            }
+            final respBytes = utf8.encode(jsonEncode(resp));
+            final respHeader = ByteData(8);
+            respHeader.setUint32(0, respBytes.length, Endian.big);
+            respHeader.setUint32(4, 0, Endian.big);
+            socket.add(respHeader.buffer.asUint8List());
+            socket.add(respBytes);
+
+            if (clientWantsTls) {
+              socket.destroy();
+              toUiSendPort.send({
+                'status': 'error', 'fatal': 'false',
+                'message': 'TLS mismatch: client has TLS enabled but server does not',
+              });
+              return;
+            }
+            // Match — reset state for real file transfer messages
+            headerLength = null;
+            fileBytesLength = null;
+            headerJson = null;
+            buffer.clear();
             return;
           }
         } catch (_) {}
