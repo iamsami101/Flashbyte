@@ -318,6 +318,20 @@ void _handleSocketConnection(dynamic socket, SendPort toUiSendPort,
   Map<String, dynamic>? headerJson;
   bool probeHandled = !waitForProbe;
 
+  if (waitForProbe) {
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!probeHandled) {
+        probeHandled = true;
+        toUiSendPort.send({
+          'status': 'error', 'fatal': 'true',
+          'message':
+              'Connection timed out. Ensure both devices have the same TLS setting.',
+        });
+        socket.destroy();
+      }
+    });
+  }
+
   socket.listen(
     (data) async {
       stopwatch.start();
