@@ -36,9 +36,30 @@ void fileReceiverIsolate(List<Object> args) {
         if (command['command'] == 'connect') {
           if (command['mode'] == 'host') {
             final securityContext = SecurityContext(withTrustedRoots: false);
+              securityContext.setTrustedCertificates('certificates/server.crt');
             try {
+              // Check if certificate files exist, if not create them
+              final certFile = File('certificates/server.crt');
+              final keyFile = File('certificates/server.key');
+              
+              if (!certFile.existsSync() || !keyFile.existsSync()) {
+                // Generate self-signed certificate for testing
+                final process = await Process.run('openssl', [
+                  'req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'certificates/server.key',
+                  '-out', 'certificates/server.crt', '-days', '365', '-nodes',
+                  '-subj', '/CN=localhost'
+                ]);
+                if (process.exitCode != 0) {
+                  throw Exception('Failed to generate certificate: ${process.stderr}');
+                }
+              }
+              
               securityContext.useCertificateChain('certificates/server.crt');
               securityContext.usePrivateKey('certificates/server.key');
+              toUiSendPort.send({
+                'status': 'debug',
+                'message': 'Certificate loaded successfully',
+              });
             } catch (e) {
               toUiSendPort.send({
                 'status': 'error',
@@ -48,12 +69,25 @@ void fileReceiverIsolate(List<Object> args) {
               return;
             }
             
-            serverSocket = await SecureServerSocket.bind(
-              "0.0.0.0",
-              command['port'],
-              securityContext,
-              shared: true,
-            );
+            try {
+              serverSocket = await SecureServerSocket.bind(
+                "0.0.0.0",
+                command['port'],
+                securityContext,
+                shared: true,
+              );
+              toUiSendPort.send({
+                'status': 'debug',
+                'message': 'SecureServerSocket bound successfully',
+              });
+            } catch (e) {
+              toUiSendPort.send({
+                'status': 'error',
+                'fatal': 'true',
+                'message': 'Failed to bind SecureServerSocket: ${e.toString()}',
+              });
+              return;
+            }
             toUiSendPort.send({
               'status': 'hosting',
               'address': serverSocket!.address.address,
