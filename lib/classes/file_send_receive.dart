@@ -188,32 +188,44 @@ Future<void> _sendFileCommand(
     if (Platform.isAndroid) {
       // Handle content URIs for Android
       if (filePath.startsWith('content://')) {
-        // For content URIs, we need to resolve them to actual file paths
+        // For content URIs, use SAF utility to get file info
         try {
-          // Use SAF utility to resolve content URI
-          final resolvedPath = await SafUtil().getRealPathFromUri(filePath);
-          cachedFile = File(resolvedPath);
-          fileStream = cachedFile.openRead();
           final fileStats = await SafUtil().stat(filePath, false);
+          if (fileStats == null) {
+            throw Exception('File not found at URI: $filePath');
+          }
+          
+          // Create a temporary file and copy the content to it
+          final tempDir = await getTemporaryDirectory();
+          final tempFile = File('${tempDir.path}/${fileStats.name}');
+          
+          // For content URIs, we need to copy the content to a temporary file
+          final process = await Process.run('cp', ['/proc/self/fd/0', tempFile.path]);
+          if (process.exitCode != 0) {
+            throw Exception('Failed to copy file: ${process.stderr}');
+          }
+          
+          cachedFile = tempFile;
+          fileStream = tempFile.openRead();
           
           fileHeader = {
             'uuid': Uuid().v4(),
-            'name': fileStats!.name,
+            'name': fileStats.name,
             'size': fileStats.length,
           };
         } catch (e) {
-          throw Exception('Failed to resolve content URI: ${e.toString()}');
+          throw Exception('Failed to handle content URI: ${e.toString()}');
         }
       } else {
         // Regular file path
         cachedFile = File(filePath);
         fileStream = cachedFile.openRead();
-        final fileStats = await SafUtil().stat(filePath, false);
+        final fileStats = await File(filePath).stat();
 
         fileHeader = {
           'uuid': Uuid().v4(),
-          'name': fileStats!.name,
-          'size': fileStats.length,
+          'name': filePath.split('/').last,
+          'size': fileStats.size,
         };
       }
     } else {
