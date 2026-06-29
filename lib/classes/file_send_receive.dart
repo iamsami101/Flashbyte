@@ -147,13 +147,20 @@ void fileReceiverIsolate(List<Object> args) {
               }
               
               try {
-                clientSocket = await SecureSocket.connect(
+                // Connect raw TCP first, then upgrade to TLS with 'localhost' hostname
+                // to match the self-signed cert's CN/SAN without hostname mismatch
+                final rawSocket = await Socket.connect(
                   command['host'],
                   command['port'],
+                );
+                clientSocket = await SecureSocket.secure(
+                  rawSocket,
+                  host: 'localhost',
                   context: securityContext,
                 );
                 print('[CLIENT_TLS] connected successfully');
               } catch (e) {
+                print('[CLIENT_TLS] connect error: $e');
                 toUiSendPort.send({
                   'status': 'error',
                   'fatal': 'true',
