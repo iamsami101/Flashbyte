@@ -23,7 +23,7 @@ dependencies:
   process_run: ^1.2.4
   qr_flutter: ^4.1.0
   saf_util: ^0.10.0
-  uri_to_file: ^1.0.0
+  # uri_to_file: ^1.0.0  # Temporarily removed due to AGP compatibility issues
   uuid: ^4.5.1
   widget_zoom: ^0.0.4
 
