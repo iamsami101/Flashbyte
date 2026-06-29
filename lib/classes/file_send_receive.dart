@@ -44,7 +44,18 @@ void fileReceiverIsolate(List<Object> args) {
                 final certPath = command['certPath'] as String?;
                 final keyPath = command['keyPath'] as String?;
                 
+                toUiSendPort.send({
+                  'status': 'debug',
+                  'message': 'Server TLS: certPath=$certPath, keyPath=$keyPath',
+                });
+                
                 if (certPath != null && keyPath != null) {
+                  final certFile = File(certPath);
+                  final keyFile = File(keyPath);
+                  toUiSendPort.send({
+                    'status': 'debug',
+                    'message': 'Server TLS: cert exists=${certFile.existsSync()}, key exists=${keyFile.existsSync()}',
+                  });
                   securityContext.useCertificateChain(certPath);
                   securityContext.usePrivateKey(keyPath);
                 } else {
@@ -119,7 +130,14 @@ void fileReceiverIsolate(List<Object> args) {
                 final certPath = command['certPath'] as String?;
                 
                 if (certPath != null) {
-                  securityContext.setTrustedCertificates(certPath);
+                  final certFile = File(certPath);
+                  toUiSendPort.send({
+                    'status': 'debug',
+                    'message': 'Client TLS: cert path=$certPath, exists=${certFile.existsSync()}',
+                  });
+                  if (certFile.existsSync()) {
+                    securityContext.setTrustedCertificates(certPath);
+                  }
                 } else {
                   // Fallback: try to load from default locations
                   final certFile = File('certificates/server.crt');
@@ -129,14 +147,30 @@ void fileReceiverIsolate(List<Object> args) {
                   }
                 }
               } catch (e) {
-                // Continue with empty context if cert loading fails
+                toUiSendPort.send({
+                  'status': 'debug',
+                  'message': 'Client TLS: cert load error: ${e.toString()}',
+                });
               }
               
-              clientSocket = await SecureSocket.connect(
-                command['host'],
-                command['port'],
-                context: securityContext,
-              );
+              try {
+                clientSocket = await SecureSocket.connect(
+                  command['host'],
+                  command['port'],
+                  context: securityContext,
+                );
+                toUiSendPort.send({
+                  'status': 'debug',
+                  'message': 'Client TLS: connected successfully',
+                });
+              } catch (e) {
+                toUiSendPort.send({
+                  'status': 'error',
+                  'fatal': 'true',
+                  'message': 'TLS connect error: ${e.toString()}',
+                });
+                return;
+              }
             } else {
               // Use regular Socket for backward compatibility
               clientSocket = await Socket.connect(
