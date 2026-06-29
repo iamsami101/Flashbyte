@@ -19,19 +19,21 @@ class SocketService {
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
 
-  Future<void> startHost(String host, {int port = 8050}) async {
+  Future<void> startHost(String host, {int port = 8050, bool useTLS = false}) async {
     await _startIsolate(
       mode: 'host',
       host: host,
       port: port,
+      useTLS: useTLS,
     );
   }
 
-  Future<void> connectToHost(String host, {int port = 8050}) async {
+  Future<void> connectToHost(String host, {int port = 8050, bool useTLS = false}) async {
     _startIsolate(
       mode: 'client',
       host: host,
       port: port,
+      useTLS: useTLS,
     );
   }
 
@@ -39,6 +41,7 @@ class SocketService {
     required String mode,
     String? host,
     required int port,
+    bool useTLS = false,
   }) async {
     stopConnection();
 
@@ -76,6 +79,7 @@ class SocketService {
       'mode': mode,
       'host': host,
       'port': port,
+      'useTLS': useTLS,
     });
   }
 
