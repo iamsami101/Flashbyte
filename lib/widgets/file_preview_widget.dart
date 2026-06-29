@@ -1,15 +1,12 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:process_run/process_run.dart';
-import 'package:saf_util/saf_util.dart';
-// import 'package:uri_to_file/uri_to_file.dart'; // Temporarily removed
+import 'package:uri_to_file/uri_to_file.dart';
 import 'package:widget_zoom/widget_zoom.dart';
 
 class FilePreviewWidget extends StatefulWidget {
@@ -68,29 +65,8 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     File file;
 
     if (widget.filePath.contains("://") && Platform.isAndroid) {
-      // Handle content URIs for Android
-      if (widget.filePath.startsWith('content://')) {
-        try {
-          // Use SAF utility to get file info
-          final safUtil = SafUtil();
-          final fileStats = await safUtil.stat(widget.filePath, false);
-          if (fileStats == null) {
-            throw Exception('File not found at URI: ${widget.filePath}');
-          }
-          
-          // Create a temporary file for preview
-          final tempDir = await getTemporaryDirectory();
-          file = File('${tempDir.path}/${fileStats.name}');
-          previewFileIsTemp = true; // mark as temp for deletion
-        } catch (e) {
-          // Fallback to original path if resolution fails
-          file = File(widget.filePath);
-          previewFileIsTemp = true; // mark as temp
-        }
-      } else {
-        file = File(widget.filePath);
-        previewFileIsTemp = true; // mark as temp
-      }
+      file = await toFile(widget.filePath);
+      previewFileIsTemp = true; // mark as temp
     } else {
       file = File(widget.filePath);
       previewFileIsTemp = false; // don't delete real files

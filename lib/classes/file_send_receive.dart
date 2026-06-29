@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
+import 'package:uri_to_file/uri_to_file.dart';
 import 'package:uuid/uuid.dart';
 
 void fileReceiverIsolate(List<Object> args) {
@@ -185,58 +186,15 @@ Future<void> _sendFileCommand(
 
   try {
     if (Platform.isAndroid) {
-      // Handle content URIs for Android
-      if (filePath.startsWith('content://')) {
-        // For content URIs, use SAF utility to get file info
-        try {
-          final fileStats = await SafUtil().stat(filePath, false);
-          if (fileStats == null) {
-            throw Exception('File not found at URI: $filePath');
-          }
-          
-          // Create a temporary file and copy the content to it
-          final tempDir = await getTemporaryDirectory();
-          final tempFile = File('${tempDir.path}/${fileStats.name}');
-          
-          // For content URIs, we need to properly read the file content
-          // Use a more reliable approach with file operations
-          try {
-            // Try to open the file directly
-            final file = File(filePath.replaceFirst('content://', '/data/data/'));
-            if (await file.exists()) {
-              await file.copy(tempFile.path);
-            } else {
-              // Fallback: try to read using standard file operations
-              final fileContent = await File(filePath).readAsBytes();
-              await tempFile.writeAsBytes(fileContent);
-            }
-          } catch (e) {
-            throw Exception('Failed to copy content URI file: ${e.toString()}');
-          }
-          
-          cachedFile = tempFile;
-          fileStream = tempFile.openRead();
-          
-          fileHeader = {
-            'uuid': Uuid().v4(),
-            'name': fileStats.name,
-            'size': fileStats.length,
-          };
-        } catch (e) {
-          throw Exception('Failed to handle content URI: ${e.toString()}');
-        }
-      } else {
-        // Regular file path
-        cachedFile = File(filePath);
-        fileStream = cachedFile.openRead();
-        final fileStats = await File(filePath).stat();
+      cachedFile = await toFile(filePath);
+      fileStream = cachedFile.openRead();
+      final fileStats = await SafUtil().stat(filePath, false);
 
-        fileHeader = {
-          'uuid': Uuid().v4(),
-          'name': filePath.split('/').last,
-          'size': fileStats.size,
-        };
-      }
+      fileHeader = {
+        'uuid': Uuid().v4(),
+        'name': fileStats!.name,
+        'size': fileStats.length,
+      };
     } else {
       fileStream = File(filePath).openRead();
       final fileStats = await File(filePath).stat();
