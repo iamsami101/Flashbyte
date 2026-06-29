@@ -68,10 +68,16 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
       // Handle content URIs for Android
       if (widget.filePath.startsWith('content://')) {
         try {
-          // Use SAF utility to resolve content URI
-          final resolvedPath = await SafUtil().getRealPathFromUri(widget.filePath);
-          file = File(resolvedPath);
-          previewFileIsTemp = false; // resolved file should not be deleted
+          // Use SAF utility to get file info
+          final fileStats = await SafUtil().stat(widget.filePath, false);
+          if (fileStats == null) {
+            throw Exception('File not found at URI: ${widget.filePath}');
+          }
+          
+          // Create a temporary file for preview
+          final tempDir = await getTemporaryDirectory();
+          file = File('${tempDir.path}/${fileStats.name}');
+          previewFileIsTemp = true; // mark as temp for deletion
         } catch (e) {
           // Fallback to original path if resolution fails
           file = File(widget.filePath);
