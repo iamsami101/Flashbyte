@@ -117,7 +117,11 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/flashbyte.png"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
-# Install application icons to the hicolor icon theme (for system-wide installs).
+# Install the .desktop file and application icons (for system-wide installs).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/flashbyte.desktop"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"
+  COMPONENT Runtime)
+
 set(ICON_SIZES 16x16 32x32 64x64 128x128 256x256 512x512)
 foreach(ICON_SIZE ${ICON_SIZES})
   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icons/hicolor/${ICON_SIZE}/apps/flashbyte.png"

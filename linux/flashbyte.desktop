@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Flashbyte
+Comment=File sharing over local network
+Exec=flashbyte
+Icon=flashbyte
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;
+StartupWMClass=flashbyte
