@@ -274,16 +274,27 @@ Future<void> _sendFileCommand(
   final stopwatch = Stopwatch()..start();
 
   File? cachedFile;
+  int? androidFileDescriptor;
 
   try {
     if (Platform.isAndroid) {
-      cachedFile = await toFile(filePath);
-      fileStream = cachedFile.openRead();
       final fileStats = await SafUtil().stat(filePath, false);
+      if (fileStats == null) {
+        throw Exception('Could not read selected file metadata.');
+      }
+
+      try {
+        androidFileDescriptor = await SafUtil().getFileDescriptor(filePath);
+        final descriptorFile = File('/proc/self/fd/$androidFileDescriptor');
+        fileStream = descriptorFile.openRead();
+      } catch (_) {
+        cachedFile = await toFile(filePath);
+        fileStream = cachedFile.openRead();
+      }
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': fileStats!.name,
+        'name': fileStats.name,
         'size': fileStats.length,
       };
     } else {
@@ -338,10 +349,19 @@ Future<void> _sendFileCommand(
     });
 
     try {
+      if (androidFileDescriptor != null) {
+        await SafUtil().closeFileDescriptor(androidFileDescriptor);
+      }
       cachedFile?.delete();
     } on Exception catch (_) {}
   } catch (e) {
     stopwatch.stop();
+    try {
+      if (androidFileDescriptor != null) {
+        await SafUtil().closeFileDescriptor(androidFileDescriptor);
+      }
+      cachedFile?.delete();
+    } on Exception catch (_) {}
     toUiSendPort.send({
       'status': 'error',
       'fatal': 'false',
@@ -376,6 +396,7 @@ void _handleSocketConnection(
   bool heartbeatEnabled = !waitForProbe;
   bool awaitingHeartbeatResponse = false;
   Timer? heartbeatTimer;
+  bool transferInProgress = false;
 
   Future<void> cleanupOpenFile() async {
     if (fileSink != null) {
@@ -418,9 +439,11 @@ void _handleSocketConnection(
       return;
     }
     if (canSendHeartbeat != null && !canSendHeartbeat()) {
+      awaitingHeartbeatResponse = false;
       return;
     }
-    if (fileSink != null) {
+    if (fileSink != null || transferInProgress) {
+      awaitingHeartbeatResponse = false;
       return;
     }
     if (awaitingHeartbeatResponse) {
@@ -565,6 +588,8 @@ void _handleSocketConnection(
             configuredDownloadDirectory: configuredDownloadDirectory,
             originalFileName: headerJson!['name'] as String,
           );
+          transferInProgress = true;
+          awaitingHeartbeatResponse = false;
           activeOutputTarget = fileTarget;
           fileSink = fileTarget.sink;
 
@@ -619,6 +644,8 @@ void _handleSocketConnection(
             fileBytesLength = null;
             headerJson = null;
             activeOutputTarget = null;
+            transferInProgress = false;
+            awaitingHeartbeatResponse = false;
             bytesWritten = 0;
             continue;
           }
@@ -629,6 +656,7 @@ void _handleSocketConnection(
     },
     onDone: () {
       heartbeatTimer?.cancel();
+      transferInProgress = false;
       unawaited(cleanupOpenFile());
       if (!probeHandled && !connectionErrorSent) {
         sendConnectionError(
@@ -639,6 +667,7 @@ void _handleSocketConnection(
     },
     onError: (e) {
       heartbeatTimer?.cancel();
+      transferInProgress = false;
       unawaited(cleanupOpenFile());
       if (!probeHandled) {
         sendConnectionError(
