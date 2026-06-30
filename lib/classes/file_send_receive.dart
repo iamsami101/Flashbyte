@@ -327,17 +327,21 @@ Future<void> _sendFileCommand(
       'filePath': command['filePath'],
     });
 
-    await for (final chunk in fileStream) {
-      clientSocket.add(chunk);
-      bytesSent += chunk.length;
+    await clientSocket.addStream(
+      fileStream.map((chunk) {
+        bytesSent += chunk.length;
 
-      final progress = (bytesSent / totalBytes).clamp(0.0, 1.0);
+        final progress = (bytesSent / totalBytes).clamp(0.0, 1.0);
 
-      toUiSendPort.send({
-        'status': 'send_progress',
-        'progress': progress,
-      });
-    }
+        toUiSendPort.send({
+          'status': 'send_progress',
+          'progress': progress,
+        });
+
+        return chunk;
+      }),
+    );
+    await clientSocket.flush();
 
     stopwatch.stop();
 
