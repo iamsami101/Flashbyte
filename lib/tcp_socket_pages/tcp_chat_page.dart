@@ -210,35 +210,57 @@ class _TcpChatPageState extends State<TcpChatPage> {
                         physics: const BouncingScrollPhysics(),
                         controller: scrollController,
                         padding: EdgeInsets.only(bottom: 15),
-                        children: widgets.isEmpty
-                            ? [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
-                                    horizontal: 20,
-                                  ),
-                                  child: Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        spacing: 10,
-                                        children: [
-                                          Icon(
-                                            Icons.error_outline_rounded,
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.inverseSurface,
-                                          ),
-                                          Text("No files sent yet."),
-                                        ],
+                        children: [
+                          AnimatedSwitcher(
+                            duration: 240.ms,
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              final offsetAnimation = Tween<Offset>(
+                                begin: const Offset(0, 0.02),
+                                end: Offset.zero,
+                              ).animate(animation);
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: offsetAnimation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: widgets.isEmpty
+                                ? Padding(
+                                    key: const ValueKey('empty_state'),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 20,
+                                      horizontal: 20,
+                                    ),
+                                    child: Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(20),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          spacing: 10,
+                                          children: [
+                                            Icon(
+                                              Icons.error_outline_rounded,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.inverseSurface,
+                                            ),
+                                            Text("No files sent yet."),
+                                          ],
+                                        ),
                                       ),
                                     ),
+                                  )
+                                : Column(
+                                    key: const ValueKey('file_list'),
+                                    children: widgets.reversed.toList(),
                                   ),
-                                ),
-                              ]
-                            : widgets.reversed.toList(),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -250,45 +272,50 @@ class _TcpChatPageState extends State<TcpChatPage> {
                       : BoxConstraints(maxWidth: 500),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Card.outlined(
-                            child: ValueListenableBuilder(
-                              valueListenable: isDisconnected,
-                              builder: (context, value, child) => InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: value == true
-                                    ? null
-                                    : isSharingInProgress == true
-                                    ? null
-                                    : () async {
-                                        final pickedFile =
-                                            await FastFilePicker.pickFile();
-                                        if (pickedFile == null) {
-                                          return;
-                                        }
-                                        _sendPickedFile(pickedFile);
-                                      },
-                                child: Padding(
-                                  padding: EdgeInsets.all(17),
-                                  child: IntrinsicHeight(
-                                    child: Row(
-                                      spacing: 10,
-                                      children: [
-                                        Icon(Icons.file_present_rounded),
-                                        Text("Pick File"),
-                                      ],
+                    child:
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Card.outlined(
+                                child: ValueListenableBuilder(
+                                  valueListenable: isDisconnected,
+                                  builder: (context, value, child) => InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: value == true
+                                        ? null
+                                        : isSharingInProgress == true
+                                        ? null
+                                        : () async {
+                                            final pickedFile =
+                                                await FastFilePicker.pickFile();
+                                            if (pickedFile == null) {
+                                              return;
+                                            }
+                                            _sendPickedFile(pickedFile);
+                                          },
+                                    child: Padding(
+                                      padding: EdgeInsets.all(17),
+                                      child: IntrinsicHeight(
+                                        child: Row(
+                                          spacing: 10,
+                                          children: [
+                                            Icon(Icons.file_present_rounded),
+                                            Text("Pick File"),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
+                        ).animate().fadeIn(
+                          delay: 80.ms,
+                          duration: 220.ms,
+                          curve: Curves.easeOutCubic,
                         ),
-                      ],
-                    ),
                   ),
                 ),
               ],

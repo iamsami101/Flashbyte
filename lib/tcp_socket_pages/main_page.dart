@@ -212,10 +212,29 @@ class _TcpSocketsState extends State<TcpSockets> {
                 constraints: (Platform.isAndroid || Platform.isIOS)
                     ? BoxConstraints()
                     : BoxConstraints(maxWidth: 500),
-                child: SingleChildScrollView(
-                  child: widget.mode == TcpConnectionMode.receive
-                      ? _buildReceiveConnection()
-                      : _buildSendConnection(),
+                child: AnimatedSwitcher(
+                  duration: 280.ms,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final offsetAnimation = Tween<Offset>(
+                      begin: const Offset(0, 0.03),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: offsetAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: SingleChildScrollView(
+                    key: ValueKey(widget.mode),
+                    child: widget.mode == TcpConnectionMode.receive
+                        ? _buildReceiveConnection()
+                        : _buildSendConnection(),
+                  ),
                 ),
               ),
             ),
@@ -247,7 +266,7 @@ class _TcpSocketsState extends State<TcpSockets> {
         ),
         _buildQrCard(),
       ],
-    );
+    ).animate().fadeIn(duration: 220.ms, curve: Curves.easeOutCubic);
   }
 
   Widget _buildSendConnection() {
@@ -288,7 +307,7 @@ class _TcpSocketsState extends State<TcpSockets> {
           ),
         ),
       ],
-    );
+    ).animate().fadeIn(duration: 220.ms, curve: Curves.easeOutCubic);
   }
 
   Widget _buildQrCard() {
@@ -303,35 +322,39 @@ class _TcpSocketsState extends State<TcpSockets> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  if (constraints.maxWidth <= 400) {
-                    return AnimatedSize(
-                      duration: 500.ms,
-                      curve: Easing.emphasizedDecelerate,
-                      child: ipAddress == null || _isConnecting
-                          ? SizedBox(
-                              width: double.infinity,
-                              child: Center(child: LoadingIndicatorM3E()),
-                            )
-                          : QrImageView(
-                              data: ipAddress!,
-                              padding: EdgeInsets.all(20),
-                              backgroundColor: Colors.white,
-                            ),
-                    );
-                  }
+                  final qr = ipAddress == null || _isConnecting
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: LoadingIndicatorM3E()),
+                        )
+                      : QrImageView(
+                          data: ipAddress!,
+                          padding: EdgeInsets.all(20),
+                          backgroundColor: Colors.white,
+                        );
 
-                  return SizedBox(
-                    width: 400,
-                    child: AnimatedSize(
-                      duration: 500.ms,
-                      curve: Easing.emphasizedDecelerate,
-                      child: ipAddress == null || _isConnecting
-                          ? Divider()
-                          : QrImageView(
-                              data: ipAddress!,
-                              padding: EdgeInsets.all(20),
-                              backgroundColor: Colors.white,
-                            ),
+                  final sizedQr = constraints.maxWidth <= 400
+                      ? AnimatedSize(
+                          duration: 500.ms,
+                          curve: Easing.emphasizedDecelerate,
+                          child: qr,
+                        )
+                      : SizedBox(
+                          width: 400,
+                          child: AnimatedSize(
+                            duration: 500.ms,
+                            curve: Easing.emphasizedDecelerate,
+                            child: qr,
+                          ),
+                        );
+
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: constraints.maxWidth <= 400
+                          ? constraints.maxWidth
+                          : 400,
+                      child: sizedQr,
                     ),
                   );
                 },
@@ -344,6 +367,10 @@ class _TcpSocketsState extends State<TcpSockets> {
           ),
         ),
       ),
+    ).animate().fadeIn(
+      delay: 80.ms,
+      duration: 220.ms,
+      curve: Curves.easeOutCubic,
     );
   }
 
