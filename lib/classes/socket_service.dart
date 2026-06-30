@@ -156,13 +156,18 @@ class SocketService {
   }
 
   void disconnect() {
-    if (_uiReceivePort == null) {
+    final sendPort = _toIsolateSendPort;
+    if (_uiReceivePort == null || sendPort == null) {
       stopConnection();
       return;
     }
-    _toIsolateSendPort!.send({
-      'command': 'disconnect',
-    });
+    try {
+      sendPort.send({
+        'command': 'disconnect',
+      });
+    } catch (_) {
+      stopConnection();
+    }
   }
 
   void stopConnection() {

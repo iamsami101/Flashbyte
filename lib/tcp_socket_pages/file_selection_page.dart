@@ -45,7 +45,7 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
   void dispose() {
     _socketSubscription?.cancel();
     receiverIpController.dispose();
-    SocketService.instance.disconnect();
+    SocketService.instance.stopConnection();
     super.dispose();
   }
 
