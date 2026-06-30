@@ -119,24 +119,52 @@ class _StartPageState extends State<StartPage> {
                       ],
                     ),
                     Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ButtonStyle(
-                          padding: WidgetStatePropertyAll(
-                            EdgeInsets.symmetric(vertical: 30),
+                    Column(
+                      spacing: 12,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonal(
+                            style: ButtonStyle(
+                              padding: WidgetStatePropertyAll(
+                                EdgeInsets.symmetric(vertical: 22),
+                              ),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FileSelectionPage(
+                                    initialTabIndex: 0,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Text("Send"),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FileSelectionPage(),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            style: ButtonStyle(
+                              padding: WidgetStatePropertyAll(
+                                EdgeInsets.symmetric(vertical: 22),
+                              ),
                             ),
-                          );
-                        },
-                        child: Text("Start"),
-                      ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FileSelectionPage(
+                                    initialTabIndex: 1,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Text("Receive"),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

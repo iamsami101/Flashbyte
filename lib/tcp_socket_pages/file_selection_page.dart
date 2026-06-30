@@ -12,7 +12,9 @@ import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class FileSelectionPage extends StatefulWidget {
-  const FileSelectionPage({super.key});
+  final int initialTabIndex;
+
+  const FileSelectionPage({super.key, this.initialTabIndex = 0});
 
   @override
   State<FileSelectionPage> createState() => _FileSelectionPageState();
@@ -35,6 +37,7 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
   @override
   void initState() {
     super.initState();
+    selectedTabIndex = widget.initialTabIndex;
 
     _socketSubscription = SocketService.instance.messageStream.listen(
       _handleSocketMessage,
