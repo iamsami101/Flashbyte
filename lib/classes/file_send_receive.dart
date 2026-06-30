@@ -26,6 +26,7 @@ void fileReceiverIsolate(List<Object> args) {
   final List<Map<String, dynamic>> commandQueue = [];
   bool isProcessing = false;
   bool isSendingFile = false;
+  String? sendingFileId;
 
   Future<void> processCommandQueue() async {
     if (isProcessing || commandQueue.isEmpty) return;
@@ -176,6 +177,12 @@ void fileReceiverIsolate(List<Object> args) {
                   toUiSendPort,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
+                  onTransferAcknowledged: (fileId) {
+                    if (sendingFileId == fileId) {
+                      isSendingFile = false;
+                      sendingFileId = null;
+                    }
+                  },
                 );
               } else {
                 // Non-TLS: send probe, then hand off to _handleSocketConnection
@@ -202,6 +209,12 @@ void fileReceiverIsolate(List<Object> args) {
                   canSendHeartbeat: () => !isSendingFile,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
+                  onTransferAcknowledged: (fileId) {
+                    if (sendingFileId == fileId) {
+                      isSendingFile = false;
+                      sendingFileId = null;
+                    }
+                  },
                 );
               }
             } catch (e) {
@@ -227,9 +240,15 @@ void fileReceiverIsolate(List<Object> args) {
 
           isSendingFile = true;
           try {
-            await _sendFileCommand(command, clientSocket!, toUiSendPort);
+            sendingFileId = await _sendFileCommand(
+              command,
+              clientSocket!,
+              toUiSendPort,
+            );
           } finally {
-            isSendingFile = false;
+            if (sendingFileId == null) {
+              isSendingFile = false;
+            }
           }
         } else if (command['command'] == "disconnect") {
           final header = utf8.encode(
@@ -262,7 +281,7 @@ void fileReceiverIsolate(List<Object> args) {
   });
 }
 
-Future<void> _sendFileCommand(
+Future<String> _sendFileCommand(
   Map<String, dynamic> command,
   dynamic clientSocket,
   SendPort toUiSendPort,
@@ -327,30 +346,20 @@ Future<void> _sendFileCommand(
       'filePath': command['filePath'],
     });
 
-    await clientSocket.addStream(
-      fileStream.map((chunk) {
-        bytesSent += chunk.length;
+    await for (final chunk in fileStream) {
+      clientSocket.add(chunk);
+      bytesSent += chunk.length;
 
-        final progress = (bytesSent / totalBytes).clamp(0.0, 1.0);
+      final progress = (bytesSent / totalBytes).clamp(0.0, 1.0);
 
-        toUiSendPort.send({
-          'status': 'send_progress',
-          'progress': progress,
-        });
-
-        return chunk;
-      }),
-    );
+      toUiSendPort.send({
+        'status': 'send_progress',
+        'progress': progress,
+      });
+    }
     await clientSocket.flush();
 
     stopwatch.stop();
-
-    toUiSendPort.send({
-      'status': 'send_complete',
-      'fileId': fileHeader['uuid'],
-      'fileName': fileHeader['name'],
-      'timeTaken': stopwatch.elapsed.inSeconds.toString(),
-    });
 
     try {
       if (androidFileDescriptor != null) {
@@ -358,6 +367,7 @@ Future<void> _sendFileCommand(
       }
       cachedFile?.delete();
     } on Exception catch (_) {}
+    return fileHeader['uuid'] as String;
   } catch (e) {
     stopwatch.stop();
     try {
@@ -371,6 +381,7 @@ Future<void> _sendFileCommand(
       'fatal': 'false',
       'message': 'File send error: ${e.toString()}',
     });
+    rethrow;
   }
 }
 
@@ -380,6 +391,7 @@ void _handleSocketConnection(
   bool waitForProbe = false,
   bool Function()? canSendHeartbeat,
   String? configuredDownloadDirectory,
+  void Function(String fileId)? onTransferAcknowledged,
 }) {
   List<int> buffer = [];
 
@@ -579,6 +591,24 @@ void _handleSocketConnection(
             continue;
           }
 
+          if (headerJson!['type'] == 'file_received_ack') {
+            awaitingHeartbeatResponse = false;
+            final fileId = headerJson!['fileId'] as String?;
+            if (fileId != null) {
+              onTransferAcknowledged?.call(fileId);
+              toUiSendPort.send({
+                'status': 'send_complete',
+                'fileId': fileId,
+                'fileName': headerJson!['fileName'],
+                'timeTaken': headerJson!['timeTaken'],
+              });
+            }
+            headerLength = null;
+            fileBytesLength = null;
+            headerJson = null;
+            continue;
+          }
+
           if (headerJson!['type'] == 'disconnect') {
             gracefulDisconnect = true;
             heartbeatTimer?.cancel();
@@ -629,6 +659,12 @@ void _handleSocketConnection(
           });
 
           if (bytesWritten == fileBytesLength!) {
+            sendControlFrame({
+              'type': 'file_received_ack',
+              'fileId': headerJson!['uuid'],
+              'fileName': activeOutputTarget!.fileName,
+              'timeTaken': stopwatch.elapsed.inSeconds.toString(),
+            });
             toUiSendPort.send({
               'status': activeOutputTarget!.finalizeToTreeUri == null
                   ? 'completed'
