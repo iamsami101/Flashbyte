@@ -365,7 +365,7 @@ void _handleSocketConnection(
   int bytesWritten = 0;
 
   IOSink? fileSink;
-  int? androidOutputFd;
+  _OutputTarget? activeOutputTarget;
 
   final Stopwatch stopwatch = Stopwatch();
 
@@ -381,10 +381,6 @@ void _handleSocketConnection(
     if (fileSink != null) {
       await fileSink!.close();
       fileSink = null;
-    }
-    if (androidOutputFd != null) {
-      await AndroidSafService.closeOutputFile(androidOutputFd!);
-      androidOutputFd = null;
     }
   }
 
@@ -569,7 +565,7 @@ void _handleSocketConnection(
             configuredDownloadDirectory: configuredDownloadDirectory,
             originalFileName: headerJson!['name'] as String,
           );
-          androidOutputFd = fileTarget.fileDescriptor;
+          activeOutputTarget = fileTarget;
           fileSink = fileTarget.sink;
 
           toUiSendPort.send({
@@ -605,9 +601,14 @@ void _handleSocketConnection(
 
           if (bytesWritten == fileBytesLength!) {
             toUiSendPort.send({
-              'status': 'completed',
+              'status': activeOutputTarget!.finalizeToTreeUri == null
+                  ? 'completed'
+                  : 'android_saf_finalize',
               'fileId': headerJson!['uuid'],
               'timeTaken': stopwatch.elapsed.inSeconds.toString(),
+              'treeUri': activeOutputTarget!.finalizeToTreeUri,
+              'sourceFilePath': activeOutputTarget!.filePath,
+              'fileName': activeOutputTarget!.fileName,
             });
 
             await cleanupOpenFile();
@@ -617,6 +618,7 @@ void _handleSocketConnection(
             headerLength = null;
             fileBytesLength = null;
             headerJson = null;
+            activeOutputTarget = null;
             bytesWritten = 0;
             continue;
           }
@@ -685,13 +687,13 @@ class _OutputTarget {
     required this.fileName,
     required this.filePath,
     required this.sink,
-    this.fileDescriptor,
+    this.finalizeToTreeUri,
   });
 
   final String fileName;
   final String filePath;
   final IOSink sink;
-  final int? fileDescriptor;
+  final String? finalizeToTreeUri;
 }
 
 Future<_OutputTarget> _createOutputTarget({
@@ -703,16 +705,18 @@ Future<_OutputTarget> _createOutputTarget({
   );
 
   if (Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory)) {
-    final outputFile = await AndroidSafService.createOutputFile(
-      treeUri: resolvedDirectory,
-      fileName: originalFileName,
+    final stagingDirectory = await getTemporaryDirectory();
+    final fileName = _generateUniqueFileName(
+      stagingDirectory.path,
+      originalFileName,
     );
-    final procFdFile = File('/proc/self/fd/${outputFile.fileDescriptor}');
+    final filePath = '${stagingDirectory.path}/$fileName';
+    final file = File(filePath);
     return _OutputTarget(
-      fileName: outputFile.name,
-      filePath: outputFile.uri,
-      sink: procFdFile.openWrite(),
-      fileDescriptor: outputFile.fileDescriptor,
+      fileName: fileName,
+      filePath: filePath,
+      sink: file.openWrite(),
+      finalizeToTreeUri: resolvedDirectory,
     );
   }
 

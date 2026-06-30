@@ -207,6 +207,20 @@ class _SettingsPageState extends State<SettingsPage> {
         AppSettings.formatDownloadDirectoryForDisplay(folderPath);
   }
 
+  Future<void> _resetDownloadDirectory() async {
+    if (widget.locked) {
+      return;
+    }
+
+    final defaultDirectory = await AppSettings.getDefaultDownloadDirectory();
+    await AppSettings.setDownloadDirectory(defaultDirectory);
+    if (!mounted) return;
+    setState(() {
+      _downloadDirectoryController.text =
+          AppSettings.formatDownloadDirectoryForDisplay(defaultDirectory);
+    });
+  }
+
   Future<void> _toggleDynamicColors(bool value) async {
     await _appearanceController.setUseDynamicColors(value);
     if (!mounted) return;
@@ -342,17 +356,31 @@ class _SettingsPageState extends State<SettingsPage> {
                         : "Files received on this device will be saved here.",
                   ),
                   trailing: SizedBox(
-                    width: 220,
-                    child: TextField(
-                      controller: _downloadDirectoryController,
-                      readOnly: true,
-                      enabled: !widget.locked,
-                      onTap: _pickDownloadDirectory,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.folder_open_rounded),
-                      ),
+                    width: 260,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _downloadDirectoryController,
+                            readOnly: true,
+                            enabled: !widget.locked,
+                            onTap: _pickDownloadDirectory,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                              suffixIcon: Icon(Icons.folder_open_rounded),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Reset folder',
+                          onPressed: widget.locked
+                              ? null
+                              : _resetDownloadDirectory,
+                          icon: const Icon(Icons.restart_alt_rounded),
+                        ),
+                      ],
                     ),
                   ),
                 ),

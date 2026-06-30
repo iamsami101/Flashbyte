@@ -2,12 +2,10 @@ import 'package:flutter/services.dart';
 
 class AndroidSafOutputFile {
   const AndroidSafOutputFile({
-    required this.fileDescriptor,
     required this.uri,
     required this.name,
   });
 
-  final int fileDescriptor;
   final String uri;
   final String name;
 }
@@ -27,51 +25,61 @@ class AndroidSafService {
 
     final decoded = Uri.decodeComponent(treeMatch.group(1)!);
     if (decoded == 'primary:') {
-      return '/storage/emulated/0';
+      return 'Internal storage';
     }
     if (decoded.startsWith('primary:')) {
-      return decoded.replaceFirst('primary:', '/storage/emulated/0/');
+      return decoded.replaceFirst('primary:', '');
     }
     return decoded.replaceAll(':', ':/');
   }
 
-  static Future<AndroidSafOutputFile> createOutputFile({
+  static String trimPathForDisplay(String path) {
+    if (isTreeUri(path)) {
+      return formatTreeUriForDisplay(path);
+    }
+
+    if (path.startsWith('/storage/emulated/0/')) {
+      return path.substring('/storage/emulated/0/'.length);
+    }
+
+    final homeMatch = RegExp(r'^/home/[^/]+/').firstMatch(path);
+    if (homeMatch != null) {
+      return path.substring(homeMatch.end);
+    }
+
+    return path;
+  }
+
+  static Future<AndroidSafOutputFile> importFileToTree({
     required String treeUri,
+    required String sourceFilePath,
     required String fileName,
     String mimeType = 'application/octet-stream',
   }) async {
     final response = await _channel.invokeMapMethod<String, dynamic>(
-      'createOutputFile',
+      'importFileToTree',
       {
         'treeUri': treeUri,
+        'sourceFilePath': sourceFilePath,
         'fileName': fileName,
         'mimeType': mimeType,
       },
     );
 
     if (response == null) {
-      throw Exception('Could not create the destination file.');
+      throw Exception('Could not save the destination file.');
     }
 
-    final fileDescriptor = response['fd'];
     final uri = response['uri'];
     final name = response['name'];
 
-    if (fileDescriptor is! int || uri is! String || name is! String) {
+    if (uri is! String || name is! String) {
       throw Exception('Invalid Android SAF response.');
     }
 
     return AndroidSafOutputFile(
-      fileDescriptor: fileDescriptor,
       uri: uri,
       name: name,
-    );
-  }
-
-  static Future<void> closeOutputFile(int fileDescriptor) {
-    return _channel.invokeMethod<void>(
-      'closeOutputFile',
-      {'fd': fileDescriptor},
     );
   }
 }

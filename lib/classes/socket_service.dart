@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/file_send_receive.dart';
 import 'package:flutter/services.dart';
@@ -112,12 +113,19 @@ class SocketService {
     }
 
     _streamSubscription = _uiReceivePort!.listen(
-      (message) {
+      (message) async {
         if (message is SendPort) {
           completer.complete(message);
-        } else {
-          _messageStreamController.add(message as IsolateMessage);
+          return;
         }
+
+        final typedMessage = message as IsolateMessage;
+        if (typedMessage['status'] == 'android_saf_finalize') {
+          await _finalizeAndroidSafTransfer(typedMessage);
+          return;
+        }
+
+        _messageStreamController.add(typedMessage);
       },
     );
 
@@ -180,5 +188,44 @@ class SocketService {
     _streamSubscription = null;
     _uiReceivePort = null;
     _currentMode = null;
+  }
+
+  Future<void> _finalizeAndroidSafTransfer(IsolateMessage message) async {
+    final treeUri = message['treeUri'] as String?;
+    final sourceFilePath = message['sourceFilePath'] as String?;
+    final fileName = message['fileName'] as String?;
+
+    if (treeUri == null || sourceFilePath == null || fileName == null) {
+      _messageStreamController.add({
+        'status': 'error',
+        'fatal': false,
+        'message': 'Could not finalize the received file on Android.',
+      });
+      return;
+    }
+
+    try {
+      final savedFile = await AndroidSafService.importFileToTree(
+        treeUri: treeUri,
+        sourceFilePath: sourceFilePath,
+        fileName: fileName,
+      );
+      await File(sourceFilePath).delete();
+
+      _messageStreamController.add({
+        'status': 'completed',
+        'fileId': message['fileId'],
+        'timeTaken': message['timeTaken'],
+        'fileName': savedFile.name,
+        'filePath': savedFile.uri,
+      });
+    } catch (e) {
+      _messageStreamController.add({
+        'status': 'error',
+        'fatal': false,
+        'message':
+            'Could not save the received file to the selected folder.\n${e.toString()}',
+      });
+    }
   }
 }

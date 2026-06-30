@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
@@ -195,7 +196,11 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
                               Icons.open_in_full_rounded: Text(
                                 widget.fileSize,
                               ),
-                              Icons.location_pin: Text(widget.filePath),
+                              Icons.location_pin: Text(
+                                AndroidSafService.trimPathForDisplay(
+                                  widget.filePath,
+                                ),
+                              ),
                             }.entries.map(
                               (e) {
                                 return Row(

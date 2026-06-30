@@ -1,14 +1,12 @@
 package com.flashbyte
 
-import android.os.ParcelFileDescriptor
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 class MainActivity : FlutterActivity() {
-    private val outputFdMap = mutableMapOf<Int, ParcelFileDescriptor>()
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -17,10 +15,12 @@ class MainActivity : FlutterActivity() {
             "flashbyte/android_saf"
         ).setMethodCallHandler { call, result ->
             when (call.method) {
-                "createOutputFile" -> {
+                "importFileToTree" -> {
                     try {
                         val treeUriString = call.argument<String>("treeUri")
                             ?: throw IllegalArgumentException("Missing treeUri")
+                        val sourceFilePath = call.argument<String>("sourceFilePath")
+                            ?: throw IllegalArgumentException("Missing sourceFilePath")
                         val requestedName = call.argument<String>("fileName")
                             ?: throw IllegalArgumentException("Missing fileName")
                         val mimeType = call.argument<String>("mimeType")
@@ -32,30 +32,24 @@ class MainActivity : FlutterActivity() {
                         val uniqueName = buildUniqueFileName(parent, requestedName)
                         val createdFile = parent.createFile(mimeType, uniqueName)
                             ?: throw IllegalStateException("Could not create the destination file.")
-                        val fileDescriptor =
-                            contentResolver.openFileDescriptor(createdFile.uri, "w")
-                                ?: throw IllegalStateException("Could not open the destination file.")
 
-                        outputFdMap[fileDescriptor.fd] = fileDescriptor
+                        val sourceFile = File(sourceFilePath)
+                        if (!sourceFile.exists()) {
+                            throw IllegalStateException("The staged file does not exist anymore.")
+                        }
+
+                        contentResolver.openOutputStream(createdFile.uri, "w")?.use { output ->
+                            sourceFile.inputStream().use { input ->
+                                input.copyTo(output)
+                            }
+                        } ?: throw IllegalStateException("Could not open the destination file.")
 
                         result.success(
                             mapOf(
-                                "fd" to fileDescriptor.fd,
                                 "uri" to createdFile.uri.toString(),
                                 "name" to (createdFile.name ?: uniqueName),
                             )
                         )
-                    } catch (error: Exception) {
-                        result.error("ANDROID_SAF_ERROR", error.message, null)
-                    }
-                }
-
-                "closeOutputFile" -> {
-                    try {
-                        val fd = call.argument<Int>("fd")
-                            ?: throw IllegalArgumentException("Missing fd")
-                        outputFdMap.remove(fd)?.close()
-                        result.success(null)
                     } catch (error: Exception) {
                         result.error("ANDROID_SAF_ERROR", error.message, null)
                     }

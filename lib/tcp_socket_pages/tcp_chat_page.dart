@@ -65,7 +65,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _fileProgress.value = message['progress'];
             break;
           case 'completed':
-            replaceLastWidget();
+            replaceLastWidget(
+              filePath: message['filePath'] as String?,
+              fileName: message['fileName'] as String?,
+            );
             _fileProgress.value = 0;
 
             setState(() {
@@ -339,7 +342,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
     }
   }
 
-  void replaceLastWidget() {
+  void replaceLastWidget({
+    String? filePath,
+    String? fileName,
+  }) {
     final lastWidget = _fileTransferWidgets.value.last;
 
     final List<TransferWidget> tempList = List.from(_fileTransferWidgets.value);
@@ -348,8 +354,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
     _fileTransferWidgets.value = [
       ...tempList,
       TransferWidget(
-        filePath: lastWidget.filePath,
-        fileName: lastWidget.fileName,
+        filePath: filePath ?? lastWidget.filePath,
+        fileName: fileName ?? lastWidget.fileName,
         fileSize: lastWidget.fileSize,
         isReceived: lastWidget.isReceived,
         uuid: lastWidget.uuid,

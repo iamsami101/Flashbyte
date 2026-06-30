@@ -60,10 +60,7 @@ class AppSettings {
   }
 
   static String formatDownloadDirectoryForDisplay(String path) {
-    if (Platform.isAndroid && AndroidSafService.isTreeUri(path)) {
-      return AndroidSafService.formatTreeUriForDisplay(path);
-    }
-    return path;
+    return AndroidSafService.trimPathForDisplay(path);
   }
 
   static Future<String> getDefaultDownloadDirectory() async {
