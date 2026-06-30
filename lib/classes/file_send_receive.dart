@@ -406,6 +406,28 @@ void _handleSocketConnection(
     }
   }
 
+  Future<void> discardPartialOutput() async {
+    final target = activeOutputTarget;
+    if (target == null) {
+      return;
+    }
+
+    await cleanupOpenFile();
+
+    try {
+      final file = File(target.filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+
+    activeOutputTarget = null;
+    bytesWritten = 0;
+    headerLength = null;
+    fileBytesLength = null;
+    headerJson = null;
+  }
+
   void sendControlFrame(Map<String, dynamic> payload) {
     final payloadBytes = utf8.encode(jsonEncode(payload));
     final header = ByteData(8);
@@ -564,6 +586,7 @@ void _handleSocketConnection(
 
           if (headerJson!['type'] == 'disconnect') {
             gracefulDisconnect = true;
+            await discardPartialOutput();
             socket.destroy();
             toUiSendPort.send({'command': 'disconnect'});
             return;
@@ -643,7 +666,9 @@ void _handleSocketConnection(
       }
     },
     onDone: () {
-      unawaited(cleanupOpenFile());
+      unawaited(
+        activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
+      );
       if (!probeHandled && !connectionErrorSent) {
         sendConnectionError(
           'Connection closed before the link was established. Check the TLS setting on both devices.',
@@ -659,7 +684,9 @@ void _handleSocketConnection(
       socket.destroy();
     },
     onError: (e) {
-      unawaited(cleanupOpenFile());
+      unawaited(
+        activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
+      );
       if (!probeHandled) {
         sendConnectionError(
           'Could not establish the connection. Check the TLS setting on both devices.',
