@@ -4,6 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QrCodeScanPage extends StatefulWidget {
   final void Function(String value) onScanned;
+
   const QrCodeScanPage({super.key, required this.onScanned});
 
   @override
@@ -11,7 +12,6 @@ class QrCodeScanPage extends StatefulWidget {
 }
 
 class _QrCodeScanPageState extends State<QrCodeScanPage> {
-  bool cameraFlip = false;
   final MobileScannerController controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: [BarcodeFormat.qrCode],
@@ -35,24 +35,28 @@ class _QrCodeScanPageState extends State<QrCodeScanPage> {
                 child: SizedBox(
                   height: MediaQuery.sizeOf(context).height * 0.8,
                   child: ClipRRect(
-                    borderRadius: BorderRadiusGeometry.circular(20),
+                    borderRadius: BorderRadius.circular(20),
                     child: Stack(
                       children: [
                         MobileScanner(
                           controller: controller,
                           onDetect: (barcodes) {
                             final barcode = barcodes.barcodes.first;
-                            widget.onScanned(barcode.rawValue!);
+                            final value = barcode.rawValue;
+                            if (value == null) {
+                              return;
+                            }
+                            widget.onScanned(value);
                             HapticFeedback.vibrate();
                           },
                         ),
-                        QrScannerOverlay(cutOutSize: 250),
+                        const QrScannerOverlay(cutOutSize: 250),
                       ],
                     ),
                   ),
                 ),
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               Card(
                 margin: EdgeInsets.zero,
                 child: InkWell(
@@ -61,8 +65,8 @@ class _QrCodeScanPageState extends State<QrCodeScanPage> {
                       controller.switchCamera();
                     });
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(13),
+                  child: const Padding(
+                    padding: EdgeInsets.all(13),
                     child: Row(
                       spacing: 20,
                       children: [
@@ -114,7 +118,6 @@ class QrScannerOverlay extends StatelessWidget {
             ],
           ),
         ),
-        // Optional border around the transparent area
         Align(
           alignment: Alignment.center,
           child: Container(

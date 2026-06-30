@@ -1,27 +1,46 @@
-import 'package:flashbyte/tcp_socket_pages/main_page.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:heroine/heroine.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppAppearanceController.instance.load();
   runApp(const MainApp());
 }
 
-class MainApp extends StatelessWidget {
+class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
   @override
+  State<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends State<MainApp> {
+  final AppAppearanceController appearanceController =
+      AppAppearanceController.instance;
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.green,
-      ),
-      home: StartPage(),
-      navigatorObservers: [HeroineController()],
+    return AnimatedBuilder(
+      animation: appearanceController,
+      builder: (context, child) {
+        return DynamicColorBuilder(
+          builder: (lightDynamic, darkDynamic) {
+            return MaterialApp(
+              theme: appearanceController.buildTheme(
+                darkDynamic: darkDynamic,
+              ),
+              home: const StartPage(),
+              navigatorObservers: [HeroineController()],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -99,7 +118,7 @@ class _StartPageState extends State<StartPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => TcpSockets(),
+                              builder: (context) => FileSelectionPage(),
                             ),
                           );
                         },

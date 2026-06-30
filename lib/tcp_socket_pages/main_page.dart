@@ -1,18 +1,27 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fast_file_picker/fast_file_picker.dart';
+import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flashbyte/pages/settings_page.dart';
-import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+enum TcpConnectionMode { send, receive }
 
 class TcpSockets extends StatefulWidget {
-  const TcpSockets({super.key});
+  final TcpConnectionMode mode;
+  final List<FastFilePickerPath> selectedFiles;
+
+  const TcpSockets({
+    super.key,
+    required this.mode,
+    required this.selectedFiles,
+  });
 
   @override
   State<TcpSockets> createState() => _TcpSocketsState();
@@ -55,18 +64,13 @@ class _TcpSocketsState extends State<TcpSockets> {
     }
   }
 
-  Future<bool> _getTLSPreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('useTLS') ?? true;
-  }
-
   @override
   void initState() {
     super.initState();
-    _getTLSPreference().then((useTLS) {
-      SocketService.instance.startHost('0.0.0.0', useTLS: useTLS);
-    });
-    getIp();
+    if (widget.mode == TcpConnectionMode.receive) {
+      _startReceiver();
+      getIp();
+    }
 
     messageSubscription?.cancel();
 
@@ -91,7 +95,7 @@ class _TcpSocketsState extends State<TcpSockets> {
               context,
               PageRouteBuilder(
                 pageBuilder: (context, animation, secondaryAnimation) =>
-                    TcpChatPage(),
+                    TcpChatPage(initialFiles: widget.selectedFiles),
               ),
             );
             break;
@@ -105,54 +109,56 @@ class _TcpSocketsState extends State<TcpSockets> {
               barrierLabel: "Close Dialog",
               pageBuilder: (context, animation, secondaryAnimation) =>
                   AlertDialog(
-                title: Row(
-                  spacing: 10,
-                  children: [
-                    Icon(
-                      Icons.error_rounded,
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                    ),
-                    Text('Connection Error'),
-                  ],
-                ),
-                content: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 10,
-                  children: [
-                    Text(
-                      "Failed to establish connection.\n\nError log:",
-                    ),
-                    Card(
-                      margin: EdgeInsets.all(0),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: 200),
-                          child: SingleChildScrollView(
-                            child: Text(message['message'] ?? 'Unknown error'),
-                          ),
+                    title: Row(
+                      spacing: 10,
+                      children: [
+                        Icon(
+                          Icons.error_rounded,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
-                      ),
+                        Text('Connection Error'),
+                      ],
                     ),
-                    const SizedBox(height: 5),
-                    SizedBox(
-                      width: double.infinity,
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => Navigator.pop(context),
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 10,
+                      children: [
+                        Text(
+                          "Failed to establish connection.\n\nError log:",
+                        ),
+                        Card(
+                          margin: EdgeInsets.all(0),
                           child: Padding(
-                            padding: const EdgeInsets.all(13),
-                            child: Center(child: Text("Dismiss")),
+                            padding: const EdgeInsets.all(10),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(maxHeight: 200),
+                              child: SingleChildScrollView(
+                                child: Text(
+                                  message['message'] ?? 'Unknown error',
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 5),
+                        SizedBox(
+                          width: double.infinity,
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => Navigator.pop(context),
+                              child: Padding(
+                                padding: const EdgeInsets.all(13),
+                                child: Center(child: Text("Dismiss")),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
             );
             break;
         }
@@ -178,7 +184,9 @@ class _TcpSocketsState extends State<TcpSockets> {
         },
         child: Scaffold(
           appBar: AppBar(
-            title: const Text("Connect"),
+            title: Text(
+              widget.mode == TcpConnectionMode.receive ? "Receive" : "Send",
+            ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.settings),
@@ -190,11 +198,9 @@ class _TcpSocketsState extends State<TcpSockets> {
                       builder: (context) => const SettingsPage(),
                     ),
                   );
-                  final newUseTLS = await _getTLSPreference();
-                  SocketService.instance.startHost(
-                    '0.0.0.0',
-                    useTLS: newUseTLS,
-                  );
+                  if (widget.mode == TcpConnectionMode.receive) {
+                    await _startReceiver();
+                  }
                 },
               ),
             ],
@@ -207,188 +213,9 @@ class _TcpSocketsState extends State<TcpSockets> {
                     ? BoxConstraints()
                     : BoxConstraints(maxWidth: 500),
                 child: SingleChildScrollView(
-                  child: Column(
-                    spacing: 20,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Card(
-                        margin: EdgeInsets.zero,
-                        child: Padding(
-                          padding: EdgeInsetsGeometry.all(20),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: Column(
-                              spacing: 20,
-                              children: [
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    if (constraints.maxWidth <= 400) {
-                                      return AnimatedSize(
-                                        duration: 500.ms,
-                                        curve: Easing.emphasizedDecelerate,
-                                        child: ipAddress == null || _isConnecting
-                                            ? SizedBox(
-                                                width: double.infinity,
-                                                child: Center(
-                                                  child: LoadingIndicatorM3E(),
-                                                ),
-                                              )
-                                            : QrImageView(
-                                                data: ipAddress!,
-                                                padding: EdgeInsets.all(
-                                                  20,
-                                                ),
-                                                backgroundColor: Colors.white,
-                                              ),
-                                      );
-                                    } else {
-                                      return SizedBox(
-                                        width: 400,
-                                        child: AnimatedSize(
-                                          duration: 500.ms,
-                                          curve: Easing.emphasizedDecelerate,
-                                          child: ipAddress == null || _isConnecting
-                                              ? Divider()
-                                              : QrImageView(
-                                                  data: ipAddress!,
-                                                  padding: EdgeInsets.all(
-                                                    20,
-                                                  ),
-                                                  backgroundColor: Colors.white,
-                                                ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                ),
-                                SelectableText(
-                                  ipAddress ?? "Fetching...",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Row(
-                        spacing: 20,
-                        children: [
-                          Expanded(child: Divider()),
-                          Text("or"),
-                          Expanded(child: Divider()),
-                        ],
-                      ),
-                      Row(
-                        spacing: 20,
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: controller,
-                              enabled: !_isConnecting,
-                              decoration: InputDecoration(
-                                label: const Text("192.168.xx.xx"),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Card(
-                            margin: EdgeInsets.zero,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(10),
-                                      onTap: _isConnecting
-                                          ? null
-                                          : () async {
-                                        if (Platform.isAndroid || Platform.isIOS) {
-                                          final useTLS = await _getTLSPreference();
-                                          if (!context.mounted) return;
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => QrCodeScanPage(
-                                                onScanned: (value) async {
-                                                  try {
-                                                    Navigator.pop(context);
-                                                    setState(() {
-                                                      _isConnecting = true;
-                                                    });
-                                                    SocketService.instance
-                                                        .connectToHost(
-                                                          value,
-                                                          useTLS: useTLS,
-                                                        );
-                                                  } on Exception catch (_) {
-                                                    setState(() {
-                                                      _isConnecting = false;
-                                                    });
-                                                    showScaffoldSnackbar(
-                                                      "Error connecting to user",
-                                                    );
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                          );
-                                        } else {
-                                          showScaffoldSnackbar(
-                                            "QR code scanning not supported on ${Platform.operatingSystem}",
-                                          );
-                                        }
-                                      },
-                              child: Padding(
-                                padding: const EdgeInsets.all(13),
-                                child: Icon(Icons.camera_alt),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: _isConnecting
-                                ? null
-                                : () async {
-                              final ip = controller.text;
-                              if (ip.isEmpty) {
-                                showScaffoldSnackbar("IP can't be empty");
-                                return;
-                              }
-                              final useTLS = await _getTLSPreference();
-                              setState(() {
-                                _isConnecting = true;
-                              });
-                              try {
-                                SocketService.instance.connectToHost(
-                                  ip,
-                                  useTLS: useTLS,
-                                );
-                              } on Exception catch (_) {
-                                setState(() {
-                                  _isConnecting = false;
-                                });
-                                showScaffoldSnackbar(
-                                  "Error connecting to user",
-                                );
-                              }
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(13),
-                              child: Center(child: Text("Connect")),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: widget.mode == TcpConnectionMode.receive
+                      ? _buildReceiveConnection()
+                      : _buildSendConnection(),
                 ),
               ),
             ),
@@ -396,6 +223,150 @@ class _TcpSocketsState extends State<TcpSockets> {
         ),
       ),
     );
+  }
+
+  Future<void> _startReceiver() async {
+    final useTLS = await AppSettings.getUseTls();
+    final port = await AppSettings.getPort();
+    await SocketService.instance.startHost(
+      '0.0.0.0',
+      port: port,
+      useTLS: useTLS,
+    );
+  }
+
+  Widget _buildReceiveConnection() {
+    return Column(
+      spacing: 20,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          "Ready to Receive",
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        _buildQrCard(),
+      ],
+    );
+  }
+
+  Widget _buildSendConnection() {
+    return Column(
+      spacing: 20,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          "${widget.selectedFiles.length} file${widget.selectedFiles.length == 1 ? "" : "s"} ready",
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        TextField(
+          controller: controller,
+          enabled: !_isConnecting,
+          decoration: InputDecoration(
+            label: const Text("Receiver IP"),
+            hintText: "192.168.xx.xx",
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: _isConnecting ? null : _connectToReceiver,
+              child: Padding(
+                padding: const EdgeInsets.all(13),
+                child: Center(
+                  child: Text(_isConnecting ? "Connecting..." : "Connect"),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQrCard() {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: EdgeInsetsGeometry.all(20),
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            spacing: 20,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth <= 400) {
+                    return AnimatedSize(
+                      duration: 500.ms,
+                      curve: Easing.emphasizedDecelerate,
+                      child: ipAddress == null || _isConnecting
+                          ? SizedBox(
+                              width: double.infinity,
+                              child: Center(child: LoadingIndicatorM3E()),
+                            )
+                          : QrImageView(
+                              data: ipAddress!,
+                              padding: EdgeInsets.all(20),
+                              backgroundColor: Colors.white,
+                            ),
+                    );
+                  }
+
+                  return SizedBox(
+                    width: 400,
+                    child: AnimatedSize(
+                      duration: 500.ms,
+                      curve: Easing.emphasizedDecelerate,
+                      child: ipAddress == null || _isConnecting
+                          ? Divider()
+                          : QrImageView(
+                              data: ipAddress!,
+                              padding: EdgeInsets.all(20),
+                              backgroundColor: Colors.white,
+                            ),
+                    ),
+                  );
+                },
+              ),
+              SelectableText(
+                ipAddress ?? "Fetching...",
+                style: TextStyle(fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _connectToReceiver() async {
+    final ip = controller.text.trim();
+    if (ip.isEmpty) {
+      showScaffoldSnackbar("Receiver IP can't be empty");
+      return;
+    }
+
+    final useTLS = await AppSettings.getUseTls();
+    final port = await AppSettings.getPort();
+    setState(() {
+      _isConnecting = true;
+    });
+    try {
+      SocketService.instance.connectToHost(ip, port: port, useTLS: useTLS);
+    } on Exception catch (_) {
+      setState(() {
+        _isConnecting = false;
+      });
+      showScaffoldSnackbar("Error connecting to receiver");
+    }
   }
 
   void showScaffoldSnackbar(String message) {

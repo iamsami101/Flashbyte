@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/file_send_receive.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,14 +15,21 @@ class SocketService {
 
   Isolate? _receiverIsolate;
   SendPort? _toIsolateSendPort;
+  String? _currentMode;
 
   ReceivePort? _uiReceivePort = ReceivePort();
   StreamSubscription? _streamSubscription;
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
+  bool get isRunning => _receiverIsolate != null;
+  bool get isHosting => _receiverIsolate != null && _currentMode == 'host';
 
-  Future<void> startHost(String host, {int port = 8050, bool useTLS = false}) async {
+  Future<void> startHost(
+    String host, {
+    int port = 8050,
+    bool useTLS = false,
+  }) async {
     await _startIsolate(
       mode: 'host',
       host: host,
@@ -30,8 +38,12 @@ class SocketService {
     );
   }
 
-  Future<void> connectToHost(String host, {int port = 8050, bool useTLS = false}) async {
-    _startIsolate(
+  Future<void> connectToHost(
+    String host, {
+    int port = 8050,
+    bool useTLS = false,
+  }) async {
+    await _startIsolate(
       mode: 'client',
       host: host,
       port: port,
@@ -79,9 +91,11 @@ class SocketService {
     bool useTLS = false,
   }) async {
     stopConnection();
+    _currentMode = mode;
 
     String? certPath;
     String? keyPath;
+    final downloadDirectory = await AppSettings.getDownloadDirectory();
     if (useTLS) {
       final paths = await _prepareCertFiles();
       certPath = paths['certPath'];
@@ -125,6 +139,7 @@ class SocketService {
       'useTLS': useTLS,
       'certPath': certPath,
       'keyPath': keyPath,
+      'downloadDirectory': downloadDirectory,
     });
   }
 
@@ -159,5 +174,6 @@ class SocketService {
     _toIsolateSendPort = null;
     _streamSubscription = null;
     _uiReceivePort = null;
+    _currentMode = null;
   }
 }

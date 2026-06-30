@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class TcpChatPage extends StatefulWidget {
-  const TcpChatPage({super.key});
+  final List<FastFilePickerPath> initialFiles;
+
+  const TcpChatPage({super.key, this.initialFiles = const []});
 
   @override
   State<TcpChatPage> createState() => _TcpChatPageState();
@@ -25,6 +27,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   final ValueNotifier<double> _fileProgress = ValueNotifier(0);
 
   bool isSharingInProgress = false;
+  bool _sentInitialFiles = false;
 
   StreamSubscription? _streamSubscription;
 
@@ -154,6 +157,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
         }
       },
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendInitialFiles();
+    });
   }
 
   @override
@@ -249,20 +256,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
                                     : () async {
                                         final pickedFile =
                                             await FastFilePicker.pickFile();
-                                        print(pickedFile?.path ?? "null");
                                         if (pickedFile == null) {
                                           return;
                                         }
-                                        if (Platform.isAndroid &&
-                                            pickedFile.uri != null) {
-                                          SocketService.instance.sendFile(
-                                            pickedFile.uri!,
-                                          );
-                                        } else {
-                                          SocketService.instance.sendFile(
-                                            pickedFile.path!,
-                                          );
-                                        }
+                                        _sendPickedFile(pickedFile);
                                       },
                                 child: Padding(
                                   padding: EdgeInsets.all(17),
@@ -302,6 +299,30 @@ class _TcpChatPageState extends State<TcpChatPage> {
         dismissDirection: DismissDirection.horizontal,
       ),
     );
+  }
+
+  void _sendInitialFiles() {
+    if (_sentInitialFiles || widget.initialFiles.isEmpty) {
+      return;
+    }
+
+    _sentInitialFiles = true;
+    for (final file in widget.initialFiles) {
+      _sendPickedFile(file);
+    }
+  }
+
+  void _sendPickedFile(FastFilePickerPath pickedFile) {
+    final fileLocation = Platform.isAndroid && pickedFile.uri != null
+        ? pickedFile.uri
+        : pickedFile.path;
+
+    if (fileLocation == null) {
+      showScaffoldSnackbar("Could not read selected file");
+      return;
+    }
+
+    SocketService.instance.sendFile(fileLocation);
   }
 
   void _scrollToBottom() {

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:external_path/external_path.dart';
+import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
@@ -267,10 +267,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     } else if (Platform.isLinux) {
       await run('xdg-open "$folderPath"', runInShell: true);
     } else if (Platform.isAndroid || Platform.isIOS) {
-      final downloadsPath =
-          await ExternalPath.getExternalStoragePublicDirectory(
-            ExternalPath.DIRECTORY_DOWNLOAD,
-          );
+      final downloadsPath = await AppSettings.getDownloadDirectory();
       final result = await OpenFilex.open("$downloadsPath/");
       if (result.type == ResultType.fileNotFound) {
         showScaffoldSnackbar("Couldn't open that folder");
