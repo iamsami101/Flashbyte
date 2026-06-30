@@ -1,8 +1,10 @@
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:saf_util/saf_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -52,7 +54,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _useTLS = prefs.getBool(AppSettings.useTlsKey) ?? true;
       _portController.text = port.toString();
-      _downloadDirectoryController.text = downloadDirectory;
+      _downloadDirectoryController.text =
+          AppSettings.formatDownloadDirectoryForDisplay(downloadDirectory);
       _isLoading = false;
     });
   }
@@ -162,6 +165,25 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      final currentDirectory = await AppSettings.getDownloadDirectory();
+      final pickedDirectory = await SafUtil().pickDirectory(
+        initialUri: AndroidSafService.isTreeUri(currentDirectory)
+            ? currentDirectory
+            : null,
+        writePermission: true,
+        persistablePermission: true,
+      );
+      if (!mounted || pickedDirectory == null) {
+        return;
+      }
+
+      await AppSettings.setDownloadDirectory(pickedDirectory.uri);
+      _downloadDirectoryController.text =
+          AppSettings.formatDownloadDirectoryForDisplay(pickedDirectory.uri);
+      return;
+    }
+
     final pickedFolder = await FastFilePicker.pickFolder(
       writePermission: true,
     );
@@ -181,7 +203,8 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     await AppSettings.setDownloadDirectory(folderPath);
-    _downloadDirectoryController.text = folderPath;
+    _downloadDirectoryController.text =
+        AppSettings.formatDownloadDirectoryForDisplay(folderPath);
   }
 
   Future<void> _toggleDynamicColors(bool value) async {

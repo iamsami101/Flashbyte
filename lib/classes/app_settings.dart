@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flutter/material.dart';
 import 'package:external_path/external_path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -56,6 +57,13 @@ class AppSettings {
   static Future<void> setDownloadDirectory(String path) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(downloadDirectoryKey, path);
+  }
+
+  static String formatDownloadDirectoryForDisplay(String path) {
+    if (Platform.isAndroid && AndroidSafService.isTreeUri(path)) {
+      return AndroidSafService.formatTreeUriForDisplay(path);
+    }
+    return path;
   }
 
   static Future<String> getDefaultDownloadDirectory() async {

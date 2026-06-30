@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:async';
+import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
@@ -364,6 +365,7 @@ void _handleSocketConnection(
   int bytesWritten = 0;
 
   IOSink? fileSink;
+  int? androidOutputFd;
 
   final Stopwatch stopwatch = Stopwatch();
 
@@ -374,6 +376,17 @@ void _handleSocketConnection(
   bool heartbeatEnabled = !waitForProbe;
   bool awaitingHeartbeatResponse = false;
   Timer? heartbeatTimer;
+
+  Future<void> cleanupOpenFile() async {
+    if (fileSink != null) {
+      await fileSink!.close();
+      fileSink = null;
+    }
+    if (androidOutputFd != null) {
+      await AndroidSafService.closeOutputFile(androidOutputFd!);
+      androidOutputFd = null;
+    }
+  }
 
   void sendControlFrame(Map<String, dynamic> payload) {
     final payloadBytes = utf8.encode(jsonEncode(payload));
@@ -552,23 +565,18 @@ void _handleSocketConnection(
           }
 
           // ——— file transfer metadata ———
-          final tempDirectory = await _resolveDownloadDirectory(
-            commandDirectory: configuredDownloadDirectory,
+          final fileTarget = await _createOutputTarget(
+            configuredDownloadDirectory: configuredDownloadDirectory,
+            originalFileName: headerJson!['name'] as String,
           );
-
-          final fileName = _generateUniqueFileName(
-            tempDirectory,
-            headerJson!['name'] as String,
-          );
-          final filePath = "$tempDirectory/$fileName";
-          final file = File(filePath);
-          fileSink = file.openWrite();
+          androidOutputFd = fileTarget.fileDescriptor;
+          fileSink = fileTarget.sink;
 
           toUiSendPort.send({
             'status': 'start',
             'fileId': headerJson!['uuid'],
-            'fileName': fileName,
-            'filePath': filePath,
+            'fileName': fileTarget.fileName,
+            'filePath': fileTarget.filePath,
             'fileSize': fileBytesLength!,
           });
 
@@ -602,14 +610,13 @@ void _handleSocketConnection(
               'timeTaken': stopwatch.elapsed.inSeconds.toString(),
             });
 
-            await fileSink!.close();
+            await cleanupOpenFile();
 
             stopwatch.stop();
             stopwatch.reset();
             headerLength = null;
             fileBytesLength = null;
             headerJson = null;
-            fileSink = null;
             bytesWritten = 0;
             continue;
           }
@@ -620,6 +627,7 @@ void _handleSocketConnection(
     },
     onDone: () {
       heartbeatTimer?.cancel();
+      unawaited(cleanupOpenFile());
       if (!probeHandled && !connectionErrorSent) {
         sendConnectionError(
           'Connection closed before the link was established. Check the TLS setting on both devices.',
@@ -629,6 +637,7 @@ void _handleSocketConnection(
     },
     onError: (e) {
       heartbeatTimer?.cancel();
+      unawaited(cleanupOpenFile());
       if (!probeHandled) {
         sendConnectionError(
           'Could not establish the connection. Check the TLS setting on both devices.',
@@ -647,6 +656,9 @@ void _handleSocketConnection(
 
 Future<String> _resolveDownloadDirectory({String? commandDirectory}) async {
   if (commandDirectory != null && commandDirectory.isNotEmpty) {
+    if (Platform.isAndroid && AndroidSafService.isTreeUri(commandDirectory)) {
+      return commandDirectory;
+    }
     final directory = Directory(commandDirectory);
     if (await directory.exists()) {
       return commandDirectory;
@@ -666,6 +678,55 @@ Future<String> _resolveDownloadDirectory({String? commandDirectory}) async {
 
   final fallback = await getApplicationDocumentsDirectory();
   return fallback.path;
+}
+
+class _OutputTarget {
+  const _OutputTarget({
+    required this.fileName,
+    required this.filePath,
+    required this.sink,
+    this.fileDescriptor,
+  });
+
+  final String fileName;
+  final String filePath;
+  final IOSink sink;
+  final int? fileDescriptor;
+}
+
+Future<_OutputTarget> _createOutputTarget({
+  required String? configuredDownloadDirectory,
+  required String originalFileName,
+}) async {
+  final resolvedDirectory = await _resolveDownloadDirectory(
+    commandDirectory: configuredDownloadDirectory,
+  );
+
+  if (Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory)) {
+    final outputFile = await AndroidSafService.createOutputFile(
+      treeUri: resolvedDirectory,
+      fileName: originalFileName,
+    );
+    final procFdFile = File('/proc/self/fd/${outputFile.fileDescriptor}');
+    return _OutputTarget(
+      fileName: outputFile.name,
+      filePath: outputFile.uri,
+      sink: procFdFile.openWrite(),
+      fileDescriptor: outputFile.fileDescriptor,
+    );
+  }
+
+  final fileName = _generateUniqueFileName(
+    resolvedDirectory,
+    originalFileName,
+  );
+  final filePath = "$resolvedDirectory/$fileName";
+  final file = File(filePath);
+  return _OutputTarget(
+    fileName: fileName,
+    filePath: filePath,
+    sink: file.openWrite(),
+  );
 }
 
 String _generateUniqueFileName(String directory, String originalFileName) {
