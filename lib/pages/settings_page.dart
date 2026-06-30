@@ -357,30 +357,29 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   trailing: SizedBox(
                     width: 260,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _downloadDirectoryController,
-                            readOnly: true,
-                            enabled: !widget.locked,
-                            onTap: _pickDownloadDirectory,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              suffixIcon: Icon(Icons.folder_open_rounded),
+                    child: TextField(
+                      controller: _downloadDirectoryController,
+                      readOnly: true,
+                      enabled: !widget.locked,
+                      onTap: _pickDownloadDirectory,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Reset folder',
+                              onPressed: widget.locked
+                                  ? null
+                                  : _resetDownloadDirectory,
+                              icon: const Icon(Icons.restart_alt_rounded),
                             ),
-                          ),
+                            const Icon(Icons.folder_open_rounded),
+                            const SizedBox(width: 8),
+                          ],
                         ),
-                        IconButton(
-                          tooltip: 'Reset folder',
-                          onPressed: widget.locked
-                              ? null
-                              : _resetDownloadDirectory,
-                          icon: const Icon(Icons.restart_alt_rounded),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
