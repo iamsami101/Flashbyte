@@ -28,6 +28,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
   bool isSharingInProgress = false;
   bool _sentInitialFiles = false;
+  bool _errorDialogVisible = false;
 
   StreamSubscription? _streamSubscription;
 
@@ -103,7 +104,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
             break;
 
           case 'error':
+            if (_errorDialogVisible) {
+              break;
+            }
             isDisconnected.value = true;
+            _errorDialogVisible = true;
             showGeneralDialog(
               context: context,
               barrierDismissible: true,
@@ -155,7 +160,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
                       ],
                     ),
                   ),
-            );
+            ).then((_) {
+              _errorDialogVisible = false;
+            });
             break;
         }
       },

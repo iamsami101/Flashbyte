@@ -25,7 +25,6 @@ void fileReceiverIsolate(List<Object> args) {
 
   final List<Map<String, dynamic>> commandQueue = [];
   bool isProcessing = false;
-  bool isSendingFile = false;
   String? sendingFileId;
 
   Future<void> processCommandQueue() async {
@@ -119,7 +118,6 @@ void fileReceiverIsolate(List<Object> args) {
                   savedClientSocket,
                   toUiSendPort,
                   waitForProbe: !useTLS,
-                  canSendHeartbeat: () => !isSendingFile,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                 );
@@ -179,7 +177,6 @@ void fileReceiverIsolate(List<Object> args) {
                       command['downloadDirectory'] as String?,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
-                      isSendingFile = false;
                       sendingFileId = null;
                     }
                   },
@@ -206,12 +203,10 @@ void fileReceiverIsolate(List<Object> args) {
                   clientSocket!,
                   toUiSendPort,
                   waitForProbe: true,
-                  canSendHeartbeat: () => !isSendingFile,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
-                      isSendingFile = false;
                       sendingFileId = null;
                     }
                   },
@@ -238,18 +233,13 @@ void fileReceiverIsolate(List<Object> args) {
             continue;
           }
 
-          isSendingFile = true;
           try {
             sendingFileId = await _sendFileCommand(
               command,
               clientSocket!,
               toUiSendPort,
             );
-          } finally {
-            if (sendingFileId == null) {
-              isSendingFile = false;
-            }
-          }
+          } finally {}
         } else if (command['command'] == "disconnect") {
           final header = utf8.encode(
             jsonEncode({
@@ -389,7 +379,6 @@ void _handleSocketConnection(
   dynamic socket,
   SendPort toUiSendPort, {
   bool waitForProbe = false,
-  bool Function()? canSendHeartbeat,
   String? configuredDownloadDirectory,
   void Function(String fileId)? onTransferAcknowledged,
 }) {
@@ -409,10 +398,6 @@ void _handleSocketConnection(
   bool probeHandled = !waitForProbe;
   bool connectionErrorSent = false;
   bool gracefulDisconnect = false;
-  bool heartbeatEnabled = !waitForProbe;
-  bool awaitingHeartbeatResponse = false;
-  Timer? heartbeatTimer;
-  bool transferInProgress = false;
 
   Future<void> cleanupOpenFile() async {
     if (fileSink != null) {
@@ -442,37 +427,12 @@ void _handleSocketConnection(
     if (markProbeHandled) {
       probeHandled = true;
     }
-    heartbeatTimer?.cancel();
     toUiSendPort.send({
       'status': 'error',
       'fatal': fatal,
       'message': message,
     });
   }
-
-  heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-    if (!heartbeatEnabled || gracefulDisconnect || connectionErrorSent) {
-      return;
-    }
-    if (canSendHeartbeat != null && !canSendHeartbeat()) {
-      awaitingHeartbeatResponse = false;
-      return;
-    }
-    if (fileSink != null || transferInProgress) {
-      awaitingHeartbeatResponse = false;
-      return;
-    }
-    if (awaitingHeartbeatResponse) {
-      sendConnectionError(
-        'Connection lost. The other device is no longer responding.',
-        markProbeHandled: false,
-      );
-      socket.destroy();
-      return;
-    }
-    awaitingHeartbeatResponse = true;
-    sendControlFrame({'type': 'ping'});
-  });
 
   if (waitForProbe) {
     Future.delayed(const Duration(seconds: 5), () {
@@ -521,8 +481,6 @@ void _handleSocketConnection(
             final ok = headerJson!['ok'];
             if (ok != null) {
               if (ok == true) {
-                heartbeatEnabled = true;
-                awaitingHeartbeatResponse = false;
                 toUiSendPort.send({'status': 'connected_to_host'});
                 headerLength = null;
                 fileBytesLength = null;
@@ -563,8 +521,6 @@ void _handleSocketConnection(
                 socket.destroy();
                 return;
               }
-              heartbeatEnabled = true;
-              awaitingHeartbeatResponse = false;
               toUiSendPort.send({'status': 'client_connected'});
               headerLength = null;
               fileBytesLength = null;
@@ -575,7 +531,6 @@ void _handleSocketConnection(
           }
 
           if (headerJson!['type'] == 'ping') {
-            awaitingHeartbeatResponse = false;
             sendControlFrame({'type': 'pong'});
             headerLength = null;
             fileBytesLength = null;
@@ -584,7 +539,6 @@ void _handleSocketConnection(
           }
 
           if (headerJson!['type'] == 'pong') {
-            awaitingHeartbeatResponse = false;
             headerLength = null;
             fileBytesLength = null;
             headerJson = null;
@@ -592,7 +546,6 @@ void _handleSocketConnection(
           }
 
           if (headerJson!['type'] == 'file_received_ack') {
-            awaitingHeartbeatResponse = false;
             final fileId = headerJson!['fileId'] as String?;
             if (fileId != null) {
               onTransferAcknowledged?.call(fileId);
@@ -611,7 +564,6 @@ void _handleSocketConnection(
 
           if (headerJson!['type'] == 'disconnect') {
             gracefulDisconnect = true;
-            heartbeatTimer?.cancel();
             socket.destroy();
             toUiSendPort.send({'command': 'disconnect'});
             return;
@@ -622,8 +574,6 @@ void _handleSocketConnection(
             configuredDownloadDirectory: configuredDownloadDirectory,
             originalFileName: headerJson!['name'] as String,
           );
-          transferInProgress = true;
-          awaitingHeartbeatResponse = false;
           activeOutputTarget = fileTarget;
           fileSink = fileTarget.sink;
 
@@ -684,8 +634,6 @@ void _handleSocketConnection(
             fileBytesLength = null;
             headerJson = null;
             activeOutputTarget = null;
-            transferInProgress = false;
-            awaitingHeartbeatResponse = false;
             bytesWritten = 0;
             continue;
           }
@@ -695,19 +643,22 @@ void _handleSocketConnection(
       }
     },
     onDone: () {
-      heartbeatTimer?.cancel();
-      transferInProgress = false;
       unawaited(cleanupOpenFile());
       if (!probeHandled && !connectionErrorSent) {
         sendConnectionError(
           'Connection closed before the link was established. Check the TLS setting on both devices.',
         );
+      } else if (!connectionErrorSent && !gracefulDisconnect) {
+        toUiSendPort.send({
+          'status': 'error',
+          'fatal': 'true',
+          'message':
+              'Connection lost. The other device disconnected unexpectedly.',
+        });
       }
       socket.destroy();
     },
     onError: (e) {
-      heartbeatTimer?.cancel();
-      transferInProgress = false;
       unawaited(cleanupOpenFile());
       if (!probeHandled) {
         sendConnectionError(

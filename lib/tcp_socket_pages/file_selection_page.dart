@@ -228,6 +228,9 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
         setState(() {
           isConnectingToSender = false;
         });
+        if (chatOpened) {
+          return;
+        }
         if (selectedTabIndex == 0) {
           SocketService.instance.stopConnection();
         }
