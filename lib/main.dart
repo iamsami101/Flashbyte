@@ -1,6 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
 import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:heroine/heroine.dart';
@@ -73,9 +74,15 @@ class _StartPageState extends State<StartPage> {
               child: Transform.translate(
                 offset: Offset(50, 0),
                 child: RepaintBoundary(
-                  child: StarWidget(
-                    key: ValueKey('${primaryColor.value}-${brightness.name}'),
-                  ),
+                  child:
+                      StarWidget(
+                        key: ValueKey(
+                          '${primaryColor.value}-${brightness.name}',
+                        ),
+                      ).animate().fadeIn(
+                        duration: 450.ms,
+                        curve: Curves.easeOutCubic,
+                      ),
                 ),
               ),
             ),
@@ -91,28 +98,48 @@ class _StartPageState extends State<StartPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          "Flash\nByte",
-                          style: TextStyle(
-                            fontSize: 50,
-                            color: Theme.of(context).colorScheme.primaryFixed,
-                          ),
-                        ),
-                        SizedBox(
-                          height: 10,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 5),
-                          child: Text(
-                            "Local file sharing",
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.secondary,
+                        Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Flash\nByte",
+                                  style: TextStyle(
+                                    fontSize: 50,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primaryFixed,
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 10,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 5),
+                                  child: Text(
+                                    "Local file sharing",
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.secondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                            .animate()
+                            .fadeIn(
+                              delay: 80.ms,
+                              duration: 420.ms,
+                              curve: Curves.easeOutCubic,
+                            )
+                            .slideY(
+                              begin: 0.06,
+                              end: 0,
+                              delay: 80.ms,
+                              duration: 420.ms,
+                              curve: Curves.easeOutCubic,
                             ),
-                          ),
-                        ),
                         SizedBox(
                           height: 200,
                         ),
@@ -123,47 +150,73 @@ class _StartPageState extends State<StartPage> {
                       spacing: 12,
                       children: [
                         SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.tonal(
-                            style: ButtonStyle(
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.symmetric(vertical: 22),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FileSelectionPage(
-                                    initialTabIndex: 0,
+                              width: double.infinity,
+                              child: FilledButton.tonal(
+                                style: ButtonStyle(
+                                  padding: WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(vertical: 22),
                                   ),
                                 ),
-                              );
-                            },
-                            child: const Text("Send"),
-                          ),
-                        ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FileSelectionPage(
+                                        initialTabIndex: 0,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: const Text("Send"),
+                              ),
+                            )
+                            .animate()
+                            .fadeIn(
+                              delay: 170.ms,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
+                            )
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              delay: 170.ms,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
                         SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: ButtonStyle(
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.symmetric(vertical: 22),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FileSelectionPage(
-                                    initialTabIndex: 1,
+                              width: double.infinity,
+                              child: FilledButton(
+                                style: ButtonStyle(
+                                  padding: WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(vertical: 22),
                                   ),
                                 ),
-                              );
-                            },
-                            child: const Text("Receive"),
-                          ),
-                        ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FileSelectionPage(
+                                        initialTabIndex: 1,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: const Text("Receive"),
+                              ),
+                            )
+                            .animate()
+                            .fadeIn(
+                              delay: 240.ms,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
+                            )
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              delay: 240.ms,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
                       ],
                     ),
                   ],
