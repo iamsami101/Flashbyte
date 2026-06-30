@@ -11,6 +11,7 @@ class AppSettings {
   static const String downloadDirectoryKey = 'downloadDirectory';
   static const String dynamicColorsEnabledKey = 'dynamicColorsEnabled';
   static const String primaryColorKey = 'primaryColor';
+  static const String useDarkModeKey = 'useDarkMode';
   static const int defaultPort = 8050;
   static const String defaultPrimaryColorName = 'green';
 
@@ -95,6 +96,16 @@ class AppSettings {
   static Future<void> setPrimaryColorName(String colorName) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(primaryColorKey, colorName);
+  }
+
+  static Future<bool> getUseDarkMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(useDarkModeKey) ?? true;
+  }
+
+  static Future<void> setUseDarkMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(useDarkModeKey, value);
   }
 
   static MaterialColor getPrimaryColorByName(String colorName) {

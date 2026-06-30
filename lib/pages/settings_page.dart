@@ -218,6 +218,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 ListTile(
+                  title: const Text("Dark Mode"),
+                  subtitle: const Text(
+                    "Use the app's dark theme instead of the light theme.",
+                  ),
+                  trailing: Switch(
+                    value: _appearanceController.useDarkMode,
+                    onChanged: (value) async {
+                      await _appearanceController.setUseDarkMode(value);
+                      if (!mounted) return;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                ListTile(
                   title: const Text("Material You Dynamic Colors"),
                   subtitle: const Text(
                     "Use the device wallpaper color scheme when supported.",

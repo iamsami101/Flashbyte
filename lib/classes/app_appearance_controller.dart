@@ -9,17 +9,21 @@ class AppAppearanceController extends ChangeNotifier {
 
   bool _useDynamicColors = false;
   String _primaryColorName = AppSettings.defaultPrimaryColorName;
+  bool _useDarkMode = true;
   bool _isLoaded = false;
 
   bool get isLoaded => _isLoaded;
   bool get useDynamicColors => _useDynamicColors;
   String get primaryColorName => _primaryColorName;
+  bool get useDarkMode => _useDarkMode;
+  ThemeMode get themeMode => _useDarkMode ? ThemeMode.dark : ThemeMode.light;
   MaterialColor get seedColor =>
       AppSettings.getPrimaryColorByName(_primaryColorName);
 
   Future<void> load() async {
     _useDynamicColors = await AppSettings.getDynamicColorsEnabled();
     _primaryColorName = await AppSettings.getPrimaryColorName();
+    _useDarkMode = await AppSettings.getUseDarkMode();
     _isLoaded = true;
     notifyListeners();
   }
@@ -39,31 +43,37 @@ class AppAppearanceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setUseDarkMode(bool value) async {
+    _useDarkMode = value;
+    await AppSettings.setUseDarkMode(value);
+    notifyListeners();
+  }
+
   ThemeData buildTheme({
-    required ColorScheme? darkDynamic,
+    required Brightness brightness,
+    required ColorScheme? dynamicScheme,
   }) {
     final seedColor = AppSettings.getPrimaryColorByName(_primaryColorName);
 
-    final darkScheme = _useDynamicColors
-        ? (darkDynamic ??
+    final scheme = _useDynamicColors
+        ? (dynamicScheme ??
               ColorScheme.fromSeed(
                 seedColor: seedColor,
-                brightness: Brightness.dark,
+                brightness: brightness,
               ))
         : ColorScheme.fromSeed(
             seedColor: seedColor,
-            brightness: Brightness.dark,
+            brightness: brightness,
           );
 
-    // The app already uses a dark appearance throughout the UI.
-    final scheme = darkScheme.harmonized();
+    final harmonizedScheme = scheme.harmonized();
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
-      canvasColor: scheme.surface,
+      brightness: brightness,
+      colorScheme: harmonizedScheme,
+      scaffoldBackgroundColor: harmonizedScheme.surface,
+      canvasColor: harmonizedScheme.surface,
     );
   }
 }

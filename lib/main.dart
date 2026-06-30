@@ -33,8 +33,14 @@ class _MainAppState extends State<MainApp> {
           builder: (lightDynamic, darkDynamic) {
             return MaterialApp(
               theme: appearanceController.buildTheme(
-                darkDynamic: darkDynamic,
+                brightness: Brightness.light,
+                dynamicScheme: lightDynamic,
               ),
+              darkTheme: appearanceController.buildTheme(
+                brightness: Brightness.dark,
+                dynamicScheme: darkDynamic,
+              ),
+              themeMode: appearanceController.themeMode,
               home: const StartPage(),
               navigatorObservers: [HeroineController()],
             );
@@ -55,6 +61,9 @@ class StartPage extends StatefulWidget {
 class _StartPageState extends State<StartPage> {
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final brightness = Theme.of(context).brightness;
+
     return Scaffold(
       body: SafeArea(
         child: Stack(
@@ -63,7 +72,11 @@ class _StartPageState extends State<StartPage> {
               alignment: Alignment.centerRight,
               child: Transform.translate(
                 offset: Offset(50, 0),
-                child: RepaintBoundary(child: StarWidget()),
+                child: RepaintBoundary(
+                  child: StarWidget(
+                    key: ValueKey('${primaryColor.value}-${brightness.name}'),
+                  ),
+                ),
               ),
             ),
             Padding(
