@@ -33,4 +33,11 @@ You can try out Flashbyte on the following platforms:
 | iOS      | In development            | N/A                                                                                          |
 | Windows  | In development            | N/A                                                                                          |
 
+## Installation instructions:
+- ### Android:
+Install the Flashbyte `.apk` file from the [releases](https://github.com/iamsami101/Flashbyte/releases) page. Now, run the `.apk` file wether it is through a file explorer or via your browser's download page.
+
+- ### Linux:
+
+
 If you find any bugs or issues or want to recommend any features, feel free to open an issue on github.

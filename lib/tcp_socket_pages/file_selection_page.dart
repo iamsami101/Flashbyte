@@ -302,7 +302,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Flash Byte"),
+        title: const Text("Flashbyte"),
         actions: [
           IconButton(
             tooltip: 'Settings',
@@ -325,15 +325,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         child: SafeArea(
           top: false,
           child: TabBar(
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding: EdgeInsetsGeometry.symmetric(
-              horizontal: 0,
-            ),
-            padding: EdgeInsets.all(0),
+            indicatorSize: TabBarIndicatorSize.label,
             dividerHeight: 0,
             indicatorAnimation: TabIndicatorAnimation.elastic,
             labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-            indicator: BoxDecoration(),
+            // indicator: BoxDecoration(),
             controller: _tabController,
             onTap: (index) {
               if (selectedTabIndex != index) {
@@ -347,10 +343,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             },
             tabs: const [
               Tab(
+                iconMargin: EdgeInsets.symmetric(horizontal: 20, vertical: 3),
                 icon: Icon(Icons.upload_rounded),
                 text: "Send",
               ),
               Tab(
+                iconMargin: EdgeInsets.symmetric(horizontal: 20, vertical: 3),
                 icon: Icon(Icons.download_rounded),
                 text: "Receive",
               ),

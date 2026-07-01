@@ -105,7 +105,7 @@ class _StartupEffectsState extends State<StartupEffects> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Disable battery optimization for FlashByte so active TCP '
+                    'Disable battery optimization for Flashbyte so active '
                     'connections and file transfers can keep running in the '
                     'background.',
                   ),
