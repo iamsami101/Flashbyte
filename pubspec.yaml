@@ -7,13 +7,14 @@ environment:
   sdk: ^3.8.1
 
 dependencies:
-  awesome_notifications: ^0.12.0
+  disable_battery_optimization: ^1.1.2
   dynamic_color: ^1.8.1
   external_path: ^2.2.0
   fast_file_picker: ^0.4.6
   flutter:
     sdk: flutter
   flutter_animate: ^4.5.2
+  flutter_local_notifications: ^22.0.1
   heroine: ^0.5.0+2
   loading_indicator_m3e: ^0.1.1
   material_new_shapes: ^1.0.0

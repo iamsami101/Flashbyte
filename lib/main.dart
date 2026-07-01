@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flashbyte/classes/app_appearance_controller.dart';
 import 'package:flashbyte/classes/android_connection_notification_service.dart';
+import 'package:flashbyte/classes/app_appearance_controller.dart';
 import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
@@ -8,11 +12,11 @@ import 'package:flutter/services.dart';
 import 'package:heroine/heroine.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppAppearanceController.instance.load();
-  await AndroidConnectionNotificationService.instance.initialize();
   runApp(const MainApp());
 }
 
@@ -44,7 +48,7 @@ class _MainAppState extends State<MainApp> {
                 dynamicScheme: darkDynamic,
               ),
               themeMode: appearanceController.themeMode,
-              home: const StartPage(),
+              home: const StartupEffects(child: StartPage()),
               navigatorObservers: [HeroineController()],
             );
           },
@@ -52,6 +56,102 @@ class _MainAppState extends State<MainApp> {
       },
     );
   }
+}
+
+class StartupEffects extends StatefulWidget {
+  const StartupEffects({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<StartupEffects> createState() => _StartupEffectsState();
+}
+
+class _StartupEffectsState extends State<StartupEffects> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(AndroidConnectionNotificationService.instance.initialize());
+      unawaited(_showBatteryOptimizationPromptIfNeeded());
+    });
+  }
+
+  Future<void> _showBatteryOptimizationPromptIfNeeded() async {
+    if (!Platform.isAndroid || !mounted) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted || (prefs.getBool('hideBatteryOptimizationPrompt') ?? false)) {
+      return;
+    }
+
+    final disabled =
+        await DisableBatteryOptimization.isBatteryOptimizationDisabled == true;
+    if (!mounted || disabled) {
+      return;
+    }
+
+    var doNotShowAgain = false;
+    final shouldOpenSettings = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Allow background transfers'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Disable battery optimization for FlashByte so active TCP '
+                    'connections and file transfers can keep running in the '
+                    'background.',
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: doNotShowAgain,
+                    title: const Text('Do not show again'),
+                    subtitle: null,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        doNotShowAgain = value ?? false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Not now'),
+                ),
+                FilledButton(
+                  onPressed: doNotShowAgain
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Disable'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (doNotShowAgain) {
+      await prefs.setBool('hideBatteryOptimizationPrompt', true);
+    }
+
+    if (shouldOpenSettings == true) {
+      await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class StartPage extends StatefulWidget {

@@ -344,6 +344,7 @@ Future<String> _sendFileCommand(
 
       toUiSendPort.send({
         'status': 'send_progress',
+        'fileId': fileHeader['uuid'],
         'progress': progress,
       });
     }

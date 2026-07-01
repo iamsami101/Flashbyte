@@ -415,7 +415,20 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
-                    onTap: isConnectingToSender ? null : _scanReceiverQr,
+                    onTap: isConnectingToSender
+                        ? null
+                        : (!Platform.isAndroid && !Platform.isIOS)
+                        ? () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                content: Text(
+                                  "QR Scanning is not supported on this OS.",
+                                ),
+                              ),
+                            );
+                          }
+                        : _scanReceiverQr,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Icon(
