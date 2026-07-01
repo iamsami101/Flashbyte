@@ -20,9 +20,11 @@ class FileSelectionPage extends StatefulWidget {
   State<FileSelectionPage> createState() => _FileSelectionPageState();
 }
 
-class _FileSelectionPageState extends State<FileSelectionPage> {
+class _FileSelectionPageState extends State<FileSelectionPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController receiverIpController = TextEditingController();
   List<FastFilePickerPath> selectedFiles = [];
+  late final TabController _tabController;
 
   bool isPickingFile = false;
   bool isConnectingToSender = false;
@@ -38,14 +40,30 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
   void initState() {
     super.initState();
     selectedTabIndex = widget.initialTabIndex;
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
+    _tabController.addListener(_handleTabChanged);
 
     _socketSubscription = SocketService.instance.messageStream.listen(
       _handleSocketMessage,
     );
+
+    if (selectedTabIndex == 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _ensureReceiveReady();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChanged);
+    _tabController.dispose();
     _socketSubscription?.cancel();
     receiverIpController.dispose();
     SocketService.instance.stopConnection();
@@ -73,12 +91,20 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
     }
   }
 
-  void _onDestinationSelected(int index) {
+  void _handleTabChanged() {
+    if (_tabController.indexIsChanging) {
+      return;
+    }
+
+    if (selectedTabIndex == _tabController.index) {
+      return;
+    }
+
     setState(() {
-      selectedTabIndex = index;
+      selectedTabIndex = _tabController.index;
     });
 
-    if (index == 1) {
+    if (selectedTabIndex == 1) {
       _ensureReceiveReady();
     }
   }
@@ -286,33 +312,65 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 30),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: (Platform.isAndroid || Platform.isIOS)
-                  ? const BoxConstraints()
-                  : const BoxConstraints(maxWidth: 500),
-              child: selectedTabIndex == 0
-                  ? _buildSendTab()
-                  : _buildReceiveTab(),
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildTabPage(_buildSendTab()),
+            _buildTabPage(_buildReceiveTab()),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(
+          top: false,
+          child: TabBar(
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding: EdgeInsetsGeometry.symmetric(
+              horizontal: 0,
             ),
+            padding: EdgeInsets.all(0),
+            dividerHeight: 0,
+            indicatorAnimation: TabIndicatorAnimation.elastic,
+            labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
+            indicator: BoxDecoration(),
+            controller: _tabController,
+            onTap: (index) {
+              if (selectedTabIndex != index) {
+                setState(() {
+                  selectedTabIndex = index;
+                });
+              }
+              if (index == 1) {
+                _ensureReceiveReady();
+              }
+            },
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.upload_rounded),
+                text: "Send",
+              ),
+              Tab(
+                icon: Icon(Icons.download_rounded),
+                text: "Receive",
+              ),
+            ],
           ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedTabIndex,
-        onDestinationSelected: _onDestinationSelected,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.upload_rounded),
-            label: "Send",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.download_rounded),
-            label: "Receive",
-          ),
-        ],
+    );
+  }
+
+  Widget _buildTabPage(Widget child) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 30),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: (Platform.isAndroid || Platform.isIOS)
+              ? const BoxConstraints()
+              : const BoxConstraints(maxWidth: 500),
+          child: child,
+        ),
       ),
     );
   }
@@ -330,12 +388,12 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
               "Pick files, then enter the receiver IP or scan its QR code.",
         ),
         _buildSelectedFilesCard(),
-        Row(
-          spacing: 12,
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 56,
+        SizedBox(
+          height: 52,
+          child: Row(
+            spacing: 12,
+            children: [
+              Expanded(
                 child: TextField(
                   controller: receiverIpController,
                   enabled: !isPickingFile && !isConnectingToSender,
@@ -350,26 +408,26 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
                   ),
                 ),
               ),
-            ),
-            SizedBox(
-              height: 56,
-              child: Card(
-                margin: EdgeInsets.zero,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: isConnectingToSender ? null : _scanReceiverQr,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Icon(
-                      Icons.qr_code_scanner_rounded,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+              SizedBox(
+                height: double.infinity,
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: isConnectingToSender ? null : _scanReceiverQr,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
       ],
@@ -387,8 +445,7 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
           _buildBrandHeader(
             icon: Icons.wifi_tethering_rounded,
             title: "Receive files",
-            subtitle: "Your QR code appears here as soon as receiving starts.",
-            titleColor: Theme.of(context).colorScheme.secondaryContainer,
+            subtitle: "Scan this QR code with another device to start sharing.",
           ),
           Card(
             margin: EdgeInsets.zero,
@@ -442,7 +499,6 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
     required IconData icon,
     required String title,
     required String subtitle,
-    Color? titleColor,
   }) {
     return Column(
       spacing: 12,
@@ -450,13 +506,13 @@ class _FileSelectionPageState extends State<FileSelectionPage> {
         Icon(
           icon,
           size: 48,
-          color: Theme.of(context).colorScheme.primaryContainer,
+          color: Theme.of(context).colorScheme.primaryFixed,
         ),
         Text(
           title,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: titleColor ?? Theme.of(context).colorScheme.onSurface,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         Text(

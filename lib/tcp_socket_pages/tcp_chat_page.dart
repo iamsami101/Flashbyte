@@ -263,7 +263,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                                   )
                                 : Column(
                                     key: const ValueKey('file_list'),
-                                    children: widgets.reversed.toList(),
+                                    children: widgets,
                                   ),
                           ),
                         ],

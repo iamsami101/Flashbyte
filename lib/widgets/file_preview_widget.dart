@@ -281,7 +281,23 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   }
 
   Future<void> openFile(String filePath) async {
-    final result = await OpenFilex.open(filePath);
+    String pathToOpen = filePath;
+
+    if (Platform.isAndroid && AndroidSafService.isTreeUri(filePath)) {
+      try {
+        final tempFile = await toFile(filePath);
+        if (!tempFile.existsSync()) {
+          showScaffoldSnackbar("File may have been moved or deleted.");
+          return;
+        }
+        pathToOpen = tempFile.path;
+      } catch (_) {
+        showScaffoldSnackbar("File may have been moved or deleted.");
+        return;
+      }
+    }
+
+    final result = await OpenFilex.open(pathToOpen);
 
     switch (result.type) {
       case ResultType.error:

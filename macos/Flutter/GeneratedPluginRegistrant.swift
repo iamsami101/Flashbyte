@@ -6,6 +6,7 @@ import FlutterMacOS
 import Foundation
 
 import accessing_security_scoped_resource
+import awesome_notifications
 import dynamic_color
 import file_selector_macos
 import macos_file_picker
@@ -14,6 +15,7 @@ import shared_preferences_foundation
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   AccessingSecurityScopedResourcePlugin.register(with: registry.registrar(forPlugin: "AccessingSecurityScopedResourcePlugin"))
+  AwesomeNotificationsPlugin.register(with: registry.registrar(forPlugin: "AwesomeNotificationsPlugin"))
   DynamicColorPlugin.register(with: registry.registrar(forPlugin: "DynamicColorPlugin"))
   FileSelectorPlugin.register(with: registry.registrar(forPlugin: "FileSelectorPlugin"))
   MacosFilePickerPlugin.register(with: registry.registrar(forPlugin: "MacosFilePickerPlugin"))

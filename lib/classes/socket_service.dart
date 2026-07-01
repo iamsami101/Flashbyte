@@ -22,9 +22,14 @@ class SocketService {
   StreamSubscription? _streamSubscription;
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
+  final _connectionStatusController = StreamController<bool>.broadcast();
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
+  Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
   bool get isRunning => _receiverIsolate != null;
   bool get isHosting => _receiverIsolate != null && _currentMode == 'host';
+  bool get hasEstablishedConnection => _hasEstablishedConnection;
+
+  bool _hasEstablishedConnection = false;
 
   Future<void> startHost(
     String host, {
@@ -93,6 +98,7 @@ class SocketService {
   }) async {
     stopConnection();
     _currentMode = mode;
+    _setConnectionEstablished(false);
 
     String? certPath;
     String? keyPath;
@@ -120,6 +126,12 @@ class SocketService {
         }
 
         final typedMessage = message as IsolateMessage;
+        final status = typedMessage['status'] ?? typedMessage['command'];
+        if (status == 'client_connected' || status == 'connected_to_host') {
+          _setConnectionEstablished(true);
+        } else if (status == 'disconnect' || status == 'error') {
+          _setConnectionEstablished(false);
+        }
         if (typedMessage['status'] == 'android_saf_finalize') {
           await _finalizeAndroidSafTransfer(typedMessage);
           return;
@@ -169,6 +181,7 @@ class SocketService {
       stopConnection();
       return;
     }
+    _setConnectionEstablished(false);
     try {
       sendPort.send({
         'command': 'disconnect',
@@ -179,6 +192,7 @@ class SocketService {
   }
 
   void stopConnection() {
+    _setConnectionEstablished(false);
     _streamSubscription?.cancel();
     _uiReceivePort?.close();
     _receiverIsolate?.kill(priority: Isolate.immediate);
@@ -188,6 +202,15 @@ class SocketService {
     _streamSubscription = null;
     _uiReceivePort = null;
     _currentMode = null;
+  }
+
+  void _setConnectionEstablished(bool value) {
+    if (_hasEstablishedConnection == value) {
+      return;
+    }
+
+    _hasEstablishedConnection = value;
+    _connectionStatusController.add(value);
   }
 
   Future<void> _finalizeAndroidSafTransfer(IsolateMessage message) async {

@@ -14,9 +14,11 @@
 - Made with [Flutter](https://flutter.dev/)!
 
 
-### New in v2.0
-- **TLS Encryption**: You can now send files over an encrypted connection.
-- **Linux support**: Flashbyte now supports Linux.
+### Features
+- **TLS Encryption**: You can send files over an encrypted connection.
+- **Cross-platform support:** Flashbyte is supported on Android and Linux with more to come.
+- **File sharing over local network:** You can send files over local network, without wifi access.
+- **Lossless file sharing:** Send files in their original quality.
 
 ### How does this work?
 Flashbyte uses pure TCP sockets to establish a connection between two devices on a local network inside an isolate (isolated memory channel) which is then utilized to read and send over the file bytes whilst keeping the frontend (main UI isolate) smooth.

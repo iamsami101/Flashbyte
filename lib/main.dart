@@ -1,5 +1,6 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/classes/android_connection_notification_service.dart';
 import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:motor/motor.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppAppearanceController.instance.load();
+  await AndroidConnectionNotificationService.instance.initialize();
   runApp(const MainApp());
 }
 
