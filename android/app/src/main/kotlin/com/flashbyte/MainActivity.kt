@@ -7,6 +7,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
+    private val transferBufferSize = 1024 * 1024
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -40,7 +42,7 @@ class MainActivity : FlutterActivity() {
 
                         contentResolver.openOutputStream(createdFile.uri, "w")?.use { output ->
                             sourceFile.inputStream().use { input ->
-                                input.copyTo(output)
+                                input.copyTo(output, transferBufferSize)
                             }
                         } ?: throw IllegalStateException("Could not open the destination file.")
 

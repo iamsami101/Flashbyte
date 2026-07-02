@@ -5,20 +5,16 @@
 </div>
 
 
-### Seemless and smooth file sharing experience
-- All file types supported!
-- No file size limit!
-- Does not use an external server (No internet required!!)
-- Transfer files to any device on your local network.
-- Open source & no data is collected!
-- Made with [Flutter](https://flutter.dev/)!
-
-
 ### Features
 - **TLS Encryption**: You can send files over an encrypted connection.
 - **Cross-platform support:** Flashbyte is supported on Android and Linux with more to come.
 - **File sharing over local network:** You can send files over local network, without wifi access.
 - **Lossless file sharing:** Send files in their original quality.
+- **All file types supported:** Send file of any type.
+- **No file size limit:** Send files no matter their size.
+- **Doesn't use an external server:** Flashbytes sends to devices using your local network.
+- **Cross-platform:** Transfer files to any device on your local network that has Flashbyte installed.
+- **Open source & no data is collected:** All of the code is readily available on github.
 
 ### How does this work?
 Flashbyte uses pure TCP sockets to establish a connection between two devices on a local network inside an isolate (isolated memory channel) which is then utilized to read and send over the file bytes whilst keeping the frontend (main UI isolate) smooth.

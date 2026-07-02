@@ -28,115 +28,135 @@ class TransferWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isFinished = value == null;
+    final transferStateText = isFinished
+        ? (isReceived ? "received" : "sent")
+        : (isReceived ? "receiving" : "sending");
+    final primaryTextStyle =
+        Theme.of(
+          context,
+        ).textTheme.labelSmall!.copyWith(
+          color: isFinished ? colorScheme.primary : Colors.white.withAlpha(100),
+        );
+
     return Heroine(
       motion: Motion.bouncySpring(),
       tag: uuid,
-      child: Card(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
         margin: EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 5,
         ),
-        child: SingleChildScrollView(
-          physics: NeverScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadiusGeometry.circular(13),
-                ),
-                onTap: () {
-                  openFilePreview(context);
-                },
-                contentPadding: EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 20,
-                ),
-                leading: SizedBox(
-                  height: double.infinity,
-                  child: FittedBox(child: Icon(Icons.file_copy)),
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: BouncingScrollPhysics(),
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          fileName,
-                          softWrap: false,
-                          overflow: TextOverflow.fade,
+        foregroundDecoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            width: isFinished ? 2 : 0,
+            color: isFinished ? colorScheme.primary : Colors.transparent,
+          ),
+        ),
+        child: Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadiusGeometry.circular(13),
+                  ),
+                  onTap: () {
+                    openFilePreview(context);
+                  },
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 20,
+                  ),
+                  leading: SizedBox(
+                    height: double.infinity,
+                    child: FittedBox(child: Icon(Icons.file_copy)),
+                  ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: BouncingScrollPhysics(),
+                          scrollDirection: Axis.horizontal,
+                          child: Text(
+                            fileName,
+                            softWrap: false,
+                            overflow: TextOverflow.fade,
+                          ),
                         ),
                       ),
-                    ),
-                    SizedBox(width: 10),
-                    Row(
-                      spacing: 5,
-                      children: [
-                        Icon(
-                          isReceived
-                              ? Icons.arrow_downward_rounded
-                              : Icons.arrow_upward_rounded,
-                          fontWeight: FontWeight.w900,
-                          size: 15,
-                          color: Colors.white.withAlpha(100),
-                        ),
-                        Text(
-                          isReceived ? "Received" : "Sent",
-                          style: Theme.of(context).textTheme.labelSmall!
-                              .copyWith(
-                                color: Colors.white.withAlpha(100),
-                              ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                subtitle: value == null
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: 10,
+                      SizedBox(width: 10),
+                      Row(
+                        spacing: 5,
                         children: [
-                          Text(
-                            "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
+                          Icon(
+                            isReceived
+                                ? Icons.arrow_downward_rounded
+                                : Icons.arrow_upward_rounded,
+                            fontWeight: FontWeight.w900,
+                            size: 15,
+                            color: isFinished
+                                ? colorScheme.primary
+                                : Colors.white.withAlpha(100),
                           ),
-                          LinearProgressIndicator(
-                            value: 1,
-                            year2023: false,
-                            stopIndicatorRadius: 1,
-                            stopIndicatorColor: Theme.of(
-                              context,
-                            ).colorScheme.secondary,
+                          Text(
+                            transferStateText,
+                            style: primaryTextStyle,
                           ),
                         ],
-                      )
-                    : ValueListenableBuilder(
-                        valueListenable: value!,
-                        builder: (context, pvalue, child) => SingleMotionBuilder(
-                          value: pvalue,
-                          motion:
-                              MaterialSpringMotion.expressiveEffectsDefault(),
-                          builder: (context, value, child) => Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            spacing: 10,
-                            children: [
-                              Text(
-                                "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
-                              ),
-                              LinearProgressIndicator(
-                                value: value,
-                                year2023: false,
-                                stopIndicatorRadius: 1,
-                                stopIndicatorColor: Theme.of(
-                                  context,
-                                ).colorScheme.secondary,
-                              ),
-                            ],
+                      ),
+                    ],
+                  ),
+                  subtitle: value == null
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          spacing: 10,
+                          children: [
+                            Text(
+                              "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
+                            ),
+                            LinearProgressIndicator(
+                              value: 1,
+                              year2023: false,
+                              stopIndicatorRadius: 1,
+                              stopIndicatorColor: colorScheme.secondary,
+                            ),
+                          ],
+                        )
+                      : ValueListenableBuilder(
+                          valueListenable: value!,
+                          builder: (context, pvalue, child) => SingleMotionBuilder(
+                            value: pvalue,
+                            motion:
+                                MaterialSpringMotion.expressiveEffectsDefault(),
+                            builder: (context, value, child) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              spacing: 10,
+                              children: [
+                                Text(
+                                  "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
+                                ),
+                                LinearProgressIndicator(
+                                  value: value,
+                                  year2023: false,
+                                  stopIndicatorRadius: 1,
+                                  stopIndicatorColor: colorScheme.secondary,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                dense: true,
-              ),
-            ],
+                  dense: true,
+                ),
+              ],
+            ),
           ),
         ),
       ),
