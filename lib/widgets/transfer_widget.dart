@@ -43,19 +43,10 @@ class TransferWidget extends StatelessWidget {
     return Heroine(
       motion: Motion.bouncySpring(),
       tag: uuid,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
+      child: Container(
         margin: EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 5,
-        ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            width: isFinished ? 2 : 0,
-            color: isFinished ? colorScheme.primary : Colors.transparent,
-          ),
         ),
         child: Card(
           margin: EdgeInsets.zero,
