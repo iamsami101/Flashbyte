@@ -379,58 +379,10 @@ void _configureSocketForTransfer(dynamic socket) {
 // File Receiving Logic - State Machine Based Implementation
 // ============================================================================
 
-/// Represents the current state of the file receiver.
-sealed class _ReceiverState {
-  const _ReceiverState();
-}
-
-/// Initial state, waiting for a frame header.
-class _WaitingForHeader extends _ReceiverState {
-  const _WaitingForHeader();
-}
-
-/// Actively receiving file data.
-class _ReceivingFile extends _ReceiverState {
-  final Map<String, dynamic> header;
-  final int totalBytes;
-  final int bytesWritten;
-  final _OutputTarget target;
-  final Stopwatch stopwatch;
-  final int lastProgressPercent;
-  final DateTime lastProgressUpdate;
-
-  const _ReceivingFile({
-    required this.header,
-    required this.totalBytes,
-    required this.bytesWritten,
-    required this.target,
-    required this.stopwatch,
-    required this.lastProgressPercent,
-    required this.lastProgressUpdate,
-  });
-
-  _ReceivingFile copyWith({
-    int? bytesWritten,
-    int? lastProgressPercent,
-    DateTime? lastProgressUpdate,
-  }) =>
-      _ReceivingFile(
-        header: header,
-        totalBytes: totalBytes,
-        bytesWritten: bytesWritten ?? this.bytesWritten,
-        target: target,
-        stopwatch: stopwatch,
-        lastProgressPercent: lastProgressPercent ?? this.lastProgressPercent,
-        lastProgressUpdate: lastProgressUpdate ?? this.lastProgressUpdate,
-      );
-}
-
-/// Connection was closed gracefully.
-class _Disconnected extends _ReceiverState {
-  const _Disconnected();
-}
-
-/// Manages the file receiving process using a state machine.
+/// Manages the file receiving process.
+/// 
+/// Uses a simple boolean flag to track whether we're in the header or data
+/// phase, avoiding type checks and allocations on the hot path.
 class _FileReceiver {
   final dynamic socket;
   final SendPort toUiSendPort;
@@ -450,29 +402,35 @@ class _FileReceiver {
   static const _probeTimeout = Duration(seconds: 5);
 
   final _buffer = _SocketReadBuffer();
-  _ReceiverState _state = const _WaitingForHeader();
+  
+  // Hot path state - mutable primitives, no allocations
+  Map<String, dynamic>? _activeHeader;
+  _OutputTarget? _activeTarget;
+  int _totalBytes = 0;
+  int _bytesWritten = 0;
+  int _lastProgressPercent = -1;
+  DateTime _lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+  Stopwatch? _stopwatch;
+  
+  // Connection state
   var _probeHandled = false;
   var _errorSent = false;
   var _socketClosed = false;
 
   void start() {
-    _scheduleProbeTimeout();
+    if (!waitForProbe) {
+      _probeHandled = true;
+    } else {
+      Future.delayed(_probeTimeout, _handleProbeTimeout);
+    }
     socket.listen(_onData, onDone: _onDone, onError: _onError);
   }
 
-  void _scheduleProbeTimeout() {
-    if (!waitForProbe) {
-      _probeHandled = true;
-      return;
-    }
-    Future.delayed(_probeTimeout, () {
-      if (!_probeHandled) _handleProbeTimeout();
-    });
-  }
-
   void _handleProbeTimeout() {
-    _sendError('Could not establish the connection. Check the TLS setting on both devices.');
-    _closeSocket();
+    if (!_probeHandled) {
+      _sendError('Could not establish the connection. Check the TLS setting on both devices.');
+      _closeSocket();
+    }
   }
 
   Future<void> _onData(List<int> data) async {
@@ -480,25 +438,21 @@ class _FileReceiver {
     await _processFrames();
   }
 
-  void _onDone() {
-    _handleConnectionEnd(
-      'Connection closed before the link was established. Check the TLS setting on both devices.',
-      'Connection lost. The other device disconnected unexpectedly.',
-    );
-  }
+  void _onDone() => _handleConnectionEnd(
+    'Connection closed before the link was established. Check the TLS setting on both devices.',
+    'Connection lost. The other device disconnected unexpectedly.',
+  );
 
-  void _onError(dynamic e) {
-    _handleConnectionEnd(
-      'Could not establish the connection. Check the TLS setting on both devices.',
-      e.toString(),
-    );
-  }
+  void _onError(dynamic e) => _handleConnectionEnd(
+    'Could not establish the connection. Check the TLS setting on both devices.',
+    e.toString(),
+  );
 
   void _handleConnectionEnd(String probeErrorMsg, String postProbeErrorMsg) {
     _cleanupOnDisconnect();
     if (!_probeHandled && !_errorSent) {
       _sendError(probeErrorMsg);
-    } else if (!_errorSent && _state is! _Disconnected) {
+    } else if (!_errorSent && _activeTarget != null) {
       _sendError(postProbeErrorMsg, fatal: true);
     }
     _closeSocket();
@@ -506,14 +460,16 @@ class _FileReceiver {
 
   Future<void> _processFrames() async {
     while (!_socketClosed) {
-      final action = _state is _WaitingForHeader
-          ? await _processHeaderFrame()
-          : _state is _ReceivingFile
-              ? _processFileData()
-              : _FrameAction.none;
-
-      if (action.shouldClose) _closeSocket();
-      if (!action.shouldContinue || _socketClosed) return;
+      // Use null check on _activeTarget instead of type check - cheaper
+      if (_activeTarget == null) {
+        final action = await _processHeaderFrame();
+        if (action.shouldClose) _closeSocket();
+        if (!action.shouldContinue || _socketClosed) return;
+      } else {
+        final action = _processFileData();
+        if (action.shouldClose) _closeSocket();
+        if (!action.shouldContinue || _socketClosed) return;
+      }
     }
   }
 
@@ -534,10 +490,8 @@ class _FileReceiver {
   }
 
   Future<_FrameAction> _handleControlFrame(Map<String, dynamic> header) async {
-    // Handle probe handshake first
     if (!_probeHandled) return _handleProbe(header);
 
-    // Handle other control frames
     return switch (header['type']) {
       'ping' => _respondToPing(),
       'pong' => _FrameAction.continueReading,
@@ -551,7 +505,6 @@ class _FileReceiver {
   _FrameAction _handleProbe(Map<String, dynamic> header) {
     _probeHandled = true;
 
-    // Client received probe response from server
     final ok = header['ok'];
     if (ok != null) {
       if (ok == true) {
@@ -562,7 +515,6 @@ class _FileReceiver {
       return _FrameAction.close;
     }
 
-    // Server received probe from client
     if (header['type'] == 'probe') {
       final clientWantsTls = header['tls'] == true;
       _sendControlFrame(clientWantsTls
@@ -612,7 +564,6 @@ class _FileReceiver {
 
   Future<_FrameAction> _handleDisconnect() async {
     await _cleanupPartialTransfer();
-    _state = const _Disconnected();
     toUiSendPort.send({'command': 'disconnect'});
     return _FrameAction.close;
   }
@@ -631,104 +582,94 @@ class _FileReceiver {
       'fileSize': payloadLength,
     });
 
-    _state = _ReceivingFile(
-      header: header,
-      totalBytes: payloadLength,
-      bytesWritten: 0,
-      target: target,
-      stopwatch: Stopwatch()..start(),
-      lastProgressPercent: -1,
-      lastProgressUpdate: DateTime.fromMillisecondsSinceEpoch(0),
-    );
+    _activeHeader = header;
+    _activeTarget = target;
+    _totalBytes = payloadLength;
+    _bytesWritten = 0;
+    _lastProgressPercent = -1;
+    _stopwatch = Stopwatch()..start();
 
     return _FrameAction.continueReading;
   }
 
   _FrameAction _processFileData() {
-    final state = _state as _ReceivingFile;
-    final remaining = state.totalBytes - state.bytesWritten;
+    final remaining = _totalBytes - _bytesWritten;
 
     if (remaining <= 0) {
-      _completeFileTransfer(state);
+      _completeFileTransfer();
       return _FrameAction.continueReading;
     }
 
-    final written = _buffer.drainToSink(state.target.sink, maxBytes: remaining);
+    final written = _buffer.drainToSink(_activeTarget!.sink, maxBytes: remaining);
     if (written == 0) return _FrameAction.wait;
 
-    final newBytesWritten = state.bytesWritten + written;
-    _state = state.copyWith(
-      bytesWritten: newBytesWritten,
-      lastProgressPercent: state.lastProgressPercent,
-      lastProgressUpdate: state.lastProgressUpdate,
-    );
+    _bytesWritten += written;
+    _reportProgress();
 
-    _reportProgress(_state as _ReceivingFile);
-
-    if (newBytesWritten >= state.totalBytes) {
-      _completeFileTransfer(_state as _ReceivingFile);
+    if (_bytesWritten >= _totalBytes) {
+      _completeFileTransfer();
     }
 
     return _FrameAction.continueReading;
   }
 
-  void _reportProgress(_ReceivingFile state, {bool force = false}) {
-    final progress = state.totalBytes == 0
+  void _reportProgress({bool force = false}) {
+    final progress = _totalBytes == 0
         ? 1.0
-        : (state.bytesWritten / state.totalBytes).clamp(0.0, 1.0);
+        : (_bytesWritten / _totalBytes).clamp(0.0, 1.0);
     final percent = (progress * 100).floor();
     final now = DateTime.now();
 
     final shouldThrottle = !force &&
-        (percent == state.lastProgressPercent ||
-            now.difference(state.lastProgressUpdate) < _progressUpdateInterval);
+        (percent == _lastProgressPercent ||
+            now.difference(_lastProgressUpdate) < _progressUpdateInterval);
 
     if (shouldThrottle) return;
 
-    _state = state.copyWith(
-      lastProgressPercent: percent,
-      lastProgressUpdate: now,
-    );
+    _lastProgressPercent = percent;
+    _lastProgressUpdate = now;
 
     toUiSendPort.send({
       'status': 'progress',
-      'fileId': state.header['uuid'],
+      'fileId': _activeHeader!['uuid'],
       'progress': progress,
     });
 
     _sendControlFrame({
       'type': 'file_receive_progress',
-      'fileId': state.header['uuid'],
+      'fileId': _activeHeader!['uuid'],
       'progress': progress,
     });
   }
 
-  void _completeFileTransfer(_ReceivingFile state) {
-    final timeTaken = state.stopwatch.elapsed.inSeconds.toString();
+  void _completeFileTransfer() {
+    final timeTaken = _stopwatch!.elapsed.inSeconds.toString();
 
-    _reportProgress(state, force: true);
+    _reportProgress(force: true);
 
     _sendControlFrame({
       'type': 'file_received_ack',
-      'fileId': state.header['uuid'],
-      'fileName': state.target.fileName,
+      'fileId': _activeHeader!['uuid'],
+      'fileName': _activeTarget!.fileName,
       'timeTaken': timeTaken,
     });
 
     toUiSendPort.send({
-      'status': state.target.finalizeToTreeUri == null
+      'status': _activeTarget!.finalizeToTreeUri == null
           ? 'completed'
           : 'android_saf_finalize',
-      'fileId': state.header['uuid'],
+      'fileId': _activeHeader!['uuid'],
       'timeTaken': timeTaken,
-      'treeUri': state.target.finalizeToTreeUri,
-      'sourceFilePath': state.target.filePath,
-      'fileName': state.target.fileName,
+      'treeUri': _activeTarget!.finalizeToTreeUri,
+      'sourceFilePath': _activeTarget!.filePath,
+      'fileName': _activeTarget!.fileName,
     });
 
-    state.stopwatch.stop();
-    state.target.sink.close();
-    _state = const _WaitingForHeader();
+    _stopwatch!.stop();
+    _activeTarget!.sink.close();
+    _activeHeader = null;
+    _activeTarget = null;
+    _stopwatch = null;
   }
 
   void _sendControlFrame(Map<String, dynamic> payload) {
@@ -754,19 +695,21 @@ class _FileReceiver {
   }
 
   Future<void> _cleanupPartialTransfer() async {
-    final state = _state;
-    if (state is! _ReceivingFile) return;
+    final target = _activeTarget;
+    if (target == null) return;
 
-    await state.target.sink.close();
+    await target.sink.close();
     try {
-      final file = File(state.target.filePath);
+      final file = File(target.filePath);
       if (await file.exists()) await file.delete();
     } catch (_) {}
+    
+    _activeHeader = null;
+    _activeTarget = null;
   }
 
   void _cleanupOnDisconnect() {
-    final state = _state;
-    if (state is _ReceivingFile) {
+    if (_activeTarget != null) {
       unawaited(_cleanupPartialTransfer());
     }
   }
@@ -776,8 +719,7 @@ class _FileReceiver {
 enum _FrameAction {
   continueReading,
   wait,
-  close,
-  none;
+  close;
 
   bool get shouldContinue => this == continueReading;
   bool get shouldClose => this == close;
