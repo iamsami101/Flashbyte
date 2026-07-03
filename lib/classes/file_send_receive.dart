@@ -381,8 +381,7 @@ void _configureSocketForTransfer(dynamic socket) {
 
 /// Manages the file receiving process.
 /// 
-/// Uses a simple boolean flag to track whether we're in the header or data
-/// phase, avoiding type checks and allocations on the hot path.
+/// Optimized for minimal allocations and syscalls on the hot path.
 class _FileReceiver {
   final dynamic socket;
   final SendPort toUiSendPort;
@@ -398,10 +397,18 @@ class _FileReceiver {
     required this.waitForProbe,
   });
 
-  static const _progressUpdateInterval = Duration(milliseconds: 500);
+  static const _progressUpdateIntervalMs = 500;
   static const _probeTimeout = Duration(seconds: 5);
+  
+  // Pre-built pong frame - constant, no encoding needed per ping
+  static final _pongFrame = Uint8List.fromList([
+    0, 0, 0, 18, // header length (18 bytes for {"type":"pong"})
+    0, 0, 0, 0,  // payload length (0 for control frames)
+    123, 34, 116, 121, 112, 101, 34, 58, 34, 112, 111, 110, 103, 34, 125, // {"type":"pong"}
+  ]);
 
   final _buffer = _SocketReadBuffer();
+  StreamSubscription<List<int>>? _subscription;
   
   // Hot path state - mutable primitives, no allocations
   Map<String, dynamic>? _activeHeader;
@@ -409,13 +416,18 @@ class _FileReceiver {
   int _totalBytes = 0;
   int _bytesWritten = 0;
   int _lastProgressPercent = -1;
-  DateTime _lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+  int _lastProgressUpdateMs = 0;
   Stopwatch? _stopwatch;
+  
+  // Pending file transfer (parsed but not yet started)
+  Map<String, dynamic>? _pendingHeader;
+  int _pendingPayloadLength = 0;
   
   // Connection state
   var _probeHandled = false;
   var _errorSent = false;
   var _socketClosed = false;
+  var _processing = false;
 
   void start() {
     if (!waitForProbe) {
@@ -423,7 +435,11 @@ class _FileReceiver {
     } else {
       Future.delayed(_probeTimeout, _handleProbeTimeout);
     }
-    socket.listen(_onData, onDone: _onDone, onError: _onError);
+    _subscription = socket.listen(
+      _onData, 
+      onDone: _onDone, 
+      onError: _onError,
+    );
   }
 
   void _handleProbeTimeout() {
@@ -433,47 +449,47 @@ class _FileReceiver {
     }
   }
 
-  Future<void> _onData(List<int> data) async {
+  void _onData(List<int> data) {
     _buffer.add(data);
-    await _processFrames();
+    // Backpressure: if already processing, let it complete and return
+    if (_processing) return;
+    _processFramesSync();
   }
 
-  void _onDone() => _handleConnectionEnd(
-    'Connection closed before the link was established. Check the TLS setting on both devices.',
-    'Connection lost. The other device disconnected unexpectedly.',
-  );
-
-  void _onError(dynamic e) => _handleConnectionEnd(
-    'Could not establish the connection. Check the TLS setting on both devices.',
-    e.toString(),
-  );
-
-  void _handleConnectionEnd(String probeErrorMsg, String postProbeErrorMsg) {
-    _cleanupOnDisconnect();
-    if (!_probeHandled && !_errorSent) {
-      _sendError(probeErrorMsg);
-    } else if (!_errorSent && _activeTarget != null) {
-      _sendError(postProbeErrorMsg, fatal: true);
-    }
-    _closeSocket();
-  }
-
-  Future<void> _processFrames() async {
+  /// Process frames synchronously until we hit an await or run out of data.
+  void _processFramesSync() {
+    _processing = true;
+    
     while (!_socketClosed) {
-      // Use null check on _activeTarget instead of type check - cheaper
       if (_activeTarget == null) {
-        final action = await _processHeaderFrame();
+        final action = _tryProcessHeaderFrameSync();
+        if (action == null) {
+          // Need async (file creation) - _pendingHeader/_pendingPayloadLength already set
+          _subscription?.pause();
+          _beginPendingFileTransfer().then((_) {
+            _subscription?.resume();
+            _processing = false;
+            // Check if more data arrived while paused
+            if (_buffer.availableBytes > 0 && !_socketClosed) {
+              _processFramesSync();
+            }
+          });
+          return;
+        }
         if (action.shouldClose) _closeSocket();
-        if (!action.shouldContinue || _socketClosed) return;
+        if (!action.shouldContinue || _socketClosed) break;
       } else {
         final action = _processFileData();
         if (action.shouldClose) _closeSocket();
-        if (!action.shouldContinue || _socketClosed) return;
+        if (!action.shouldContinue || _socketClosed) break;
       }
     }
+    
+    _processing = false;
   }
 
-  Future<_FrameAction> _processHeaderFrame() async {
+  /// Synchronous header frame processing. Returns null if async needed.
+  _FrameAction? _tryProcessHeaderFrameSync() {
     final frameHeader = _buffer.tryPeekFrameHeader();
     if (frameHeader == null || _buffer.availableBytes < 8 + frameHeader.headerLength) {
       return _FrameAction.wait;
@@ -484,20 +500,39 @@ class _FileReceiver {
     final header = jsonDecode(utf8.decode(headerBytes)) as Map<String, dynamic>;
 
     final isControlFrame = header.containsKey('type') || header.containsKey('ok');
-    return isControlFrame && frameHeader.payloadLength == 0
-        ? _handleControlFrame(header)
-        : _beginFileTransfer(header, frameHeader.payloadLength);
+    
+    // Control frames can be handled sync
+    if (isControlFrame && frameHeader.payloadLength == 0) {
+      return _handleControlFrameSync(header);
+    }
+    
+    // File transfer needs async (file creation) - store for async path
+    _pendingHeader = header;
+    _pendingPayloadLength = frameHeader.payloadLength;
+    return null;
   }
 
-  Future<_FrameAction> _handleControlFrame(Map<String, dynamic> header) async {
+  Future<void> _beginPendingFileTransfer() async {
+    final header = _pendingHeader;
+    final payloadLength = _pendingPayloadLength;
+    _pendingHeader = null;
+    _pendingPayloadLength = 0;
+    
+    if (header == null) return;
+    
+    await _beginFileTransfer(header, payloadLength);
+  }
+
+  _FrameAction _handleControlFrameSync(Map<String, dynamic> header) {
     if (!_probeHandled) return _handleProbe(header);
 
-    return switch (header['type']) {
+    final type = header['type'];
+    return switch (type) {
       'ping' => _respondToPing(),
       'pong' => _FrameAction.continueReading,
       'file_received_ack' => _handleFileAck(header),
       'file_receive_progress' => _handleProgressReport(header),
-      'disconnect' => _handleDisconnect(),
+      'disconnect' => _handleDisconnectSync(),
       _ => _FrameAction.continueReading,
     };
   }
@@ -508,7 +543,7 @@ class _FileReceiver {
     final ok = header['ok'];
     if (ok != null) {
       if (ok == true) {
-        toUiSendPort.send({'status': 'connected_to_host'});
+        toUiSendPort.send(['connected_to_host']);
         return _FrameAction.continueReading;
       }
       _sendError(header['error'] as String? ?? 'Could not establish the connection.');
@@ -517,21 +552,21 @@ class _FileReceiver {
 
     if (header['type'] == 'probe') {
       final clientWantsTls = header['tls'] == true;
-      _sendControlFrame(clientWantsTls
-          ? {'ok': false, 'error': 'TLS mismatch: server does not use TLS, client has TLS enabled'}
-          : {'ok': true, 'tls': false});
+      _writeFrameUtf8(clientWantsTls
+          ? '{"ok":false,"error":"TLS mismatch: server does not use TLS, client has TLS enabled"}'
+          : '{"ok":true,"tls":false}');
 
       if (clientWantsTls) {
         _sendError('TLS settings do not match on both devices.', fatal: false);
         return _FrameAction.close;
       }
-      toUiSendPort.send({'status': 'client_connected'});
+      toUiSendPort.send(['client_connected']);
     }
     return _FrameAction.continueReading;
   }
 
   _FrameAction _respondToPing() {
-    _sendControlFrame({'type': 'pong'});
+    socket.add(_pongFrame);
     return _FrameAction.continueReading;
   }
 
@@ -539,12 +574,12 @@ class _FileReceiver {
     final fileId = header['fileId'] as String?;
     if (fileId != null) {
       onTransferAcknowledged?.call(fileId);
-      toUiSendPort.send({
-        'status': 'send_complete',
-        'fileId': fileId,
-        'fileName': header['fileName'],
-        'timeTaken': header['timeTaken'],
-      });
+      toUiSendPort.send([
+        'send_complete',
+        fileId,
+        header['fileName'],
+        header['timeTaken'],
+      ]);
     }
     return _FrameAction.continueReading;
   }
@@ -553,18 +588,14 @@ class _FileReceiver {
     final fileId = header['fileId'] as String?;
     final progress = (header['progress'] as num?)?.toDouble();
     if (fileId != null && progress != null) {
-      toUiSendPort.send({
-        'status': 'send_progress',
-        'fileId': fileId,
-        'progress': progress.clamp(0.0, 1.0),
-      });
+      toUiSendPort.send(['send_progress', fileId, progress.clamp(0.0, 1.0)]);
     }
     return _FrameAction.continueReading;
   }
 
-  Future<_FrameAction> _handleDisconnect() async {
-    await _cleanupPartialTransfer();
-    toUiSendPort.send({'command': 'disconnect'});
+  _FrameAction _handleDisconnectSync() {
+    _cleanupPartialTransferSync();
+    toUiSendPort.send(['disconnect']);
     return _FrameAction.close;
   }
 
@@ -574,13 +605,13 @@ class _FileReceiver {
       originalFileName: header['name'] as String,
     );
 
-    toUiSendPort.send({
-      'status': 'start',
-      'fileId': header['uuid'],
-      'fileName': target.fileName,
-      'filePath': target.filePath,
-      'fileSize': payloadLength,
-    });
+    toUiSendPort.send([
+      'start',
+      header['uuid'],
+      target.fileName,
+      target.filePath,
+      payloadLength,
+    ]);
 
     _activeHeader = header;
     _activeTarget = target;
@@ -614,78 +645,77 @@ class _FileReceiver {
   }
 
   void _reportProgress({bool force = false}) {
-    final progress = _totalBytes == 0
-        ? 1.0
-        : (_bytesWritten / _totalBytes).clamp(0.0, 1.0);
-    final percent = (progress * 100).floor();
-    final now = DateTime.now();
+    // Integer math first - only compute double if we'll actually send
+    final percent = _totalBytes == 0 ? 100 : (_bytesWritten * 100) ~/ _totalBytes;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
 
     final shouldThrottle = !force &&
         (percent == _lastProgressPercent ||
-            now.difference(_lastProgressUpdate) < _progressUpdateInterval);
+            nowMs - _lastProgressUpdateMs < _progressUpdateIntervalMs);
 
     if (shouldThrottle) return;
 
     _lastProgressPercent = percent;
-    _lastProgressUpdate = now;
+    _lastProgressUpdateMs = nowMs;
 
-    toUiSendPort.send({
-      'status': 'progress',
-      'fileId': _activeHeader!['uuid'],
-      'progress': progress,
-    });
+    // Now compute double for the payload
+    final progress = _totalBytes == 0 ? 1.0 : _bytesWritten / _totalBytes;
+    final fileId = _activeHeader!['uuid'] as String;
 
-    _sendControlFrame({
-      'type': 'file_receive_progress',
-      'fileId': _activeHeader!['uuid'],
-      'progress': progress,
-    });
+    // List instead of Map for isolate message
+    toUiSendPort.send(['progress', fileId, progress]);
+
+    // Hand-built JSON for hot frame
+    _sendProgressFrame(fileId, progress);
+  }
+
+  /// Send progress frame with hand-built JSON - no jsonEncode overhead.
+  void _sendProgressFrame(String fileId, double progress) {
+    final json = '{"type":"file_receive_progress","fileId":"$fileId","progress":$progress}';
+    _writeFrameUtf8(json);
+  }
+
+  /// Write a UTF-8 encoded JSON frame with single socket.add call.
+  void _writeFrameUtf8(String json) {
+    final payloadBytes = utf8.encode(json);
+    final frame = Uint8List(8 + payloadBytes.length)
+      ..buffer.asByteData().setUint32(0, payloadBytes.length, Endian.big);
+    frame.setRange(8, 8 + payloadBytes.length, payloadBytes);
+    socket.add(frame);
   }
 
   void _completeFileTransfer() {
     final timeTaken = _stopwatch!.elapsed.inSeconds.toString();
+    final fileId = _activeHeader!['uuid'] as String;
+    final target = _activeTarget!;
 
     _reportProgress(force: true);
 
-    _sendControlFrame({
-      'type': 'file_received_ack',
-      'fileId': _activeHeader!['uuid'],
-      'fileName': _activeTarget!.fileName,
-      'timeTaken': timeTaken,
-    });
+    // Hand-built JSON for ack frame
+    final json = '{"type":"file_received_ack","fileId":"$fileId","fileName":"${target.fileName}","timeTaken":"$timeTaken"}';
+    _writeFrameUtf8(json);
 
-    toUiSendPort.send({
-      'status': _activeTarget!.finalizeToTreeUri == null
-          ? 'completed'
-          : 'android_saf_finalize',
-      'fileId': _activeHeader!['uuid'],
-      'timeTaken': timeTaken,
-      'treeUri': _activeTarget!.finalizeToTreeUri,
-      'sourceFilePath': _activeTarget!.filePath,
-      'fileName': _activeTarget!.fileName,
-    });
+    toUiSendPort.send([
+      target.finalizeToTreeUri == null ? 'completed' : 'android_saf_finalize',
+      fileId,
+      timeTaken,
+      target.finalizeToTreeUri ?? '',
+      target.filePath,
+      target.fileName,
+    ]);
 
     _stopwatch!.stop();
-    _activeTarget!.sink.close();
+    target.sink.close();
     _activeHeader = null;
     _activeTarget = null;
     _stopwatch = null;
-  }
-
-  void _sendControlFrame(Map<String, dynamic> payload) {
-    final payloadBytes = utf8.encode(jsonEncode(payload));
-    final header = ByteData(8)
-      ..setUint32(0, payloadBytes.length, Endian.big)
-      ..setUint32(4, 0, Endian.big);
-    socket.add(header.buffer.asUint8List());
-    socket.add(payloadBytes);
   }
 
   void _sendError(String message, {bool fatal = true}) {
     if (_errorSent) return;
     _errorSent = true;
     _probeHandled = true;
-    toUiSendPort.send({'status': 'error', 'fatal': fatal, 'message': message});
+    toUiSendPort.send(['error', fatal, message]);
   }
 
   void _closeSocket() {
@@ -694,23 +724,42 @@ class _FileReceiver {
     socket.destroy();
   }
 
-  Future<void> _cleanupPartialTransfer() async {
+  void _cleanupPartialTransferSync() {
     final target = _activeTarget;
     if (target == null) return;
 
-    await target.sink.close();
+    target.sink.close();
     try {
-      final file = File(target.filePath);
-      if (await file.exists()) await file.delete();
+      File(target.filePath).deleteSync();
     } catch (_) {}
     
     _activeHeader = null;
     _activeTarget = null;
   }
 
+  void _onDone() => _handleConnectionEnd(
+    'Connection closed before the link was established. Check the TLS setting on both devices.',
+    'Connection lost. The other device disconnected unexpectedly.',
+  );
+
+  void _onError(dynamic e) => _handleConnectionEnd(
+    'Could not establish the connection. Check the TLS setting on both devices.',
+    e.toString(),
+  );
+
+  void _handleConnectionEnd(String probeErrorMsg, String postProbeErrorMsg) {
+    _cleanupOnDisconnect();
+    if (!_probeHandled && !_errorSent) {
+      _sendError(probeErrorMsg);
+    } else if (!_errorSent && _activeTarget != null) {
+      _sendError(postProbeErrorMsg, fatal: true);
+    }
+    _closeSocket();
+  }
+
   void _cleanupOnDisconnect() {
     if (_activeTarget != null) {
-      unawaited(_cleanupPartialTransfer());
+      _cleanupPartialTransferSync();
     }
   }
 }

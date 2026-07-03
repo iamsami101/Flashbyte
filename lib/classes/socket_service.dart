@@ -125,7 +125,10 @@ class SocketService {
           return;
         }
 
-        final typedMessage = message as IsolateMessage;
+        // Convert List messages (from optimized isolate) to Map for UI compatibility
+        final typedMessage = message is List 
+            ? _listToMapMessage(message) 
+            : message as IsolateMessage;
         final status = typedMessage['status'] ?? typedMessage['command'];
         if (status == 'client_connected' || status == 'connected_to_host') {
           _setConnectionEstablished(true);
@@ -211,6 +214,25 @@ class SocketService {
 
     _hasEstablishedConnection = value;
     _connectionStatusController.add(value);
+  }
+
+  /// Converts optimized List messages from isolate to Map for UI compatibility.
+  /// Format: [status, ...args] where args depend on message type.
+  IsolateMessage _listToMapMessage(List<dynamic> list) {
+    final status = list[0] as String;
+    return switch (status) {
+      'connected_to_host' => {'status': 'connected_to_host'},
+      'client_connected' => {'status': 'client_connected'},
+      'disconnect' => {'command': 'disconnect'},
+      'error' => {'status': 'error', 'fatal': list[1], 'message': list[2]},
+      'progress' => {'status': 'progress', 'fileId': list[1], 'progress': list[2]},
+      'start' => {'status': 'start', 'fileId': list[1], 'fileName': list[2], 'filePath': list[3], 'fileSize': list[4]},
+      'completed' => {'status': 'completed', 'fileId': list[1], 'timeTaken': list[2], 'fileName': list[5]},
+      'android_saf_finalize' => {'status': 'android_saf_finalize', 'fileId': list[1], 'timeTaken': list[2], 'treeUri': list[3], 'sourceFilePath': list[4], 'fileName': list[5]},
+      'send_complete' => {'status': 'send_complete', 'fileId': list[1], 'fileName': list[2], 'timeTaken': list[3]},
+      'send_progress' => {'status': 'send_progress', 'fileId': list[1], 'progress': list[2]},
+      _ => {'status': status},
+    };
   }
 
   Future<void> _finalizeAndroidSafTransfer(IsolateMessage message) async {
