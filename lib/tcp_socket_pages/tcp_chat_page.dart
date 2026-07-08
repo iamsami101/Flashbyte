@@ -30,6 +30,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   bool _sentInitialFiles = false;
   bool _errorDialogVisible = false;
   bool _disconnectSignalSent = false;
+  bool _leavingPage = false;
 
   StreamSubscription? _streamSubscription;
 
@@ -45,8 +46,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
-            Navigator.pop(context);
-            showScaffoldSnackbar("Disconnected");
+            if (!_leavingPage) {
+              Navigator.pop(context);
+              showScaffoldSnackbar("Disconnected");
+            }
             break;
           case 'start':
             if (isSharingInProgress) break;
@@ -106,6 +109,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
             break;
 
           case 'error':
+            if (_disconnectSignalSent || !mounted) {
+              break;
+            }
             if (_errorDialogVisible) {
               break;
             }
@@ -179,6 +185,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   void dispose() {
     _streamSubscription?.cancel();
     if (!_disconnectSignalSent) {
+      _leavingPage = true;
       SocketService.instance.disconnect();
     }
     super.dispose();
@@ -190,6 +197,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop && !_disconnectSignalSent) {
+          _leavingPage = true;
           _disconnectSignalSent = true;
           SocketService.instance.disconnect();
         }

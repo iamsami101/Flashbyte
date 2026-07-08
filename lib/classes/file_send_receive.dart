@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
@@ -11,6 +12,7 @@ import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 import 'package:uuid/uuid.dart';
+import 'package:windowed_file_reader/windowed_file_reader.dart';
 
 void fileReceiverIsolate(List<Object> args) {
   final toUiSendPort = args[0] as SendPort;
@@ -27,6 +29,8 @@ void fileReceiverIsolate(List<Object> args) {
   final Queue<Map<String, dynamic>> commandQueue =
       Queue<Map<String, dynamic>>();
   bool isProcessing = false;
+  bool isSendingFile = false;
+  bool localDisconnectRequested = false;
   String? sendingFileId;
 
   Future<void> processCommandQueue() async {
@@ -123,6 +127,8 @@ void fileReceiverIsolate(List<Object> args) {
                   waitForProbe: !useTLS,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
+                  shouldSuppressConnectionErrors: () =>
+                      localDisconnectRequested,
                 );
               },
               onError: (error) {
@@ -179,6 +185,8 @@ void fileReceiverIsolate(List<Object> args) {
                   toUiSendPort,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
+                  shouldSuppressConnectionErrors: () =>
+                      localDisconnectRequested,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -210,6 +218,8 @@ void fileReceiverIsolate(List<Object> args) {
                   waitForProbe: true,
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
+                  shouldSuppressConnectionErrors: () =>
+                      localDisconnectRequested,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -229,6 +239,9 @@ void fileReceiverIsolate(List<Object> args) {
             }
           }
         } else if (command['command'] == 'send_file') {
+          if (localDisconnectRequested) {
+            continue;
+          }
           if (clientSocket == null) {
             toUiSendPort.send({
               'status': 'error',
@@ -239,13 +252,20 @@ void fileReceiverIsolate(List<Object> args) {
           }
 
           try {
+            isSendingFile = true;
             sendingFileId = await _sendFileCommand(
               command,
               clientSocket!,
               toUiSendPort,
+              shouldCancel: () => localDisconnectRequested,
             );
-          } finally {}
+          } on _TransferCancelled {
+            sendingFileId = null;
+          } finally {
+            isSendingFile = false;
+          }
         } else if (command['command'] == "disconnect") {
+          localDisconnectRequested = true;
           final header = utf8.encode(
             jsonEncode({
               'type': 'disconnect',
@@ -255,10 +275,23 @@ void fileReceiverIsolate(List<Object> args) {
           byteData.setUint32(0, header.length);
           byteData.setUint32(4, 0);
 
-          clientSocket!.add(byteData.buffer.asUint8List());
-          clientSocket!.add(header);
+          try {
+            if (!isSendingFile && clientSocket != null) {
+              clientSocket!.add(byteData.buffer.asUint8List());
+              clientSocket!.add(header);
+              await clientSocket!.flush();
+            }
+          } catch (_) {}
+          try {
+            clientSocket?.destroy();
+            await serverSocket?.close();
+          } catch (_) {}
+          toUiSendPort.send({'command': 'disconnect'});
         }
       } catch (e) {
+        if (localDisconnectRequested) {
+          continue;
+        }
         toUiSendPort.send({
           'status': 'error',
           'fatal': 'false',
@@ -271,18 +304,33 @@ void fileReceiverIsolate(List<Object> args) {
   }
 
   fromUiReceivePort.listen((message) {
-    commandQueue.add(message as Map<String, dynamic>);
+    final command = message as Map<String, dynamic>;
+    if (command['command'] == 'disconnect') {
+      localDisconnectRequested = true;
+      if (isSendingFile) {
+        try {
+          clientSocket?.destroy();
+          serverSocket?.close();
+        } catch (_) {}
+      }
+    }
+    commandQueue.add(command);
     processCommandQueue();
   });
 }
 
-Future<String> _sendFileCommand(
+class _TransferCancelled implements Exception {
+  const _TransferCancelled();
+}
+
+Future<String?> _sendFileCommand(
   Map<String, dynamic> command,
   dynamic clientSocket,
-  SendPort toUiSendPort,
-) async {
+  SendPort toUiSendPort, {
+  required bool Function() shouldCancel,
+}) async {
   final filePath = command['filePath'] as String;
-  Stream<List<int>>? fileStream;
+  File? fileToSend;
   Map<String, dynamic>? fileHeader;
 
   final stopwatch = Stopwatch()..start();
@@ -299,11 +347,10 @@ Future<String> _sendFileCommand(
 
       try {
         androidFileDescriptor = await SafUtil().getFileDescriptor(filePath);
-        final descriptorFile = File('/proc/self/fd/$androidFileDescriptor');
-        fileStream = descriptorFile.openRead();
+        fileToSend = File('/proc/self/fd/$androidFileDescriptor');
       } catch (_) {
         cachedFile = await toFile(filePath);
-        fileStream = cachedFile.openRead();
+        fileToSend = cachedFile;
       }
 
       fileHeader = {
@@ -312,8 +359,8 @@ Future<String> _sendFileCommand(
         'size': fileStats.length,
       };
     } else {
-      fileStream = File(filePath).openRead();
-      final fileStats = await File(filePath).stat();
+      fileToSend = File(filePath);
+      final fileStats = await fileToSend.stat();
 
       fileHeader = {
         'uuid': Uuid().v4(),
@@ -338,9 +385,12 @@ Future<String> _sendFileCommand(
       'filePath': command['filePath'],
     });
 
-    await for (final chunk in fileStream) {
-      clientSocket.add(chunk);
-    }
+    await _sendFileWithWindowedReader(
+      file: fileToSend,
+      fileSize: fileHeader['size'] as int,
+      clientSocket: clientSocket,
+      shouldCancel: shouldCancel,
+    );
     await clientSocket.flush();
 
     stopwatch.stop();
@@ -360,12 +410,65 @@ Future<String> _sendFileCommand(
       }
       cachedFile?.delete();
     } on Exception catch (_) {}
+    if (e is _TransferCancelled || shouldCancel()) {
+      return null;
+    }
     toUiSendPort.send({
       'status': 'error',
       'fatal': 'false',
       'message': 'File send error: ${e.toString()}',
     });
     rethrow;
+  }
+}
+
+Future<void> _sendFileWithWindowedReader({
+  required File file,
+  required int fileSize,
+  required dynamic clientSocket,
+  required bool Function() shouldCancel,
+}) async {
+  const int windowSize = 65536;
+  if (fileSize <= 0) {
+    return;
+  }
+
+  final effectiveWindowSize = min(windowSize, fileSize);
+  final reader = DefaultWindowedFileReader(
+    file,
+    windowSize: effectiveWindowSize,
+  );
+
+  await reader.initialize();
+  try {
+    var currentPosition = 0;
+    final lastWindowStart = max(0, fileSize - effectiveWindowSize);
+
+    while (currentPosition < fileSize) {
+      if (shouldCancel()) {
+        throw const _TransferCancelled();
+      }
+      final windowStart = min(currentPosition, lastWindowStart);
+      final offset = currentPosition - windowStart;
+
+      await reader.jumpTo(windowStart);
+      final Uint8List windowBuffer = reader.view();
+
+      final bytesToSend = min(
+        effectiveWindowSize - offset,
+        fileSize - currentPosition,
+      );
+      final actualChunk = windowBuffer.sublist(offset, offset + bytesToSend);
+
+      clientSocket.add(actualChunk);
+      await clientSocket.flush();
+      if (shouldCancel()) {
+        throw const _TransferCancelled();
+      }
+      currentPosition += bytesToSend;
+    }
+  } finally {
+    await reader.dispose();
   }
 }
 
@@ -380,6 +483,7 @@ void _handleSocketConnection(
   SendPort toUiSendPort, {
   bool waitForProbe = false,
   String? configuredDownloadDirectory,
+  bool Function()? shouldSuppressConnectionErrors,
   void Function(String fileId)? onTransferAcknowledged,
 }) {
   final readBuffer = _SocketReadBuffer();
@@ -704,7 +808,7 @@ void _handleSocketConnection(
 
   if (waitForProbe) {
     Future.delayed(const Duration(seconds: 5), () {
-      if (!probeHandled) {
+      if (!probeHandled && !(shouldSuppressConnectionErrors?.call() ?? false)) {
         sendConnectionError(
           'Could not establish the connection. Check the TLS setting on both devices.',
         );
@@ -730,11 +834,18 @@ void _handleSocketConnection(
       unawaited(
         activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
       );
-      if (!probeHandled && !connectionErrorSent) {
+      final suppressErrors = shouldSuppressConnectionErrors?.call() ?? false;
+      if (suppressErrors) {
+        gracefulDisconnect = true;
+      }
+
+      if (!probeHandled && !connectionErrorSent && !suppressErrors) {
         sendConnectionError(
           'Connection closed before the link was established. Check the TLS setting on both devices.',
         );
-      } else if (!connectionErrorSent && !gracefulDisconnect) {
+      } else if (!connectionErrorSent &&
+          !gracefulDisconnect &&
+          !suppressErrors) {
         toUiSendPort.send({
           'status': 'error',
           'fatal': 'true',
@@ -748,11 +859,18 @@ void _handleSocketConnection(
       unawaited(
         activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
       );
-      if (!probeHandled) {
+      final suppressErrors = shouldSuppressConnectionErrors?.call() ?? false;
+      if (suppressErrors) {
+        gracefulDisconnect = true;
+      }
+
+      if (!probeHandled && !suppressErrors) {
         sendConnectionError(
           'Could not establish the connection. Check the TLS setting on both devices.',
         );
-      } else if (!connectionErrorSent && !gracefulDisconnect) {
+      } else if (!connectionErrorSent &&
+          !gracefulDisconnect &&
+          !suppressErrors) {
         toUiSendPort.send({
           'status': 'error',
           'fatal': 'true',

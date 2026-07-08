@@ -813,6 +813,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.0.4"
+  windowed_file_reader:
+    dependency: "direct main"
+    description:
+      name: windowed_file_reader
+      sha256: "9ee6734c5e4d0c1328887219b7435e6ce86fa409d99beacd2678eaa900f465f8"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.3"
   xdg_directories:
     dependency: transitive
     description:

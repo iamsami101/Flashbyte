@@ -20,6 +20,7 @@ class SocketService {
 
   ReceivePort? _uiReceivePort = ReceivePort();
   StreamSubscription? _streamSubscription;
+  bool _disconnectRequested = false;
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   final _connectionStatusController = StreamController<bool>.broadcast();
@@ -98,6 +99,7 @@ class SocketService {
   }) async {
     stopConnection();
     _currentMode = mode;
+    _disconnectRequested = false;
     _setConnectionEstablished(false);
 
     String? certPath;
@@ -128,9 +130,13 @@ class SocketService {
         final typedMessage = message as IsolateMessage;
         final status = typedMessage['status'] ?? typedMessage['command'];
         if (status == 'client_connected' || status == 'connected_to_host') {
+          _disconnectRequested = false;
           _setConnectionEstablished(true);
         } else if (status == 'disconnect' || status == 'error') {
           _setConnectionEstablished(false);
+        }
+        if (status == 'error' && _disconnectRequested) {
+          return;
         }
         if (typedMessage['status'] == 'android_saf_finalize') {
           await _finalizeAndroidSafTransfer(typedMessage);
@@ -138,6 +144,9 @@ class SocketService {
         }
 
         _messageStreamController.add(typedMessage);
+        if (status == 'disconnect') {
+          Future.microtask(stopConnection);
+        }
       },
     );
 
@@ -181,6 +190,7 @@ class SocketService {
       stopConnection();
       return;
     }
+    _disconnectRequested = true;
     _setConnectionEstablished(false);
     try {
       sendPort.send({
@@ -202,6 +212,7 @@ class SocketService {
     _streamSubscription = null;
     _uiReceivePort = null;
     _currentMode = null;
+    _disconnectRequested = false;
   }
 
   void _setConnectionEstablished(bool value) {

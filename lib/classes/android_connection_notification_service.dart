@@ -67,7 +67,7 @@ class AndroidConnectionNotificationService {
 
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
-      await _startOrUpdateForegroundService();
+      await _showConnectionNotification();
       return;
     }
 
@@ -75,37 +75,36 @@ class AndroidConnectionNotificationService {
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     await _localNotifications.cancel(id: _progressNotificationId);
-    await _stopForegroundService();
+    await _localNotifications.cancel(id: _foregroundServiceId);
   }
 
-  Future<void> _startOrUpdateForegroundService() async {
+  Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) {
       return;
     }
 
     try {
-      await _androidNotifications?.startForegroundService(
+      await _localNotifications.show(
         id: _foregroundServiceId,
         title: _foregroundNotificationTitle,
         body: _foregroundNotificationText,
-        notificationDetails: const AndroidNotificationDetails(
-          'tcp_connection_service',
-          'TCP connection service',
-          channelDescription:
-              'Keeps Flashbyte active while a TCP connection is established.',
-          category: AndroidNotificationCategory.service,
-          importance: Importance.low,
-          priority: Priority.low,
-          ongoing: true,
-          autoCancel: false,
-          onlyAlertOnce: true,
-          playSound: false,
-          enableVibration: false,
-          showWhen: false,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'tcp_connection_service',
+            'TCP connection service',
+            channelDescription:
+                'Shows when Flashbyte has an active TCP connection.',
+            category: AndroidNotificationCategory.service,
+            importance: Importance.low,
+            priority: Priority.low,
+            ongoing: true,
+            autoCancel: false,
+            onlyAlertOnce: true,
+            playSound: false,
+            enableVibration: false,
+            showWhen: false,
+          ),
         ),
-        foregroundServiceTypes: const {
-          AndroidServiceForegroundType.foregroundServiceTypeDataSync,
-        },
       );
     } catch (error, stackTrace) {
       FlutterError.reportError(
@@ -113,26 +112,7 @@ class AndroidConnectionNotificationService {
           exception: error,
           stack: stackTrace,
           library: 'flashbyte notifications',
-          context: ErrorDescription('start foreground service'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _stopForegroundService() async {
-    if (!Platform.isAndroid) {
-      return;
-    }
-
-    try {
-      await _androidNotifications?.stopForegroundService();
-    } catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'flashbyte notifications',
-          context: ErrorDescription('stop foreground service'),
+          context: ErrorDescription('show connection notification'),
         ),
       );
     }
@@ -312,7 +292,7 @@ class AndroidConnectionNotificationService {
     _progressNotificationTimer?.cancel();
     await _connectionSubscription?.cancel();
     await _messageSubscription?.cancel();
-    await _stopForegroundService();
+    await _localNotifications.cancel(id: _foregroundServiceId);
   }
 }
 

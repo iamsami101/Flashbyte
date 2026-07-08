@@ -286,7 +286,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       MaterialPageRoute(
         builder: (context) => TcpChatPage(initialFiles: initialFiles),
       ),
-    ).then((_) {
+    ).then((_) async {
       if (!mounted) return;
       setState(() {
         chatOpened = false;
@@ -295,6 +295,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           receiveStarted = false;
         }
       });
+      if (selectedTabIndex == 1) {
+        await _ensureReceiveReady();
+      }
     });
   }
 

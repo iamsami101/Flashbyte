@@ -31,6 +31,7 @@ class _TcpSocketsState extends State<TcpSockets> {
   String? ipAddress;
   final TextEditingController controller = TextEditingController();
   bool _isConnecting = false;
+  bool _chatOpen = false;
 
   StreamSubscription? messageSubscription;
 
@@ -88,8 +89,12 @@ class _TcpSocketsState extends State<TcpSockets> {
             break;
           case 'client_connected':
           case 'connected_to_host':
+            if (_chatOpen) {
+              break;
+            }
             setState(() {
               _isConnecting = false;
+              _chatOpen = true;
             });
             Navigator.push(
               context,
@@ -97,9 +102,21 @@ class _TcpSocketsState extends State<TcpSockets> {
                 pageBuilder: (context, animation, secondaryAnimation) =>
                     TcpChatPage(initialFiles: widget.selectedFiles),
               ),
-            );
+            ).then((_) async {
+              if (!mounted) return;
+              setState(() {
+                _chatOpen = false;
+                _isConnecting = false;
+              });
+              if (widget.mode == TcpConnectionMode.receive) {
+                await _startReceiver();
+              }
+            });
             break;
           case 'error':
+            if (_chatOpen) {
+              break;
+            }
             setState(() {
               _isConnecting = false;
             });

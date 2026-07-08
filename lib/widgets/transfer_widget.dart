@@ -105,45 +105,48 @@ class TransferWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  subtitle: value == null
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          spacing: 10,
-                          children: [
-                            Text(
-                              "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
-                            ),
-                            LinearProgressIndicator(
-                              value: 1,
-                              year2023: false,
-                              stopIndicatorRadius: 1,
-                              stopIndicatorColor: colorScheme.secondary,
-                            ),
-                          ],
-                        )
-                      : ValueListenableBuilder(
-                          valueListenable: value!,
-                          builder: (context, pvalue, child) => SingleMotionBuilder(
-                            value: pvalue,
-                            motion:
-                                MaterialSpringMotion.expressiveEffectsDefault(),
-                            builder: (context, value, child) => Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              spacing: 10,
-                              children: [
-                                Text(
-                                  "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
-                                ),
-                                LinearProgressIndicator(
-                                  value: value,
-                                  year2023: false,
-                                  stopIndicatorRadius: 1,
-                                  stopIndicatorColor: colorScheme.secondary,
-                                ),
-                              ],
-                            ),
+                  subtitle:
+                      // value == null
+                      //     ? Column(
+                      //         crossAxisAlignment: CrossAxisAlignment.start,
+                      //         spacing: 10,
+                      //         children: [
+                      //           Text(
+                      //             "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
+                      //           ),
+                      //           LinearProgressIndicator(
+                      //             value: 1,
+                      //             year2023: false,
+                      //             stopIndicatorRadius: 1,
+                      //             stopIndicatorColor: colorScheme.secondary,
+                      //           ),
+                      //         ],
+                      //       )
+                      //     :
+                      ValueListenableBuilder(
+                        valueListenable: value == null
+                            ? ValueNotifier<double>(1.0)
+                            : value!,
+                        builder: (context, pvalue, child) => SingleMotionBuilder(
+                          value: pvalue,
+                          motion: Motion.smoothSpring(),
+                          builder: (context, value, child) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 10,
+                            children: [
+                              Text(
+                                "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
+                              ),
+                              LinearProgressIndicator(
+                                value: value,
+                                year2023: false,
+                                stopIndicatorRadius: 1,
+                                stopIndicatorColor: colorScheme.secondary,
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                   dense: true,
                 ),
               ],
