@@ -24,6 +24,8 @@ class SocketService {
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   final _connectionStatusController = StreamController<bool>.broadcast();
+  final Map<String, IsolateMessage> _transferStartMessages = {};
+  final Map<String, IsolateMessage> _transferLatestMessages = {};
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
   Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
   bool get isRunning => _receiverIsolate != null;
@@ -100,6 +102,8 @@ class SocketService {
     stopConnection();
     _currentMode = mode;
     _disconnectRequested = false;
+    _transferStartMessages.clear();
+    _transferLatestMessages.clear();
     _setConnectionEstablished(false);
 
     String? certPath;
@@ -143,7 +147,7 @@ class SocketService {
           return;
         }
 
-        _messageStreamController.add(typedMessage);
+        _publishMessage(typedMessage);
         if (status == 'disconnect') {
           Future.microtask(stopConnection);
         }
@@ -182,6 +186,18 @@ class SocketService {
       'command': 'send_file',
       'filePath': filePath,
     });
+  }
+
+  void replayTransferState() {
+    for (final entry in _transferStartMessages.entries) {
+      _messageStreamController.add(Map<String, dynamic>.from(entry.value));
+      final latestMessage = _transferLatestMessages[entry.key];
+      if (latestMessage != null) {
+        _messageStreamController.add(
+          Map<String, dynamic>.from(latestMessage),
+        );
+      }
+    }
   }
 
   void disconnect() {
@@ -224,13 +240,31 @@ class SocketService {
     _connectionStatusController.add(value);
   }
 
+  void _publishMessage(IsolateMessage message) {
+    final status = message['status'] ?? message['command'];
+    final fileId = message['fileId'] as String?;
+    if (fileId != null) {
+      if (status == 'start' || status == 'send_start') {
+        _transferStartMessages[fileId] = Map<String, dynamic>.from(message);
+        _transferLatestMessages.remove(fileId);
+      } else if (status == 'progress' ||
+          status == 'send_progress' ||
+          status == 'completed' ||
+          status == 'send_complete') {
+        _transferLatestMessages[fileId] = Map<String, dynamic>.from(message);
+      }
+    }
+
+    _messageStreamController.add(message);
+  }
+
   Future<void> _finalizeAndroidSafTransfer(IsolateMessage message) async {
     final treeUri = message['treeUri'] as String?;
     final sourceFilePath = message['sourceFilePath'] as String?;
     final fileName = message['fileName'] as String?;
 
     if (treeUri == null || sourceFilePath == null || fileName == null) {
-      _messageStreamController.add({
+      _publishMessage({
         'status': 'error',
         'fatal': false,
         'message': 'Could not finalize the received file on Android.',
@@ -246,7 +280,7 @@ class SocketService {
       );
       await File(sourceFilePath).delete();
 
-      _messageStreamController.add({
+      _publishMessage({
         'status': 'completed',
         'fileId': message['fileId'],
         'timeTaken': message['timeTaken'],
@@ -254,7 +288,7 @@ class SocketService {
         'filePath': savedFile.uri,
       });
     } catch (e) {
-      _messageStreamController.add({
+      _publishMessage({
         'status': 'error',
         'fatal': false,
         'message':

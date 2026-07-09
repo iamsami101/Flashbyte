@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flashbyte/classes/android_saf_service.dart';
+import 'package:flashbyte/classes/two_random_words.dart';
 import 'package:flutter/material.dart';
 import 'package:external_path/external_path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class AppSettings {
   static const String useTlsKey = 'useTLS';
@@ -13,6 +15,8 @@ class AppSettings {
   static const String dynamicColorsEnabledKey = 'dynamicColorsEnabled';
   static const String primaryColorKey = 'primaryColor';
   static const String useDarkModeKey = 'useDarkMode';
+  static const String deviceNameKey = 'deviceName';
+  static const String deviceIdKey = 'deviceId';
   static const int defaultPort = 8050;
   static const String defaultPrimaryColorName = 'green';
 
@@ -43,6 +47,37 @@ class AppSettings {
   static Future<void> setPort(int port) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(portKey, port);
+  }
+
+  static Future<String> getDeviceName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = prefs.getString(deviceNameKey);
+    if (savedName != null && savedName.isNotEmpty) {
+      return savedName;
+    }
+
+    final words = RandomWords();
+    final name =
+        '${_capitalize(words.firstWord)} ${_capitalize(words.secondWord)}';
+    await prefs.setString(deviceNameKey, name);
+    return name;
+  }
+
+  static Future<String> getDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedId = prefs.getString(deviceIdKey);
+    if (savedId != null && savedId.isNotEmpty) {
+      return savedId;
+    }
+
+    final id = const Uuid().v4();
+    await prefs.setString(deviceIdKey, id);
+    return id;
+  }
+
+  static String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 
   static Future<String> getDownloadDirectory() async {

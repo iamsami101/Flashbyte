@@ -15,6 +15,7 @@
 - **Doesn't use an external server:** Flashbytes sends to devices using your local network.
 - **Cross-platform:** Transfer files to any device on your local network that has Flashbyte installed.
 - **Open source & no data is collected:** All of the code is readily available on github.
+- **Automatic Discovery:** Connect to users without having to manually type their IP.
 
 ### How does this work?
 Flashbyte uses pure TCP sockets to establish a connection between two devices on a local network inside an isolate (isolated memory channel) which is then utilized to read and send over the file bytes whilst keeping the frontend (main UI isolate) smooth.

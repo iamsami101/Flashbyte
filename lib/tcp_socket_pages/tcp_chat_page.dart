@@ -175,6 +175,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
         }
       },
     );
+    SocketService.instance.replayTransferState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _sendInitialFiles();

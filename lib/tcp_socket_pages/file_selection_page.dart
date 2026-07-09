@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
+import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -31,10 +33,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool isReceiveStarting = false;
   bool receiveStarted = false;
   bool chatOpened = false;
+  bool isDiscovering = true;
   int selectedTabIndex = 0;
 
   String? receiveIpAddress;
+  String? deviceName;
+  String? _deviceId;
+  List<DiscoveredDevice> discoveredDevices = const [];
   StreamSubscription? _socketSubscription;
+  StreamSubscription<List<DiscoveredDevice>>? _discoverySubscription;
 
   @override
   void initState() {
@@ -50,6 +57,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _socketSubscription = SocketService.instance.messageStream.listen(
       _handleSocketMessage,
     );
+    _discoverySubscription = DeviceDiscoveryService.instance.devicesStream
+        .listen((devices) {
+          if (!mounted) return;
+          setState(() {
+            discoveredDevices = devices;
+            isDiscovering = false;
+          });
+        });
+    _initializeDiscovery();
 
     if (selectedTabIndex == 1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -65,9 +81,33 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     _socketSubscription?.cancel();
+    _discoverySubscription?.cancel();
     receiverIpController.dispose();
     SocketService.instance.stopConnection();
+    unawaited(DeviceDiscoveryService.instance.stop());
     super.dispose();
+  }
+
+  Future<void> _initializeDiscovery() async {
+    try {
+      final name = await AppSettings.getDeviceName();
+      final id = await AppSettings.getDeviceId();
+      if (!mounted) return;
+      setState(() {
+        deviceName = name;
+        _deviceId = id;
+      });
+      await DeviceDiscoveryService.instance.startDiscovery(localDeviceId: id);
+      if (!mounted) return;
+      setState(() {
+        discoveredDevices = DeviceDiscoveryService.instance.devices;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isDiscovering = false;
+      });
+    }
   }
 
   Future<void> _pickFiles() async {
@@ -106,6 +146,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     if (selectedTabIndex == 1) {
       _ensureReceiveReady();
+    } else {
+      unawaited(DeviceDiscoveryService.instance.stopAdvertising());
     }
   }
 
@@ -139,6 +181,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           useTLS: useTLS,
         );
       }
+      final name = deviceName ?? await AppSettings.getDeviceName();
+      final id = _deviceId ?? await AppSettings.getDeviceId();
+      await DeviceDiscoveryService.instance.startAdvertising(
+        deviceId: id,
+        name: name,
+        port: port,
+        usesTls: useTLS,
+      );
       receiveStarted = true;
       await _loadReceiveIpAddress();
     } catch (e) {
@@ -207,7 +257,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _connectToReceiver(ip);
   }
 
-  Future<void> _connectToReceiver(String ip) async {
+  Future<void> _connectToReceiver(
+    String ip, {
+    int? advertisedPort,
+    bool? advertisedTls,
+  }) async {
     if (selectedFiles.isEmpty) {
       showScaffoldSnackbar("Select at least one file first");
       return;
@@ -222,8 +276,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     });
 
     try {
-      final useTLS = await AppSettings.getUseTls();
-      final port = await AppSettings.getPort();
+      await DeviceDiscoveryService.instance.stopAdvertising();
+      final useTLS = advertisedTls ?? await AppSettings.getUseTls();
+      final port = advertisedPort ?? await AppSettings.getPort();
       SocketService.instance.connectToHost(ip, port: port, useTLS: useTLS);
     } catch (e) {
       if (!mounted) return;
@@ -237,6 +292,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
   }
 
+  void _connectToDiscoveredDevice(DiscoveredDevice device) {
+    receiverIpController.text = device.address;
+    _connectToReceiver(
+      device.address,
+      advertisedPort: device.port,
+      advertisedTls: device.usesTls,
+    );
+  }
+
   void _handleSocketMessage(Map<String, dynamic> message) {
     if (!mounted) return;
 
@@ -245,6 +309,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     switch (status) {
       case 'client_connected':
         if (selectedTabIndex == 1) {
+          unawaited(DeviceDiscoveryService.instance.stopAdvertising());
           _openChatIfNeeded(initialFiles: const []);
         }
         break;
@@ -342,6 +407,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               }
               if (index == 1) {
                 _ensureReceiveReady();
+              } else {
+                unawaited(
+                  DeviceDiscoveryService.instance.stopAdvertising(),
+                );
               }
             },
             tabs: const [
@@ -377,74 +446,81 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Widget _buildSendTab() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 20,
-      children: [
-        _buildBrandHeader(
-          icon: Icons.upload_file_rounded,
-          title: "Send files",
-          subtitle:
-              "Pick files, then enter the receiver IP or scan its QR code.",
-        ),
-        _buildSelectedFilesCard(),
-        SizedBox(
-          height: 52,
-          child: Row(
-            spacing: 12,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: receiverIpController,
-                  enabled: !isPickingFile && !isConnectingToSender,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: _submitReceiverAddress,
-                  decoration: InputDecoration(
-                    label: const Text("Receiver IP"),
-                    hintText: "192.168.xx.xx",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: double.infinity,
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: isConnectingToSender
-                        ? null
-                        : (!Platform.isAndroid && !Platform.isIOS)
-                        ? () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                content: Text(
-                                  "QR Scanning is not supported on this OS.",
-                                ),
-                              ),
-                            );
-                          }
-                        : _scanReceiverQr,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Icon(
-                        Icons.qr_code_scanner_rounded,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 20,
+        children: [
+          _buildBrandHeader(
+            icon: Icons.upload_file_rounded,
+            title: "Send files",
+            subtitle:
+                "Pick files, then choose a nearby receiver or use its IP address.",
+          ),
+          _buildSelectedFilesCard(),
+          _buildAvailableDevicesCard(),
+          SizedBox(
+            height: 52,
+            child: Row(
+              spacing: 12,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: receiverIpController,
+                    enabled: !isPickingFile && !isConnectingToSender,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: _submitReceiverAddress,
+                    decoration: InputDecoration(
+                      label: const Text("Receiver IP"),
+                      hintText: "192.168.xx.xx",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                SizedBox(
+                  height: double.infinity,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: isConnectingToSender
+                          ? null
+                          : (!Platform.isAndroid && !Platform.isIOS)
+                          ? () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  behavior: SnackBarBehavior.floating,
+                                  content: Text(
+                                    "QR Scanning is not supported on this OS.",
+                                  ),
+                                ),
+                              );
+                            }
+                          : _scanReceiverQr,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Icon(
+                          Icons.qr_code_scanner_rounded,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
-      ],
+          if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
+        ],
+      ),
     );
   }
 
@@ -461,6 +537,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             title: "Receive files",
             subtitle: "Scan this QR code with another device to start sharing.",
           ),
+          _buildReceiverIdentityCard(),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
@@ -509,6 +586,192 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
+  Widget _buildAvailableDevicesCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 12,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Available nearby",
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                AnimatedSwitcher(
+                  duration: 180.ms,
+                  child: isDiscovering
+                      ? SizedBox.square(
+                          key: const ValueKey('discovering'),
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        )
+                      : Icon(
+                          Icons.radar_rounded,
+                          key: const ValueKey('ready'),
+                          size: 20,
+                          color: colorScheme.primary,
+                        ),
+                ),
+              ],
+            ),
+            AnimatedSwitcher(
+              duration: 220.ms,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: discoveredDevices.isEmpty
+                  ? Padding(
+                      key: const ValueKey('no-devices'),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        isDiscovering
+                            ? "Looking for receivers on this network..."
+                            : "No receivers found yet. You can still use an IP or QR code.",
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : Column(
+                      key: ValueKey(
+                        discoveredDevices.map((device) => device.id).join(),
+                      ),
+                      spacing: 8,
+                      children: [
+                        for (final (index, device) in discoveredDevices.indexed)
+                          _buildDeviceTile(device)
+                              .animate()
+                              .fadeIn(
+                                duration: 180.ms,
+                                delay: (index * 70).ms,
+                              )
+                              .slideY(
+                                begin: 0.08,
+                                end: 0,
+                                curve: Curves.easeOutCubic,
+                              ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceTile(DiscoveredDevice device) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final canConnect =
+        selectedFiles.isNotEmpty && !isPickingFile && !isConnectingToSender;
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: canConnect ? () => _connectToDiscoveredDevice(device) : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            child: Row(
+              spacing: 12,
+              children: [
+                CircleAvatar(
+                  backgroundColor: colorScheme.primaryContainer,
+                  foregroundColor: colorScheme.onPrimaryContainer,
+                  child: const Icon(Icons.devices_rounded, size: 20),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        device.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      Text(
+                        "${device.address}:${device.port}${device.usesTls ? ' • Secure' : ''}",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: canConnect
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceiverIdentityCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          spacing: 12,
+          children: [
+            Icon(
+              Icons.broadcast_on_personal_rounded,
+              color: colorScheme.onPrimaryContainer,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  Text(
+                    "Visible as",
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onPrimaryContainer.withValues(
+                        alpha: 0.72,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    deviceName ?? "Creating your name...",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBrandHeader({
     required IconData icon,
     required String title,
@@ -544,9 +807,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final shouldRestartReceive = selectedTabIndex == 1;
     if (shouldRestartReceive) {
       SocketService.instance.stopConnection();
+      await DeviceDiscoveryService.instance.stopAdvertising();
       receiveStarted = false;
       receiveIpAddress = null;
     }
+    if (!mounted) return;
 
     await Navigator.push(
       context,
@@ -570,53 +835,42 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           children: [
             Text(
               _selectionSummary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (selectedFiles.isNotEmpty)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 180),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: selectedFiles.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.insert_drive_file),
-                    title: Text(
-                      selectedFiles[index].name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ),
-            Card.outlined(
-              margin: EdgeInsets.zero,
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
               child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: isPickingFile ? null : _pickFiles,
-                child: Padding(
-                  padding: const EdgeInsets.all(17),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    spacing: 10,
-                    children: [
-                      Icon(
-                        selectedFiles.isEmpty
-                            ? Icons.attach_file_rounded
-                            : Icons.swap_horiz_rounded,
-                      ),
-                      Text(
-                        isPickingFile
-                            ? "Opening Picker..."
-                            : selectedFiles.isEmpty
-                            ? "Pick Files"
-                            : "Change Files",
-                      ),
-                    ],
+                borderRadius: BorderRadius.circular(14),
+                onTap: isPickingFile || isConnectingToSender
+                    ? null
+                    : _pickFiles,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 10,
+                      children: [
+                        Icon(
+                          selectedFiles.isEmpty
+                              ? Icons.attach_file_rounded
+                              : Icons.swap_horiz_rounded,
+                        ),
+                        Text(
+                          isPickingFile
+                              ? "Opening picker..."
+                              : selectedFiles.isEmpty
+                              ? "Pick files"
+                              : "Change files",
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
