@@ -587,6 +587,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     enabled: !isPickingFile && !isConnectingToSender,
                     textInputAction: TextInputAction.done,
                     onSubmitted: _submitReceiverAddress,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: InputDecoration(
                       label: const Text("Receiver IP"),
                       hintText: "192.168.xx.xx",
@@ -632,6 +634,19 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   ),
                 ),
               ],
+            ),
+          ),
+          SizedBox(
+            height: 50,
+            child: FilledButton.icon(
+              onPressed:
+                  selectedFiles.isEmpty || isPickingFile || isConnectingToSender
+                  ? null
+                  : () => _submitReceiverAddress(receiverIpController.text),
+              icon: const Icon(Icons.link_rounded),
+              label: Text(
+                isConnectingToSender ? "Connecting..." : "Connect",
+              ),
             ),
           ),
           if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
@@ -808,7 +823,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                 CircleAvatar(
                   backgroundColor: colorScheme.primaryContainer,
                   foregroundColor: colorScheme.onPrimaryContainer,
-                  child: const Icon(Icons.devices_rounded, size: 20),
+                  child: Icon(
+                    device.type == DiscoveredDeviceType.laptop
+                        ? Icons.laptop_rounded
+                        : Icons.smartphone_rounded,
+                    size: 20,
+                  ),
                 ),
                 Expanded(
                   child: Column(
@@ -878,6 +898,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     enabled: deviceName != null && !_settingsLocked,
                     onChanged: _scheduleDeviceNameSave,
                     onSubmitted: (_) => _saveDeviceName(),
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colorScheme.onPrimaryContainer,
                     ),

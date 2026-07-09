@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+enum DiscoveredDeviceType { phone, laptop }
+
 class DiscoveredDevice {
   const DiscoveredDevice({
     required this.id,
@@ -9,6 +11,7 @@ class DiscoveredDevice {
     required this.address,
     required this.port,
     required this.usesTls,
+    required this.type,
   });
 
   final String id;
@@ -16,6 +19,7 @@ class DiscoveredDevice {
   final String address;
   final int port;
   final bool usesTls;
+  final DiscoveredDeviceType type;
 }
 
 class DeviceDiscoveryService {
@@ -81,6 +85,9 @@ class DeviceDiscoveryService {
       'name': name,
       'port': port,
       'tls': usesTls,
+      'deviceType': Platform.isAndroid || Platform.isIOS
+          ? DiscoveredDeviceType.phone.name
+          : DiscoveredDeviceType.laptop.name,
     };
     _broadcastTimer?.cancel();
     _broadcastAdvertisement();
@@ -157,6 +164,10 @@ class DeviceDiscoveryService {
       if (name == null || port == null || usesTls == null) {
         return;
       }
+      final deviceType = DiscoveredDeviceType.values.firstWhere(
+        (type) => type.name == message['deviceType'],
+        orElse: () => DiscoveredDeviceType.phone,
+      );
 
       _devices[id] = _SeenDevice(
         device: DiscoveredDevice(
@@ -165,6 +176,7 @@ class DeviceDiscoveryService {
           address: datagram.address.address,
           port: port,
           usesTls: usesTls,
+          type: deviceType,
         ),
         lastSeen: DateTime.now(),
       );
