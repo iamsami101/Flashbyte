@@ -68,11 +68,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             isDiscovering = false;
           });
         });
-    _initializeDiscovery();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _ensureReceiveReady();
+        _initializeNetworking();
       }
     });
   }
@@ -91,16 +89,17 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     super.dispose();
   }
 
-  Future<void> _initializeDiscovery() async {
+  Future<void> _initializeNetworking() async {
+    final name = await AppSettings.getDeviceName();
+    final id = await AppSettings.getDeviceId();
+    if (!mounted) return;
+    setState(() {
+      deviceName = name;
+      _deviceId = id;
+      _deviceNameController.text = name;
+    });
+
     try {
-      final name = await AppSettings.getDeviceName();
-      final id = await AppSettings.getDeviceId();
-      if (!mounted) return;
-      setState(() {
-        deviceName = name;
-        _deviceId = id;
-        _deviceNameController.text = name;
-      });
       await DeviceDiscoveryService.instance.startDiscovery(localDeviceId: id);
       if (!mounted) return;
       setState(() {
@@ -111,6 +110,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       setState(() {
         isDiscovering = false;
       });
+    }
+
+    if (mounted) {
+      await _ensureReceiveReady();
     }
   }
 
@@ -147,8 +150,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     setState(() {
       selectedTabIndex = _tabController.index;
     });
-
-    _ensureReceiveReady();
   }
 
   Future<void> _ensureReceiveReady() async {
@@ -481,11 +482,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                 setState(() {
                   selectedTabIndex = index;
                 });
-              }
-              if (index == 1) {
-                _ensureReceiveReady();
-              } else {
-                _ensureReceiveReady();
               }
             },
             tabs: const [

@@ -116,6 +116,7 @@ class SocketService {
     }
 
     final completer = Completer<SendPort>();
+    final hostingCompleter = Completer<void>();
 
     _uiReceivePort = ReceivePort();
     final RootIsolateToken? rootToken = RootIsolateToken.instance;
@@ -133,6 +134,15 @@ class SocketService {
 
         final typedMessage = message as IsolateMessage;
         final status = typedMessage['status'] ?? typedMessage['command'];
+        if (status == 'hosting' && !hostingCompleter.isCompleted) {
+          hostingCompleter.complete();
+        } else if (mode == 'host' &&
+            status == 'error' &&
+            !hostingCompleter.isCompleted) {
+          hostingCompleter.completeError(
+            Exception(typedMessage['message'] ?? 'Failed to start server'),
+          );
+        }
         if (status == 'client_connected' || status == 'connected_to_host') {
           _disconnectRequested = false;
           _setConnectionEstablished(true);
@@ -174,6 +184,10 @@ class SocketService {
       'keyPath': keyPath,
       'downloadDirectory': downloadDirectory,
     });
+
+    if (mode == 'host') {
+      await hostingCompleter.future.timeout(const Duration(seconds: 10));
+    }
   }
 
   void sendFile(String filePath) {
