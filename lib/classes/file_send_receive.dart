@@ -43,6 +43,13 @@ void fileReceiverIsolate(List<Object> args) {
       try {
         if (command['command'] == 'connect') {
           final useTLS = command['useTLS'] ?? false;
+          final localPeerInfo = <String, dynamic>{
+            'type': 'peer_info',
+            'name': command['deviceName'],
+            'deviceType': command['deviceType'],
+            'port': command['listeningPort'],
+            'tls': useTLS,
+          };
 
           if (command['mode'] == 'host') {
             SecurityContext? securityContext;
@@ -129,6 +136,7 @@ void fileReceiverIsolate(List<Object> args) {
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
+                  localPeerInfo: localPeerInfo,
                 );
               },
               onError: (error) {
@@ -187,6 +195,7 @@ void fileReceiverIsolate(List<Object> args) {
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
+                  localPeerInfo: localPeerInfo,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -220,6 +229,7 @@ void fileReceiverIsolate(List<Object> args) {
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
+                  localPeerInfo: localPeerInfo,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -485,6 +495,7 @@ void _handleSocketConnection(
   String? configuredDownloadDirectory,
   bool Function()? shouldSuppressConnectionErrors,
   void Function(String fileId)? onTransferAcknowledged,
+  required Map<String, dynamic> localPeerInfo,
 }) {
   final readBuffer = _SocketReadBuffer();
   const progressUpdateInterval = Duration(milliseconds: 500);
@@ -545,6 +556,10 @@ void _handleSocketConnection(
     header.setUint32(4, 0, Endian.big);
     socket.add(header.buffer.asUint8List());
     socket.add(payloadBytes);
+  }
+
+  void sendLocalPeerInfo() {
+    sendControlFrame(localPeerInfo);
   }
 
   void closeSocket() {
@@ -617,6 +632,7 @@ void _handleSocketConnection(
       final ok = headerJson['ok'];
       if (ok != null) {
         if (ok == true) {
+          sendLocalPeerInfo();
           toUiSendPort.send({'status': 'connected_to_host'});
           return true;
         }
@@ -648,6 +664,7 @@ void _handleSocketConnection(
           return false;
         }
 
+        sendLocalPeerInfo();
         toUiSendPort.send({'status': 'client_connected'});
         return true;
       }
@@ -658,6 +675,20 @@ void _handleSocketConnection(
         sendControlFrame({'type': 'pong'});
         return true;
       case 'pong':
+        return true;
+      case 'peer_info':
+        toUiSendPort.send({
+          'status': 'peer_info',
+          'name': headerJson['name'] is String
+              ? headerJson['name']
+              : 'Connected device',
+          'deviceType': headerJson['deviceType'] == 'laptop'
+              ? 'laptop'
+              : 'phone',
+          'port': headerJson['port'] is int ? headerJson['port'] : null,
+          'tls': headerJson['tls'] == true,
+          'address': socket.remoteAddress.address,
+        });
         return true;
       case 'file_received_ack':
         final fileId = headerJson['fileId'] as String?;
@@ -815,6 +846,10 @@ void _handleSocketConnection(
         closeSocket();
       }
     });
+  }
+
+  if (!waitForProbe) {
+    sendLocalPeerInfo();
   }
 
   late StreamSubscription<List<int>> subscription;

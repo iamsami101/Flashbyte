@@ -17,6 +17,8 @@ class TcpChatPage extends StatefulWidget {
 }
 
 class _TcpChatPageState extends State<TcpChatPage> {
+  static const double _wideLayoutBreakpoint = 1000;
+
   final ScrollController scrollController = ScrollController();
   final TextEditingController textFieldController = TextEditingController();
 
@@ -31,18 +33,26 @@ class _TcpChatPageState extends State<TcpChatPage> {
   bool _errorDialogVisible = false;
   bool _disconnectSignalSent = false;
   bool _leavingPage = false;
+  Map<String, dynamic>? _peerInfo;
 
   StreamSubscription? _streamSubscription;
 
   @override
   void initState() {
     super.initState();
+    _peerInfo = SocketService.instance.connectedPeerInfo;
 
     _streamSubscription = SocketService.instance.messageStream.listen(
       (message) {
         final status = message['status'] ?? message['command'];
 
         switch (status) {
+          case 'peer_info':
+            if (!mounted) return;
+            setState(() {
+              _peerInfo = Map<String, dynamic>.from(message);
+            });
+            break;
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
@@ -210,134 +220,300 @@ class _TcpChatPageState extends State<TcpChatPage> {
         child: Scaffold(
           appBar: AppBar(title: const Text("Share")),
           body: SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Row(
               children: [
                 Expanded(
-                  child: ConstrainedBox(
-                    constraints: (Platform.isAndroid || Platform.isIOS)
-                        ? BoxConstraints()
-                        : BoxConstraints(maxWidth: 500),
-                    child: ValueListenableBuilder(
-                      valueListenable: _fileTransferWidgets,
-                      builder: (context, widgets, child) => ListView(
-                        reverse: true,
-                        physics: const BouncingScrollPhysics(),
-                        controller: scrollController,
-                        padding: EdgeInsets.only(bottom: 15),
-                        children: [
-                          AnimatedSwitcher(
-                            duration: 240.ms,
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) {
-                              final offsetAnimation = Tween<Offset>(
-                                begin: const Offset(0, 0.02),
-                                end: Offset.zero,
-                              ).animate(animation);
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: offsetAnimation,
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: widgets.isEmpty
-                                ? Padding(
-                                    key: const ValueKey('empty_state'),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
-                                      horizontal: 20,
-                                    ),
-                                    child: Card(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(20),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          spacing: 10,
-                                          children: [
-                                            Icon(
-                                              Icons.error_outline_rounded,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.inverseSurface,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: (Platform.isAndroid || Platform.isIOS)
+                              ? BoxConstraints()
+                              : BoxConstraints(maxWidth: 500),
+                          child: ValueListenableBuilder(
+                            valueListenable: _fileTransferWidgets,
+                            builder: (context, widgets, child) => ListView(
+                              reverse: true,
+                              physics: const BouncingScrollPhysics(),
+                              controller: scrollController,
+                              padding: EdgeInsets.only(bottom: 15),
+                              children: [
+                                AnimatedSwitcher(
+                                  duration: 240.ms,
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, animation) {
+                                    final offsetAnimation = Tween<Offset>(
+                                      begin: const Offset(0, 0.02),
+                                      end: Offset.zero,
+                                    ).animate(animation);
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: offsetAnimation,
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: widgets.isEmpty
+                                      ? Padding(
+                                          key: const ValueKey('empty_state'),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 20,
+                                            horizontal: 20,
+                                          ),
+                                          child: Card(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(20),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                spacing: 10,
+                                                children: [
+                                                  Icon(
+                                                    Icons.error_outline_rounded,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .inverseSurface,
+                                                  ),
+                                                  Text("No files sent yet."),
+                                                ],
+                                              ),
                                             ),
-                                            Text("No files sent yet."),
-                                          ],
+                                          ),
+                                        )
+                                      : Column(
+                                          key: const ValueKey('file_list'),
+                                          children: widgets,
                                         ),
-                                      ),
-                                    ),
-                                  )
-                                : Column(
-                                    key: const ValueKey('file_list'),
-                                    children: widgets,
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 0),
-                ConstrainedBox(
-                  constraints: (Platform.isAndroid || Platform.isIOS)
-                      ? BoxConstraints()
-                      : BoxConstraints(maxWidth: 500),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child:
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Card.outlined(
-                                child: ValueListenableBuilder(
-                                  valueListenable: isDisconnected,
-                                  builder: (context, value, child) => InkWell(
-                                    borderRadius: BorderRadius.circular(12),
-                                    onTap: value == true
-                                        ? null
-                                        : isSharingInProgress == true
-                                        ? null
-                                        : () async {
-                                            final pickedFile =
-                                                await FastFilePicker.pickFile();
-                                            if (pickedFile == null) {
-                                              return;
-                                            }
-                                            _sendPickedFile(pickedFile);
-                                          },
-                                    child: Padding(
-                                      padding: EdgeInsets.all(17),
-                                      child: IntrinsicHeight(
-                                        child: Row(
-                                          spacing: 10,
-                                          children: [
-                                            Icon(Icons.file_present_rounded),
-                                            Text("Pick File"),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ).animate().fadeIn(
-                          delay: 80.ms,
-                          duration: 220.ms,
-                          curve: Curves.easeOutCubic,
+                          ),
                         ),
+                      ),
+                      const Divider(height: 0),
+                      ConstrainedBox(
+                        constraints: (Platform.isAndroid || Platform.isIOS)
+                            ? BoxConstraints()
+                            : BoxConstraints(maxWidth: 500),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child:
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Card.outlined(
+                                      child: ValueListenableBuilder(
+                                        valueListenable: isDisconnected,
+                                        builder: (context, value, child) => InkWell(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          onTap:
+                                              value == true ||
+                                                  isSharingInProgress
+                                              ? null
+                                              : () async {
+                                                  final pickedFile =
+                                                      await FastFilePicker.pickFile();
+                                                  if (pickedFile == null) {
+                                                    return;
+                                                  }
+                                                  _sendPickedFile(
+                                                    pickedFile,
+                                                  );
+                                                },
+                                          child: Padding(
+                                            padding: EdgeInsets.all(17),
+                                            child: IntrinsicHeight(
+                                              child: Row(
+                                                spacing: 10,
+                                                children: [
+                                                  Icon(
+                                                    Icons.file_present_rounded,
+                                                  ),
+                                                  Text("Pick File"),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ).animate().fadeIn(
+                                delay: 80.ms,
+                                duration: 220.ms,
+                                curve: Curves.easeOutCubic,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                if (MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint)
+                  Container(
+                    width: 1,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.55),
+                  ),
+                if (MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint)
+                  SizedBox(
+                    width: 340,
+                    child: _buildPeerDetailsPanel(),
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPeerDetailsPanel() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final peer = _peerInfo;
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: AnimatedSwitcher(
+          duration: 220.ms,
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: peer == null
+              ? Column(
+                  key: const ValueKey('peer-loading'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  spacing: 14,
+                  children: [
+                    const CircularProgressIndicator(),
+                    Text(
+                      "Identifying connected device...",
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  key: ValueKey(peer['address']),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CircleAvatar(
+                      radius: 34,
+                      backgroundColor: colorScheme.primaryContainer,
+                      foregroundColor: colorScheme.onPrimaryContainer,
+                      child: Icon(
+                        peer['deviceType'] == 'laptop'
+                            ? Icons.laptop_rounded
+                            : Icons.smartphone_rounded,
+                        size: 30,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      peer['name'] as String? ?? "Connected device",
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 7,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 9,
+                          color: colorScheme.primary,
+                        ),
+                        Text(
+                          "Connected",
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: colorScheme.primary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                    _buildPeerDetailRow(
+                      icon: Icons.lan_rounded,
+                      label: "IP address",
+                      value: peer['address'] as String? ?? "Unknown",
+                    ),
+                    const Divider(height: 28),
+                    _buildPeerDetailRow(
+                      icon: Icons.numbers_rounded,
+                      label: "Port",
+                      value: (peer['port'] as int?)?.toString() ?? "Unknown",
+                    ),
+                    const Divider(height: 28),
+                    _buildPeerDetailRow(
+                      icon: Icons.devices_rounded,
+                      label: "Device",
+                      value: peer['deviceType'] == 'laptop'
+                          ? "Desktop or laptop"
+                          : "Phone or tablet",
+                    ),
+                    const Divider(height: 28),
+                    _buildPeerDetailRow(
+                      icon: peer['tls'] == true
+                          ? Icons.lock_rounded
+                          : Icons.lock_open_rounded,
+                      label: "Security",
+                      value: peer['tls'] == true
+                          ? "TLS enabled"
+                          : "Unencrypted",
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPeerDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      spacing: 12,
+      children: [
+        Icon(icon, size: 20, color: colorScheme.onSurfaceVariant),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

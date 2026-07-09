@@ -26,11 +26,15 @@ class SocketService {
   final _connectionStatusController = StreamController<bool>.broadcast();
   final Map<String, IsolateMessage> _transferStartMessages = {};
   final Map<String, IsolateMessage> _transferLatestMessages = {};
+  IsolateMessage? _connectedPeerInfo;
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
   Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
   bool get isRunning => _receiverIsolate != null;
   bool get isHosting => _receiverIsolate != null && _currentMode == 'host';
   bool get hasEstablishedConnection => _hasEstablishedConnection;
+  IsolateMessage? get connectedPeerInfo => _connectedPeerInfo == null
+      ? null
+      : Map<String, dynamic>.from(_connectedPeerInfo!);
 
   bool _hasEstablishedConnection = false;
 
@@ -104,11 +108,13 @@ class SocketService {
     _disconnectRequested = false;
     _transferStartMessages.clear();
     _transferLatestMessages.clear();
+    _connectedPeerInfo = null;
     _setConnectionEstablished(false);
 
     String? certPath;
     String? keyPath;
     final downloadDirectory = await AppSettings.getDownloadDirectory();
+    final deviceName = await AppSettings.getDeviceName();
     if (useTLS) {
       final paths = await _prepareCertFiles();
       certPath = paths['certPath'];
@@ -183,6 +189,9 @@ class SocketService {
       'certPath': certPath,
       'keyPath': keyPath,
       'downloadDirectory': downloadDirectory,
+      'deviceName': deviceName,
+      'deviceType': Platform.isAndroid || Platform.isIOS ? 'phone' : 'laptop',
+      'listeningPort': port,
     });
 
     if (mode == 'host') {
@@ -256,6 +265,9 @@ class SocketService {
 
   void _publishMessage(IsolateMessage message) {
     final status = message['status'] ?? message['command'];
+    if (status == 'peer_info') {
+      _connectedPeerInfo = Map<String, dynamic>.from(message);
+    }
     final fileId = message['fileId'] as String?;
     if (fileId != null) {
       if (status == 'start' || status == 'send_start') {
