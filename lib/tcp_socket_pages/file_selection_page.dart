@@ -100,7 +100,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     });
 
     try {
-      await DeviceDiscoveryService.instance.startDiscovery(localDeviceId: id);
+      final port = await AppSettings.getPort();
+      await DeviceDiscoveryService.instance.startDiscovery(
+        localDeviceId: id,
+        port: port,
+      );
       if (!mounted) return;
       setState(() {
         discoveredDevices = DeviceDiscoveryService.instance.devices;

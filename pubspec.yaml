@@ -7,7 +7,6 @@ environment:
   sdk: ^3.8.1
 
 dependencies:
-  bonsoir: ^7.1.4
   disable_battery_optimization: ^1.1.2
   dynamic_color: ^1.8.1
   external_path: ^2.2.0

@@ -1,7 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-
-import 'package:bonsoir/bonsoir.dart';
 
 class DiscoveredDevice {
   const DiscoveredDevice({
@@ -23,33 +22,49 @@ class DeviceDiscoveryService {
   DeviceDiscoveryService._();
 
   static final DeviceDiscoveryService instance = DeviceDiscoveryService._();
-  static const serviceType = '_flashbyte._tcp';
+  static const _protocol = 'flashbyte-discovery-v1';
+  static const _broadcastInterval = Duration(seconds: 2);
+  static const _peerTimeout = Duration(seconds: 6);
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
-  final Map<String, DiscoveredDevice> _devices = {};
+  final Map<String, _SeenDevice> _devices = {};
 
-  BonsoirBroadcast? _broadcast;
-  BonsoirDiscovery? _discovery;
-  StreamSubscription<BonsoirDiscoveryEvent>? _discoverySubscription;
+  RawDatagramSocket? _socket;
+  StreamSubscription<RawSocketEvent>? _socketSubscription;
+  Timer? _broadcastTimer;
+  Timer? _cleanupTimer;
   String? _localDeviceId;
+  int? _discoveryPort;
+  Map<String, dynamic>? _advertisement;
 
   Stream<List<DiscoveredDevice>> get devicesStream => _devicesController.stream;
-  List<DiscoveredDevice> get devices => List.unmodifiable(_devices.values);
+  List<DiscoveredDevice> get devices =>
+      List.unmodifiable(_devices.values.map((entry) => entry.device));
 
-  Future<void> startDiscovery({required String localDeviceId}) async {
+  Future<void> startDiscovery({
+    required String localDeviceId,
+    required int port,
+  }) async {
     _localDeviceId = localDeviceId;
-    if (_discovery != null) {
+    if (_socket != null && _discoveryPort == port) {
       return;
     }
 
-    final discovery = BonsoirDiscovery(type: serviceType);
-    await discovery.initialize();
-    _discoverySubscription = discovery.eventStream!.listen(
-      (event) => _handleDiscoveryEvent(event, discovery),
+    await stopDiscovery();
+    final socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      port,
+      reuseAddress: true,
     );
-    _discovery = discovery;
-    await discovery.start();
+    socket.broadcastEnabled = true;
+    _socket = socket;
+    _discoveryPort = port;
+    _socketSubscription = socket.listen(_handleSocketEvent);
+    _cleanupTimer = Timer.periodic(
+      _broadcastInterval,
+      (_) => _removeExpiredDevices(),
+    );
   }
 
   Future<void> startAdvertising({
@@ -58,40 +73,41 @@ class DeviceDiscoveryService {
     required int port,
     required bool usesTls,
   }) async {
-    await stopAdvertising();
-
-    final broadcast = BonsoirBroadcast(
-      service: BonsoirService(
-        name: name,
-        type: serviceType,
-        port: port,
-        attributes: {
-          'id': deviceId,
-          'tls': usesTls ? '1' : '0',
-        },
-      ),
+    await startDiscovery(localDeviceId: deviceId, port: port);
+    _advertisement = {
+      'protocol': _protocol,
+      'action': 'hello',
+      'id': deviceId,
+      'name': name,
+      'port': port,
+      'tls': usesTls,
+    };
+    _broadcastTimer?.cancel();
+    _broadcastAdvertisement();
+    _broadcastTimer = Timer.periodic(
+      _broadcastInterval,
+      (_) => _broadcastAdvertisement(),
     );
-    await broadcast.initialize();
-    _broadcast = broadcast;
-    await broadcast.start();
   }
 
   Future<void> stopAdvertising() async {
-    final broadcast = _broadcast;
-    _broadcast = null;
-    if (broadcast != null && !broadcast.isStopped) {
-      await broadcast.stop();
+    _broadcastTimer?.cancel();
+    _broadcastTimer = null;
+    final advertisement = _advertisement;
+    if (advertisement != null) {
+      _sendPacket({...advertisement, 'action': 'goodbye'});
     }
+    _advertisement = null;
   }
 
   Future<void> stopDiscovery() async {
-    final discovery = _discovery;
-    _discovery = null;
-    await _discoverySubscription?.cancel();
-    _discoverySubscription = null;
-    if (discovery != null && !discovery.isStopped) {
-      await discovery.stop();
-    }
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    await _socketSubscription?.cancel();
+    _socketSubscription = null;
+    _socket?.close();
+    _socket = null;
+    _discoveryPort = null;
     _devices.clear();
     _emitDevices();
   }
@@ -101,62 +117,112 @@ class DeviceDiscoveryService {
     await stopDiscovery();
   }
 
-  void _handleDiscoveryEvent(
-    BonsoirDiscoveryEvent event,
-    BonsoirDiscovery discovery,
-  ) {
-    switch (event) {
-      case BonsoirDiscoveryServiceFoundEvent():
-        event.service.resolve(discovery.serviceResolver);
-      case BonsoirDiscoveryServiceResolvedEvent():
-        _upsertService(event.service);
-      case BonsoirDiscoveryServiceUpdatedEvent():
-        _upsertService(event.service);
-      case BonsoirDiscoveryServiceLostEvent():
-        _devices.remove(_serviceKey(event.service));
+  void _handleSocketEvent(RawSocketEvent event) {
+    if (event != RawSocketEvent.read) {
+      return;
+    }
+
+    Datagram? datagram;
+    while ((datagram = _socket?.receive()) != null) {
+      _handleDatagram(datagram!);
+    }
+  }
+
+  void _handleDatagram(Datagram datagram) {
+    if (datagram.address.type != InternetAddressType.IPv4 ||
+        datagram.address.isLoopback) {
+      return;
+    }
+
+    try {
+      final message =
+          jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
+      if (message['protocol'] != _protocol) {
+        return;
+      }
+
+      final id = message['id'] as String?;
+      if (id == null || id == _localDeviceId) {
+        return;
+      }
+      if (message['action'] == 'goodbye') {
+        _devices.remove(id);
         _emitDevices();
-      default:
-        break;
-    }
-  }
+        return;
+      }
 
-  void _upsertService(BonsoirService service) {
-    final deviceId = service.attributes['id'] ?? _serviceKey(service);
-    if (deviceId == _localDeviceId) {
-      return;
-    }
+      final name = message['name'] as String?;
+      final port = message['port'] as int?;
+      final usesTls = message['tls'] as bool?;
+      if (name == null || port == null || usesTls == null) {
+        return;
+      }
 
-    final address = service.hostAddresses
-        .map(InternetAddress.tryParse)
-        .whereType<InternetAddress>()
-        .where(
-          (address) =>
-              address.type == InternetAddressType.IPv4 &&
-              !address.isLoopback,
-        )
-        .firstOrNull;
-    if (address == null) {
-      _devices.remove(_serviceKey(service));
+      _devices[id] = _SeenDevice(
+        device: DiscoveredDevice(
+          id: id,
+          name: name,
+          address: datagram.address.address,
+          port: port,
+          usesTls: usesTls,
+        ),
+        lastSeen: DateTime.now(),
+      );
       _emitDevices();
+    } on FormatException {
+      // Ignore unrelated UDP traffic received on the configured port.
+    } on TypeError {
+      // Ignore malformed discovery packets.
+    }
+  }
+
+  void _broadcastAdvertisement() {
+    final advertisement = _advertisement;
+    if (advertisement != null) {
+      _sendPacket(advertisement);
+    }
+  }
+
+  void _sendPacket(Map<String, dynamic> packet) {
+    final socket = _socket;
+    final port = _discoveryPort;
+    if (socket == null || port == null) {
       return;
     }
 
-    _devices[_serviceKey(service)] = DiscoveredDevice(
-      id: deviceId,
-      name: service.name,
-      address: address.address,
-      port: service.port,
-      usesTls: service.attributes['tls'] == '1',
-    );
-    _emitDevices();
+    try {
+      socket.send(
+        utf8.encode(jsonEncode(packet)),
+        InternetAddress('255.255.255.255'),
+        port,
+      );
+    } on SocketException {
+      // The next heartbeat retries after temporary network failures.
+    }
   }
 
-  String _serviceKey(BonsoirService service) =>
-      service.attributes['id'] ?? '${service.name}:${service.port}';
+  void _removeExpiredDevices() {
+    final cutoff = DateTime.now().subtract(_peerTimeout);
+    final previousLength = _devices.length;
+    _devices.removeWhere((_, entry) => entry.lastSeen.isBefore(cutoff));
+    if (_devices.length != previousLength) {
+      _emitDevices();
+    }
+  }
 
   void _emitDevices() {
-    final sortedDevices = _devices.values.toList()
+    final sortedDevices = _devices.values.map((entry) => entry.device).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     _devicesController.add(List.unmodifiable(sortedDevices));
   }
+}
+
+class _SeenDevice {
+  const _SeenDevice({
+    required this.device,
+    required this.lastSeen,
+  });
+
+  final DiscoveredDevice device;
+  final DateTime lastSeen;
 }
