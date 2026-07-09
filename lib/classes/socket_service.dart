@@ -16,7 +16,6 @@ class SocketService {
 
   Isolate? _receiverIsolate;
   SendPort? _toIsolateSendPort;
-  String? _currentMode;
 
   ReceivePort? _uiReceivePort = ReceivePort();
   StreamSubscription? _streamSubscription;
@@ -30,13 +29,16 @@ class SocketService {
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
   Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
   bool get isRunning => _receiverIsolate != null;
-  bool get isHosting => _receiverIsolate != null && _currentMode == 'host';
+  bool get isHosting => _hostIsListening;
+  bool get isSecureHosting => _hostIsListening && _hostUsesTls;
   bool get hasEstablishedConnection => _hasEstablishedConnection;
   IsolateMessage? get connectedPeerInfo => _connectedPeerInfo == null
       ? null
       : Map<String, dynamic>.from(_connectedPeerInfo!);
 
   bool _hasEstablishedConnection = false;
+  bool _hostIsListening = false;
+  bool _hostUsesTls = false;
 
   Future<void> startHost(
     String host, {
@@ -104,7 +106,7 @@ class SocketService {
     bool useTLS = false,
   }) async {
     stopConnection();
-    _currentMode = mode;
+    _hostUsesTls = mode == 'host' && useTLS;
     _disconnectRequested = false;
     _transferStartMessages.clear();
     _transferLatestMessages.clear();
@@ -141,6 +143,7 @@ class SocketService {
         final typedMessage = message as IsolateMessage;
         final status = typedMessage['status'] ?? typedMessage['command'];
         if (status == 'hosting' && !hostingCompleter.isCompleted) {
+          _hostIsListening = true;
           hostingCompleter.complete();
         } else if (mode == 'host' &&
             status == 'error' &&
@@ -250,7 +253,8 @@ class SocketService {
     _toIsolateSendPort = null;
     _streamSubscription = null;
     _uiReceivePort = null;
-    _currentMode = null;
+    _hostIsListening = false;
+    _hostUsesTls = false;
     _disconnectRequested = false;
   }
 

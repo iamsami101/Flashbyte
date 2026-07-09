@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/device_discovery_service.dart';
@@ -9,6 +10,7 @@ import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -48,8 +50,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   List<DiscoveredDevice> discoveredDevices = const [];
   StreamSubscription? _socketSubscription;
   StreamSubscription<List<DiscoveredDevice>>? _discoverySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _nameSaveDebounce;
+  Timer? _networkRefreshTimer;
   int _serverRestartGeneration = 0;
+  String _networkLabel = "Checking network";
+  IconData _networkIcon = Icons.network_check_rounded;
 
   @override
   void initState() {
@@ -77,9 +83,17 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             isDiscovering = false;
           });
         });
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      _updateNetworkStatus,
+    );
+    _networkRefreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_refreshNetworkStatus()),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initializeNetworking();
+        unawaited(_refreshNetworkStatus());
       }
     });
   }
@@ -94,12 +108,59 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
     _socketSubscription?.cancel();
     _discoverySubscription?.cancel();
+    _connectivitySubscription?.cancel();
     _nameSaveDebounce?.cancel();
+    _networkRefreshTimer?.cancel();
     receiverIpController.dispose();
     _deviceNameController.dispose();
     SocketService.instance.stopConnection();
     unawaited(DeviceDiscoveryService.instance.stop());
     super.dispose();
+  }
+
+  Future<void> _refreshNetworkStatus() async {
+    final results = await Connectivity().checkConnectivity();
+    await _updateNetworkStatus(results);
+  }
+
+  Future<void> _updateNetworkStatus(
+    List<ConnectivityResult> results,
+  ) async {
+    var isHotspot = false;
+    if (Platform.isAndroid) {
+      try {
+        isHotspot =
+            await const MethodChannel(
+              'flashbyte/network_status',
+            ).invokeMethod<bool>('isHotspotEnabled') ??
+            false;
+      } on PlatformException {
+        isHotspot = false;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (isHotspot) {
+        _networkLabel = "Hotspot active";
+        _networkIcon = Icons.wifi_tethering_rounded;
+      } else if (results.contains(ConnectivityResult.wifi)) {
+        _networkLabel = "Connected to Wi-Fi";
+        _networkIcon = Icons.wifi_rounded;
+      } else if (results.contains(ConnectivityResult.mobile)) {
+        _networkLabel = "Using mobile data";
+        _networkIcon = Icons.signal_cellular_alt_rounded;
+      } else if (results.contains(ConnectivityResult.ethernet)) {
+        _networkLabel = "Connected by Ethernet";
+        _networkIcon = Icons.lan_rounded;
+      } else if (results.contains(ConnectivityResult.vpn)) {
+        _networkLabel = "Connected through VPN";
+        _networkIcon = Icons.vpn_lock_rounded;
+      } else {
+        _networkLabel = "No network connection";
+        _networkIcon = Icons.signal_wifi_off_rounded;
+      }
+    });
   }
 
   Future<void> _initializeNetworking() async {
@@ -437,6 +498,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       case 'connected_to_host':
         _openChatIfNeeded(initialFiles: selectedFiles);
         break;
+      case 'hosting':
+        setState(() {});
+        break;
       case 'error':
         final wasConnecting = isConnectingToSender;
         setState(() {
@@ -631,16 +695,20 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           ),
         ),
         _buildDesktopStatusChip(
-          icon: Icons.wifi_rounded,
-          label: "Local network",
+          icon: _networkIcon,
+          label: _networkLabel,
         ),
         const SizedBox(width: 10),
         _buildDesktopStatusChip(
-          icon: receiveStarted
-              ? Icons.radio_button_checked_rounded
-              : Icons.hourglass_top_rounded,
-          label: receiveStarted ? "Ready to receive" : "Starting receiver",
-          emphasized: receiveStarted,
+          icon: SocketService.instance.isHosting
+              ? Icons.dns_rounded
+              : Icons.portable_wifi_off_rounded,
+          label: SocketService.instance.isSecureHosting
+              ? "Secure server running"
+              : SocketService.instance.isHosting
+              ? "Server running"
+              : "Server stopped",
+          emphasized: SocketService.instance.isHosting,
         ),
       ],
     );
