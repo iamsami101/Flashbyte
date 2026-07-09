@@ -25,6 +25,7 @@ class FileSelectionPage extends StatefulWidget {
 class _FileSelectionPageState extends State<FileSelectionPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController receiverIpController = TextEditingController();
+  final TextEditingController _deviceNameController = TextEditingController();
   List<FastFilePickerPath> selectedFiles = [];
   late final TabController _tabController;
 
@@ -42,6 +43,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   List<DiscoveredDevice> discoveredDevices = const [];
   StreamSubscription? _socketSubscription;
   StreamSubscription<List<DiscoveredDevice>>? _discoverySubscription;
+  Timer? _nameSaveDebounce;
+  int _serverRestartGeneration = 0;
 
   @override
   void initState() {
@@ -67,13 +70,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         });
     _initializeDiscovery();
 
-    if (selectedTabIndex == 1) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _ensureReceiveReady();
-        }
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _ensureReceiveReady();
+      }
+    });
   }
 
   @override
@@ -82,7 +83,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _tabController.dispose();
     _socketSubscription?.cancel();
     _discoverySubscription?.cancel();
+    _nameSaveDebounce?.cancel();
     receiverIpController.dispose();
+    _deviceNameController.dispose();
     SocketService.instance.stopConnection();
     unawaited(DeviceDiscoveryService.instance.stop());
     super.dispose();
@@ -96,6 +99,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       setState(() {
         deviceName = name;
         _deviceId = id;
+        _deviceNameController.text = name;
       });
       await DeviceDiscoveryService.instance.startDiscovery(localDeviceId: id);
       if (!mounted) return;
@@ -144,11 +148,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       selectedTabIndex = _tabController.index;
     });
 
-    if (selectedTabIndex == 1) {
-      _ensureReceiveReady();
-    } else {
-      unawaited(DeviceDiscoveryService.instance.stopAdvertising());
-    }
+    _ensureReceiveReady();
   }
 
   Future<void> _ensureReceiveReady() async {
@@ -204,6 +204,81 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         });
       }
     }
+  }
+
+  Future<void> _restartServer() async {
+    final generation = ++_serverRestartGeneration;
+    await DeviceDiscoveryService.instance.stopAdvertising();
+    SocketService.instance.stopConnection();
+    receiveStarted = false;
+
+    if (!mounted || generation != _serverRestartGeneration) {
+      return;
+    }
+    await _ensureReceiveReady();
+  }
+
+  Future<void> _refreshAdvertisement() async {
+    if (!SocketService.instance.isHosting) {
+      return;
+    }
+
+    final name = deviceName ?? await AppSettings.getDeviceName();
+    final id = _deviceId ?? await AppSettings.getDeviceId();
+    final port = await AppSettings.getPort();
+    final useTLS = await AppSettings.getUseTls();
+    await DeviceDiscoveryService.instance.startAdvertising(
+      deviceId: id,
+      name: name,
+      port: port,
+      usesTls: useTLS,
+    );
+  }
+
+  void _scheduleDeviceNameSave(String value) {
+    setState(() {
+      deviceName = value;
+    });
+    _nameSaveDebounce?.cancel();
+    _nameSaveDebounce = Timer(
+      const Duration(milliseconds: 400),
+      _saveDeviceName,
+    );
+  }
+
+  Future<void> _saveDeviceName() async {
+    _nameSaveDebounce?.cancel();
+    final name = _deviceNameController.text.trim();
+    if (name.isEmpty) {
+      final savedName = await AppSettings.getDeviceName();
+      if (!mounted) return;
+      setState(() {
+        deviceName = savedName;
+        _deviceNameController.text = savedName;
+      });
+      return;
+    }
+
+    await AppSettings.setDeviceName(name);
+    if (!mounted) return;
+    setState(() {
+      deviceName = name;
+      if (_deviceNameController.text != name) {
+        _deviceNameController.text = name;
+      }
+    });
+    await _refreshAdvertisement();
+  }
+
+  Future<void> _generateDeviceName() async {
+    _nameSaveDebounce?.cancel();
+    final name = await AppSettings.generateDeviceName();
+    if (!mounted) return;
+    setState(() {
+      deviceName = name;
+      _deviceNameController.text = name;
+    });
+    await _refreshAdvertisement();
   }
 
   Future<void> _loadReceiveIpAddress() async {
@@ -277,9 +352,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     try {
       await DeviceDiscoveryService.instance.stopAdvertising();
+      receiveStarted = false;
       final useTLS = advertisedTls ?? await AppSettings.getUseTls();
       final port = advertisedPort ?? await AppSettings.getPort();
-      SocketService.instance.connectToHost(ip, port: port, useTLS: useTLS);
+      await SocketService.instance.connectToHost(
+        ip,
+        port: port,
+        useTLS: useTLS,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -308,10 +388,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     switch (status) {
       case 'client_connected':
-        if (selectedTabIndex == 1) {
-          unawaited(DeviceDiscoveryService.instance.stopAdvertising());
-          _openChatIfNeeded(initialFiles: const []);
-        }
+        unawaited(DeviceDiscoveryService.instance.stopAdvertising());
+        _openChatIfNeeded(initialFiles: const []);
         break;
       case 'connected_to_host':
         if (selectedTabIndex == 0) {
@@ -327,6 +405,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         }
         if (selectedTabIndex == 0) {
           SocketService.instance.stopConnection();
+          unawaited(_restartServer());
         }
         _showErrorDialog(
           title: 'Connection Error',
@@ -360,9 +439,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           receiveStarted = false;
         }
       });
-      if (selectedTabIndex == 1) {
-        await _ensureReceiveReady();
-      }
+      await _ensureReceiveReady();
     });
   }
 
@@ -408,9 +485,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               if (index == 1) {
                 _ensureReceiveReady();
               } else {
-                unawaited(
-                  DeviceDiscoveryService.instance.stopAdvertising(),
-                );
+                _ensureReceiveReady();
               }
             },
             tabs: const [
@@ -757,14 +832,37 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       ),
                     ),
                   ),
-                  Text(
-                    deviceName ?? "Creating your name...",
+                  TextField(
+                    controller: _deviceNameController,
+                    enabled: deviceName != null && !_settingsLocked,
+                    onChanged: _scheduleDeviceNameSave,
+                    onSubmitted: (_) => _saveDeviceName(),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colorScheme.onPrimaryContainer,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: "Creating your name...",
+                      hintStyle: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(
+                            color: colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: "Generate a new name",
+              onPressed: _settingsLocked ? null : _generateDeviceName,
+              icon: const Icon(Icons.refresh_rounded),
+              color: colorScheme.onPrimaryContainer,
             ),
           ],
         ),
@@ -804,25 +902,19 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Future<void> _openSettings() async {
-    final shouldRestartReceive = selectedTabIndex == 1;
-    if (shouldRestartReceive) {
-      SocketService.instance.stopConnection();
-      await DeviceDiscoveryService.instance.stopAdvertising();
-      receiveStarted = false;
-      receiveIpAddress = null;
-    }
     if (!mounted) return;
 
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SettingsPage(locked: _settingsLocked),
+        builder: (context) => SettingsPage(
+          locked: _settingsLocked,
+          onServerSettingsChanged: _restartServer,
+        ),
       ),
     );
     if (!mounted) return;
-    if (shouldRestartReceive) {
-      await _ensureReceiveReady();
-    }
+    await _ensureReceiveReady();
   }
 
   Widget _buildSelectedFilesCard() {

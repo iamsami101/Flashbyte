@@ -56,11 +56,25 @@ class AppSettings {
       return savedName;
     }
 
+    return generateDeviceName();
+  }
+
+  static Future<String> generateDeviceName() async {
     final words = RandomWords();
     final name =
         '${_capitalize(words.firstWord)} ${_capitalize(words.secondWord)}';
-    await prefs.setString(deviceNameKey, name);
+    await setDeviceName(name);
     return name;
+  }
+
+  static Future<void> setDeviceName(String name) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(deviceNameKey, normalizedName);
   }
 
   static Future<String> getDeviceId() async {

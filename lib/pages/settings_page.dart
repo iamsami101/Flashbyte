@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
 import 'package:flashbyte/classes/android_saf_service.dart';
@@ -9,8 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
   final bool locked;
+  final Future<void> Function()? onServerSettingsChanged;
 
-  const SettingsPage({super.key, this.locked = false});
+  const SettingsPage({
+    super.key,
+    this.locked = false,
+    this.onServerSettingsChanged,
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -25,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _portController;
   late final TextEditingController _downloadDirectoryController;
   late final FocusNode _portFocusNode;
+  Timer? _portSaveDebounce;
 
   @override
   void initState() {
@@ -38,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _portSaveDebounce?.cancel();
     _portFocusNode
       ..removeListener(_handlePortFocusChange)
       ..dispose();
@@ -66,6 +75,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
 
     // Show info dialog only when disabling TLS
     if (_useTLS && !value) {
@@ -124,6 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _useTLS = value;
     });
+    await widget.onServerSettingsChanged?.call();
   }
 
   void _handlePortFocusChange() {
@@ -133,6 +144,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _savePort() async {
+    _portSaveDebounce?.cancel();
     if (widget.locked) {
       return;
     }
@@ -156,8 +168,23 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
+    final previousPort = await AppSettings.getPort();
     await AppSettings.setPort(port);
     _portController.text = port.toString();
+    if (port != previousPort) {
+      await widget.onServerSettingsChanged?.call();
+    }
+  }
+
+  void _schedulePortSave(String value) {
+    _portSaveDebounce?.cancel();
+    if (value.isEmpty) {
+      return;
+    }
+    _portSaveDebounce = Timer(
+      const Duration(milliseconds: 500),
+      _savePort,
+    );
   }
 
   Future<void> _pickDownloadDirectory() async {
@@ -340,6 +367,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                       ],
+                      onChanged: _schedulePortSave,
                       onSubmitted: (_) => _savePort(),
                       decoration: const InputDecoration(
                         isDense: true,
