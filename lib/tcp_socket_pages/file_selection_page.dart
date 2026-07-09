@@ -24,6 +24,9 @@ class FileSelectionPage extends StatefulWidget {
 
 class _FileSelectionPageState extends State<FileSelectionPage>
     with SingleTickerProviderStateMixin {
+  static const double _wideLayoutBreakpoint = 1000;
+  static const double _wideLayoutMaxWidth = 1200;
+
   final TextEditingController receiverIpController = TextEditingController();
   final TextEditingController _deviceNameController = TextEditingController();
   List<FastFilePickerPath> selectedFiles = [];
@@ -397,18 +400,17 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         _openChatIfNeeded(initialFiles: const []);
         break;
       case 'connected_to_host':
-        if (selectedTabIndex == 0) {
-          _openChatIfNeeded(initialFiles: selectedFiles);
-        }
+        _openChatIfNeeded(initialFiles: selectedFiles);
         break;
       case 'error':
+        final wasConnecting = isConnectingToSender;
         setState(() {
           isConnectingToSender = false;
         });
         if (chatOpened) {
           return;
         }
-        if (selectedTabIndex == 0) {
+        if (wasConnecting || selectedTabIndex == 0) {
           SocketService.instance.stopConnection();
           unawaited(_restartServer());
         }
@@ -450,6 +452,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   @override
   Widget build(BuildContext context) {
+    final useWideLayout =
+        MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Flashbyte"),
@@ -462,45 +467,81 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         ],
       ),
       body: SafeArea(
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildTabPage(_buildSendTab()),
-            _buildTabPage(_buildReceiveTab()),
-          ],
-        ),
+        child: useWideLayout
+            ? _buildWideLayout()
+            : TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildTabPage(_buildSendTab()),
+                  _buildTabPage(_buildReceiveTab()),
+                ],
+              ),
       ),
-      bottomNavigationBar: Material(
-        color: Theme.of(context).colorScheme.surface,
-        child: SafeArea(
-          top: false,
-          child: TabBar(
-            indicatorSize: TabBarIndicatorSize.label,
-            dividerHeight: 0,
-            indicatorAnimation: TabIndicatorAnimation.elastic,
-            labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-            // indicator: BoxDecoration(),
-            controller: _tabController,
-            onTap: (index) {
-              if (selectedTabIndex != index) {
-                setState(() {
-                  selectedTabIndex = index;
-                });
-              }
-            },
-            tabs: const [
-              Tab(
-                iconMargin: EdgeInsets.symmetric(horizontal: 20, vertical: 3),
-                icon: Icon(Icons.upload_rounded),
-                text: "Send",
+      bottomNavigationBar: useWideLayout
+          ? null
+          : Material(
+              color: Theme.of(context).colorScheme.surface,
+              child: SafeArea(
+                top: false,
+                child: TabBar(
+                  indicatorSize: TabBarIndicatorSize.label,
+                  dividerHeight: 0,
+                  indicatorAnimation: TabIndicatorAnimation.elastic,
+                  labelColor: Theme.of(
+                    context,
+                  ).colorScheme.onPrimaryContainer,
+                  controller: _tabController,
+                  onTap: (index) {
+                    if (selectedTabIndex != index) {
+                      setState(() {
+                        selectedTabIndex = index;
+                      });
+                    }
+                  },
+                  tabs: const [
+                    Tab(
+                      iconMargin: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 3,
+                      ),
+                      icon: Icon(Icons.upload_rounded),
+                      text: "Send",
+                    ),
+                    Tab(
+                      iconMargin: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 3,
+                      ),
+                      icon: Icon(Icons.download_rounded),
+                      text: "Receive",
+                    ),
+                  ],
+                ),
               ),
-              Tab(
-                iconMargin: EdgeInsets.symmetric(horizontal: 20, vertical: 3),
-                icon: Icon(Icons.download_rounded),
-                text: "Receive",
-              ),
-            ],
-          ),
+            ),
+    );
+  }
+
+  Widget _buildWideLayout() {
+    final dividerColor = Theme.of(
+      context,
+    ).colorScheme.outlineVariant.withValues(alpha: 0.55);
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _wideLayoutMaxWidth),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildTabPage(_buildSendTab())),
+            Container(
+              width: 1,
+              height: MediaQuery.sizeOf(context).height * 0.76,
+              margin: const EdgeInsets.symmetric(vertical: 24),
+              color: dividerColor,
+            ),
+            Expanded(child: _buildTabPage(_buildReceiveTab())),
+          ],
         ),
       ),
     );
