@@ -5,6 +5,7 @@ import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/classes/android_connection_notification_service.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
@@ -171,7 +172,28 @@ class _StartPageState extends State<StartPage> {
 
     return Scaffold(
       body: SafeArea(
-        child: useDesktopLayout ? _buildDesktopHome() : _buildMobileHome(),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: useDesktopLayout
+                  ? _buildDesktopHome()
+                  : _buildMobileHome(),
+            ),
+            Positioned(
+              top: 12,
+              right: 16,
+              child: IconButton.filledTonal(
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                tooltip: "Settings",
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings_rounded),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -505,6 +527,13 @@ class _StartPageState extends State<StartPage> {
         builder: (context) =>
             FileSelectionPage(initialTabIndex: initialTabIndex),
       ),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsPage()),
     );
   }
 }
