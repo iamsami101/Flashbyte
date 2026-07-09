@@ -172,28 +172,7 @@ class _StartPageState extends State<StartPage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: useDesktopLayout
-                  ? _buildDesktopHome()
-                  : _buildMobileHome(),
-            ),
-            Positioned(
-              top: 12,
-              right: 16,
-              child: IconButton.filledTonal(
-                constraints: const BoxConstraints.tightFor(
-                  width: 48,
-                  height: 48,
-                ),
-                tooltip: "Settings",
-                onPressed: _openSettings,
-                icon: const Icon(Icons.settings_rounded),
-              ),
-            ),
-          ],
-        ),
+        child: useDesktopLayout ? _buildDesktopHome() : _buildMobileHome(),
       ),
     );
   }
@@ -334,6 +313,32 @@ class _StartPageState extends State<StartPage> {
                           duration: 360.ms,
                           curve: Curves.easeOutCubic,
                         ),
+                    SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            style: const ButtonStyle(
+                              padding: WidgetStatePropertyAll(
+                                EdgeInsets.symmetric(vertical: 20),
+                              ),
+                            ),
+                            onPressed: _openSettings,
+                            icon: const Icon(Icons.settings_rounded),
+                            label: const Text("Settings"),
+                          ),
+                        )
+                        .animate()
+                        .fadeIn(
+                          delay: 300.ms,
+                          duration: 340.ms,
+                          curve: Curves.easeOutCubic,
+                        )
+                        .slideY(
+                          begin: 0.05,
+                          end: 0,
+                          delay: 300.ms,
+                          duration: 340.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
                   ],
                 ),
               ],
@@ -361,77 +366,98 @@ class _StartPageState extends State<StartPage> {
               children: [
                 Expanded(
                   flex: 6,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                            "Flashbyte",
-                            style: Theme.of(context).textTheme.displayMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          )
-                          .animate()
-                          .fadeIn(duration: 360.ms)
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "Share files with devices on your local network.",
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              height: 1.4,
+                  child: SizedBox(
+                    height: 440,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                              "Flashbyte",
+                              style: Theme.of(context).textTheme.displayMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            )
+                            .animate()
+                            .fadeIn(duration: 360.ms)
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
                             ),
-                      ).animate().fadeIn(delay: 70.ms, duration: 340.ms),
-                      const SizedBox(height: 42),
-                      Text(
-                        "Start a transfer",
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
+                        const SizedBox(height: 10),
+                        Text(
+                          "Share files with devices on your local network.",
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                        ).animate().fadeIn(delay: 70.ms, duration: 340.ms),
+                        const Spacer(),
+                        Text(
+                          "Start a transfer",
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                              children: [
+                                Expanded(
+                                  child: _HomeActionCard(
+                                    icon: Icons.north_east_rounded,
+                                    title: "Send files",
+                                    subtitle: "Choose files",
+                                    backgroundColor:
+                                        colorScheme.surfaceContainerHighest,
+                                    foregroundColor: colorScheme.onSurface,
+                                    onTap: () => _openSharing(0),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _HomeActionCard(
+                                    icon: Icons.south_west_rounded,
+                                    title: "Receive files",
+                                    subtitle: "Wait for a sender",
+                                    backgroundColor: colorScheme.primary,
+                                    foregroundColor: colorScheme.onPrimary,
+                                    onTap: () => _openSharing(1),
+                                  ),
+                                ),
+                              ],
+                            )
+                            .animate()
+                            .fadeIn(delay: 140.ms, duration: 360.ms)
+                            .slideY(
+                              begin: 0.04,
+                              end: 0,
+                              delay: 140.ms,
+                              duration: 360.ms,
+                              curve: Curves.easeOutCubic,
                             ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                            children: [
-                              Expanded(
-                                child: _HomeActionCard(
-                                  icon: Icons.north_east_rounded,
-                                  title: "Send files",
-                                  subtitle: "Choose files",
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                  foregroundColor: colorScheme.onSurface,
-                                  onTap: () => _openSharing(0),
-                                ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: FilledButton.tonalIcon(
+                                onPressed: _openSettings,
+                                icon: const Icon(Icons.settings_rounded),
+                                label: const Text("Settings"),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _HomeActionCard(
-                                  icon: Icons.south_west_rounded,
-                                  title: "Receive files",
-                                  subtitle: "Wait for a sender",
-                                  backgroundColor: colorScheme.primary,
-                                  foregroundColor: colorScheme.onPrimary,
-                                  onTap: () => _openSharing(1),
-                                ),
-                              ),
-                            ],
-                          )
-                          .animate()
-                          .fadeIn(delay: 140.ms, duration: 360.ms)
-                          .slideY(
-                            begin: 0.04,
-                            end: 0,
-                            delay: 140.ms,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
-                    ],
+                            )
+                            .animate()
+                            .fadeIn(delay: 200.ms, duration: 340.ms)
+                            .slideY(
+                              begin: 0.04,
+                              end: 0,
+                              delay: 200.ms,
+                              duration: 340.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(
