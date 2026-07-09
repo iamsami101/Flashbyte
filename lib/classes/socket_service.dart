@@ -20,6 +20,7 @@ class SocketService {
   ReceivePort? _uiReceivePort = ReceivePort();
   StreamSubscription? _streamSubscription;
   bool _disconnectRequested = false;
+  int _connectionGeneration = 0;
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   final _connectionStatusController = StreamController<bool>.broadcast();
@@ -106,6 +107,7 @@ class SocketService {
     bool useTLS = false,
   }) async {
     stopConnection();
+    final generation = _connectionGeneration;
     _hostUsesTls = mode == 'host' && useTLS;
     _disconnectRequested = false;
     _transferStartMessages.clear();
@@ -126,17 +128,23 @@ class SocketService {
     final completer = Completer<SendPort>();
     final hostingCompleter = Completer<void>();
 
-    _uiReceivePort = ReceivePort();
+    final uiReceivePort = ReceivePort();
+    _uiReceivePort = uiReceivePort;
     final RootIsolateToken? rootToken = RootIsolateToken.instance;
 
     if (rootToken == null) {
       throw Exception('Fatal: RootIsolateToken is null!');
     }
 
-    _streamSubscription = _uiReceivePort!.listen(
+    _streamSubscription = uiReceivePort.listen(
       (message) async {
         if (message is SendPort) {
-          completer.complete(message);
+          if (!completer.isCompleted) {
+            completer.complete(message);
+          }
+          return;
+        }
+        if (generation != _connectionGeneration) {
           return;
         }
 
@@ -168,20 +176,28 @@ class SocketService {
 
         _publishMessage(typedMessage);
         if (status == 'disconnect') {
-          Future.microtask(stopConnection);
+          Future.microtask(() => _stopConnectionIfCurrent(generation));
         }
       },
     );
 
-    _receiverIsolate = await Isolate.spawn(
+    final receiverIsolate = await Isolate.spawn(
       fileReceiverIsolate,
       [
-        _uiReceivePort!.sendPort,
+        uiReceivePort.sendPort,
         rootToken,
       ],
     );
+    if (generation != _connectionGeneration) {
+      receiverIsolate.kill(priority: Isolate.immediate);
+      throw StateError('Socket startup was cancelled.');
+    }
+    _receiverIsolate = receiverIsolate;
 
     _toIsolateSendPort = await completer.future;
+    if (generation != _connectionGeneration) {
+      throw StateError('Socket startup was cancelled.');
+    }
 
     _toIsolateSendPort!.send({
       'command': 'connect',
@@ -244,6 +260,7 @@ class SocketService {
   }
 
   void stopConnection() {
+    _connectionGeneration++;
     _setConnectionEstablished(false);
     _streamSubscription?.cancel();
     _uiReceivePort?.close();
@@ -256,6 +273,12 @@ class SocketService {
     _hostIsListening = false;
     _hostUsesTls = false;
     _disconnectRequested = false;
+  }
+
+  void _stopConnectionIfCurrent(int generation) {
+    if (generation == _connectionGeneration) {
+      stopConnection();
+    }
   }
 
   void _setConnectionEstablished(bool value) {

@@ -161,6 +161,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         _networkIcon = Icons.signal_wifi_off_rounded;
       }
     });
+    if (SocketService.instance.isHosting) {
+      unawaited(_loadReceiveIpAddress());
+    }
   }
 
   Future<void> _initializeNetworking() async {
@@ -289,7 +292,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final generation = ++_serverRestartGeneration;
     await DeviceDiscoveryService.instance.stopAdvertising();
     SocketService.instance.stopConnection();
-    receiveStarted = false;
+    if (mounted) {
+      setState(() {
+        receiveStarted = false;
+        receiveIpAddress = null;
+      });
+    }
 
     if (!mounted || generation != _serverRestartGeneration) {
       return;
@@ -365,7 +373,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     for (final interface in await NetworkInterface.list()) {
       for (final address in interface.addresses) {
-        if (address.type == InternetAddressType.IPv4) {
+        if (address.type == InternetAddressType.IPv4 &&
+            !address.isLoopback &&
+            !address.address.startsWith('169.254.')) {
           foundIp = address.address;
           if (foundIp.startsWith('192.168.')) {
             break;
@@ -541,11 +551,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       setState(() {
         chatOpened = false;
         isConnectingToSender = false;
-        if (selectedTabIndex == 1) {
-          receiveStarted = false;
-        }
       });
-      await _ensureReceiveReady();
+      await _restartServer();
     });
   }
 
