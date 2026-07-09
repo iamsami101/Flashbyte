@@ -1045,79 +1045,86 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Stack(
+        child: Column(
+          spacing: 14,
           children: [
-            Column(
-              spacing: 14,
+            Row(
               children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: selectedFiles.isEmpty ? 0 : 32,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Text(
-                      _selectionSummary,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                Expanded(
+                  child: Text(
+                    _selectionSummary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                Material(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: isPickingFile || isConnectingToSender
+                if (selectedFiles.isNotEmpty)
+                  IconButton(
+                    tooltip: "Clear selected files",
+                    onPressed: isConnectingToSender
                         ? null
-                        : _pickFiles,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 52),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          spacing: 10,
-                          children: [
-                            Icon(
-                              selectedFiles.isEmpty
-                                  ? Icons.attach_file_rounded
-                                  : Icons.swap_horiz_rounded,
-                            ),
-                            Text(
-                              isPickingFile
-                                  ? "Opening picker..."
-                                  : selectedFiles.isEmpty
-                                  ? "Pick files"
-                                  : "Change files",
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                        : () {
+                            setState(() {
+                              selectedFiles = [];
+                            });
+                          },
+                    icon: const Icon(Icons.close_rounded),
                   ),
-                ),
               ],
             ),
             if (selectedFiles.isNotEmpty)
-              Positioned(
-                top: -8,
-                right: -8,
-                child: IconButton(
-                  tooltip: "Clear selected files",
-                  onPressed: isConnectingToSender
-                      ? null
-                      : () {
-                          setState(() {
-                            selectedFiles = [];
-                          });
-                        },
-                  icon: const Icon(Icons.close_rounded),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 160),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: selectedFiles.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      selectedFiles[index].name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: isPickingFile || isConnectingToSender
+                    ? null
+                    : _pickFiles,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 10,
+                      children: [
+                        Icon(
+                          selectedFiles.isEmpty
+                              ? Icons.attach_file_rounded
+                              : Icons.swap_horiz_rounded,
+                        ),
+                        Text(
+                          isPickingFile
+                              ? "Opening picker..."
+                              : selectedFiles.isEmpty
+                              ? "Pick files"
+                              : "Change files",
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1130,7 +1137,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       return "No files selected";
     }
     if (count == 1) {
-      return selectedFiles.first.name;
+      return "1 file selected";
     }
     return "$count files selected";
   }
