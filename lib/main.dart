@@ -327,24 +327,15 @@ class _StartPageState extends State<StartPage> {
     final primaryColor = colorScheme.primary;
     final brightness = Theme.of(context).brightness;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.surface,
-            colorScheme.surfaceContainerLow.withValues(alpha: 0.72),
-          ],
-        ),
-      ),
+    return ColoredBox(
+      color: colorScheme.surface,
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1280),
+          constraints: const BoxConstraints(maxWidth: 1120),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
             child: Row(
-              spacing: 64,
+              spacing: 48,
               children: [
                 Expanded(
                   flex: 6,
@@ -352,157 +343,114 @@ class _StartPageState extends State<StartPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              child: Text(
-                                "LOCAL  •  DIRECT  •  YOURS",
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(
-                                      color: colorScheme.onPrimaryContainer,
-                                      letterSpacing: 1.2,
-                                    ),
-                              ),
-                            ),
-                          )
-                          .animate()
-                          .fadeIn(duration: 320.ms)
-                          .slideY(
-                            begin: 0.08,
-                            end: 0,
-                            duration: 320.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
-                      const SizedBox(height: 26),
                       Text(
-                            "Move files.\nSkip the cloud.",
-                            style: Theme.of(context).textTheme.displayLarge
-                                ?.copyWith(
-                                  fontSize: 64,
-                                  height: 0.98,
-                                  letterSpacing: -2.6,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            "Flashbyte",
+                            style: Theme.of(context).textTheme.displayMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           )
                           .animate()
-                          .fadeIn(delay: 80.ms, duration: 400.ms)
+                          .fadeIn(duration: 360.ms)
                           .slideY(
                             begin: 0.05,
                             end: 0,
-                            delay: 80.ms,
-                            duration: 400.ms,
+                            duration: 360.ms,
                             curve: Curves.easeOutCubic,
                           ),
-                      const SizedBox(height: 22),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child:
-                            Text(
-                                  "Private, fast file sharing for devices on the same network. No accounts, uploads, or detours.",
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        height: 1.5,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                )
-                                .animate()
-                                .fadeIn(delay: 150.ms, duration: 380.ms)
-                                .slideY(
-                                  begin: 0.05,
-                                  end: 0,
-                                  delay: 150.ms,
-                                  duration: 380.ms,
-                                  curve: Curves.easeOutCubic,
+                      const SizedBox(height: 10),
+                      Text(
+                        "Share files with devices on your local network.",
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                      ).animate().fadeIn(delay: 70.ms, duration: 340.ms),
+                      const SizedBox(height: 42),
+                      Text(
+                        "Start a transfer",
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                            children: [
+                              Expanded(
+                                child: _HomeActionCard(
+                                  icon: Icons.north_east_rounded,
+                                  title: "Send files",
+                                  subtitle: "Choose files",
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
+                                  foregroundColor: colorScheme.onSurface,
+                                  onTap: () => _openSharing(0),
                                 ),
-                      ),
-                      const SizedBox(height: 32),
-                      Row(
-                        spacing: 20,
-                        children: [
-                          _buildFeature(
-                            Icons.shield_outlined,
-                            "Private by design",
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _HomeActionCard(
+                                  icon: Icons.south_west_rounded,
+                                  title: "Receive files",
+                                  subtitle: "Wait for a sender",
+                                  backgroundColor: colorScheme.primary,
+                                  foregroundColor: colorScheme.onPrimary,
+                                  onTap: () => _openSharing(1),
+                                ),
+                              ),
+                            ],
+                          )
+                          .animate()
+                          .fadeIn(delay: 140.ms, duration: 360.ms)
+                          .slideY(
+                            begin: 0.04,
+                            end: 0,
+                            delay: 140.ms,
+                            duration: 360.ms,
+                            curve: Curves.easeOutCubic,
                           ),
-                          _buildFeature(Icons.bolt_rounded, "Network speed"),
-                          _buildFeature(
-                            Icons.devices_rounded,
-                            "Cross-platform",
-                          ),
-                        ],
-                      ).animate().fadeIn(
-                        delay: 220.ms,
-                        duration: 360.ms,
-                      ),
-                      const SizedBox(height: 44),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _HomeActionCard(
-                              icon: Icons.north_east_rounded,
-                              title: "Send files",
-                              subtitle: "Choose files and find a nearby device",
-                              backgroundColor:
-                                  colorScheme.surfaceContainerHighest,
-                              foregroundColor: colorScheme.onSurface,
-                              onTap: () => _openSharing(0),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _HomeActionCard(
-                              icon: Icons.south_west_rounded,
-                              title: "Receive files",
-                              subtitle: "Make this device visible and ready",
-                              backgroundColor: colorScheme.primary,
-                              foregroundColor: colorScheme.onPrimary,
-                              onTap: () => _openSharing(1),
-                            ),
-                          ),
-                        ],
-                      ).animate().fadeIn(
-                        delay: 280.ms,
-                        duration: 380.ms,
-                        curve: Curves.easeOutCubic,
-                      ),
                     ],
                   ),
                 ),
                 Expanded(
-                  flex: 5,
+                  flex: 4,
                   child:
                       Container(
-                            constraints: const BoxConstraints(
-                              minHeight: 520,
-                              maxHeight: 620,
-                            ),
+                            height: 440,
                             decoration: BoxDecoration(
                               color: colorScheme.surfaceContainer,
-                              borderRadius: BorderRadius.circular(32),
+                              borderRadius: BorderRadius.circular(28),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
+                                  color: Colors.black.withValues(alpha: 0.06),
                                   blurRadius: 1,
                                   spreadRadius: 1,
                                 ),
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 22,
-                                  offset: const Offset(0, 12),
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
                                 ),
                               ],
                             ),
                             child: Stack(
                               children: [
                                 Positioned(
-                                  top: 30,
-                                  left: 30,
+                                  top: 24,
+                                  left: 26,
+                                  child: Text(
+                                    "Local network",
+                                    style:
+                                        Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 76,
+                                  left: 28,
                                   child: _NetworkNode(
                                     icon: Icons.laptop_rounded,
                                     color: colorScheme.tertiaryContainer,
@@ -510,8 +458,8 @@ class _StartPageState extends State<StartPage> {
                                   ),
                                 ),
                                 Positioned(
-                                  right: 34,
-                                  bottom: 94,
+                                  right: 28,
+                                  bottom: 44,
                                   child: _NetworkNode(
                                     icon: Icons.smartphone_rounded,
                                     color: colorScheme.secondaryContainer,
@@ -525,35 +473,8 @@ class _StartPageState extends State<StartPage> {
                                       key: ValueKey(
                                         'desktop-${primaryColor.value}-${brightness.name}',
                                       ),
-                                      size: 270,
+                                      size: 220,
                                     ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 28,
-                                  right: 28,
-                                  bottom: 26,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.wifi_tethering_rounded,
-                                        size: 20,
-                                        color: colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          "Drag and flick the shape. Your files stay closer.",
-                                          style:
-                                              Theme.of(
-                                                context,
-                                              ).textTheme.bodyMedium?.copyWith(
-                                                color: colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ],
@@ -574,17 +495,6 @@ class _StartPageState extends State<StartPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildFeature(IconData icon, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: 7,
-      children: [
-        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-        Text(label, style: Theme.of(context).textTheme.labelLarge),
-      ],
     );
   }
 
@@ -641,8 +551,8 @@ class _HomeActionCardState extends State<_HomeActionCard> {
             });
           },
           onTap: widget.onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 148),
+          child: SizedBox(
+            height: 148,
             child: Padding(
               padding: const EdgeInsets.all(22),
               child: Column(
