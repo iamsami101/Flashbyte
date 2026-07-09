@@ -23,12 +23,14 @@ class FileSelectionPage extends StatefulWidget {
 }
 
 class _FileSelectionPageState extends State<FileSelectionPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const double _wideLayoutBreakpoint = 1000;
   static const double _wideLayoutMaxWidth = 1200;
 
   final TextEditingController receiverIpController = TextEditingController();
   final TextEditingController _deviceNameController = TextEditingController();
+  late final AnimationController _connectShakeController;
+  final Map<String, AnimationController> _deviceShakeControllers = {};
   List<FastFilePickerPath> selectedFiles = [];
   late final TabController _tabController;
 
@@ -58,6 +60,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
+    _connectShakeController = AnimationController(
+      vsync: this,
+      duration: 420.ms,
+    );
     _tabController.addListener(_handleTabChanged);
 
     _socketSubscription = SocketService.instance.messageStream.listen(
@@ -82,6 +88,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   void dispose() {
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
+    _connectShakeController.dispose();
+    for (final controller in _deviceShakeControllers.values) {
+      controller.dispose();
+    }
     _socketSubscription?.cancel();
     _discoverySubscription?.cancel();
     _nameSaveDebounce?.cancel();
@@ -389,6 +399,31 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
+  void _handleManualConnect() {
+    if (selectedFiles.isEmpty) {
+      _showFileRequiredFeedback(_connectShakeController);
+      return;
+    }
+    _submitReceiverAddress(receiverIpController.text);
+  }
+
+  void _handleDiscoveredDeviceTap(DiscoveredDevice device) {
+    if (selectedFiles.isEmpty) {
+      final controller = _deviceShakeControllers.putIfAbsent(
+        device.id,
+        () => AnimationController(vsync: this, duration: 420.ms),
+      );
+      _showFileRequiredFeedback(controller);
+      return;
+    }
+    _connectToDiscoveredDevice(device);
+  }
+
+  void _showFileRequiredFeedback(AnimationController controller) {
+    controller.forward(from: 0);
+    showScaffoldSnackbar("Select at least one file first");
+  }
+
   void _handleSocketMessage(Map<String, dynamic> message) {
     if (!mounted) return;
 
@@ -637,18 +672,27 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             ),
           ),
           SizedBox(
-            height: 50,
-            child: FilledButton.icon(
-              onPressed:
-                  selectedFiles.isEmpty || isPickingFile || isConnectingToSender
-                  ? null
-                  : () => _submitReceiverAddress(receiverIpController.text),
-              icon: const Icon(Icons.link_rounded),
-              label: Text(
-                isConnectingToSender ? "Connecting..." : "Connect",
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: isPickingFile || isConnectingToSender
+                      ? null
+                      : _handleManualConnect,
+                  icon: const Icon(Icons.link_rounded),
+                  label: Text(
+                    isConnectingToSender ? "Connecting..." : "Connect",
+                  ),
+                ),
+              )
+              .animate(
+                controller: _connectShakeController,
+                autoPlay: false,
+              )
+              .shake(
+                duration: 420.ms,
+                hz: 4,
+                offset: const Offset(8, 0),
+                rotation: 0,
               ),
-            ),
-          ),
           if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
         ],
       ),
@@ -768,7 +812,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       child: Text(
                         isDiscovering
                             ? "Looking for receivers on this network..."
-                            : "No receivers found yet. You can still use an IP or QR code.",
+                            : "No ones around to send to.",
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -803,66 +847,82 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildDeviceTile(DiscoveredDevice device) {
     final colorScheme = Theme.of(context).colorScheme;
-    final canConnect =
-        selectedFiles.isNotEmpty && !isPickingFile && !isConnectingToSender;
+    final canTap = !isPickingFile && !isConnectingToSender;
+    final shakeController = _deviceShakeControllers.putIfAbsent(
+      device.id,
+      () => AnimationController(vsync: this, duration: 420.ms),
+    );
 
     return Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: canConnect ? () => _connectToDiscoveredDevice(device) : null,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-            child: Row(
-              spacing: 12,
-              children: [
-                CircleAvatar(
-                  backgroundColor: colorScheme.primaryContainer,
-                  foregroundColor: colorScheme.onPrimaryContainer,
-                  child: Icon(
-                    device.type == DiscoveredDeviceType.laptop
-                        ? Icons.laptop_rounded
-                        : Icons.smartphone_rounded,
-                    size: 20,
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 2,
-                    children: [
-                      Text(
-                        device.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: canTap ? () => _handleDiscoveredDeviceTap(device) : null,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 64),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+                child: Row(
+                  spacing: 12,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: colorScheme.primaryContainer,
+                      foregroundColor: colorScheme.onPrimaryContainer,
+                      child: Icon(
+                        device.type == DiscoveredDeviceType.laptop
+                            ? Icons.laptop_rounded
+                            : Icons.smartphone_rounded,
+                        size: 20,
                       ),
-                      Text(
-                        "${device.address}:${device.port}${device.usesTls ? ' • Secure' : ''}",
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 2,
+                        children: [
+                          Text(
+                            device.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          Text(
+                            "${device.address}:${device.port}${device.usesTls ? ' • Secure' : ''}",
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: canTap
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    ),
+                  ],
                 ),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  color: canConnect
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        )
+        .animate(
+          controller: shakeController,
+          autoPlay: false,
+        )
+        .shake(
+          duration: 420.ms,
+          hz: 4,
+          offset: const Offset(8, 0),
+          rotation: 0,
+        );
   }
 
   Widget _buildReceiverIdentityCard() {
@@ -985,51 +1045,79 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          spacing: 14,
+        child: Stack(
           children: [
-            Text(
-              _selectionSummary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: isPickingFile || isConnectingToSender
-                    ? null
-                    : _pickFiles,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 52),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 10,
-                      children: [
-                        Icon(
-                          selectedFiles.isEmpty
-                              ? Icons.attach_file_rounded
-                              : Icons.swap_horiz_rounded,
-                        ),
-                        Text(
-                          isPickingFile
-                              ? "Opening picker..."
-                              : selectedFiles.isEmpty
-                              ? "Pick files"
-                              : "Change files",
-                        ),
-                      ],
+            Column(
+              spacing: 14,
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: selectedFiles.isEmpty ? 0 : 32,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      _selectionSummary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ),
-              ),
+                Material(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: isPickingFile || isConnectingToSender
+                        ? null
+                        : _pickFiles,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 52),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          spacing: 10,
+                          children: [
+                            Icon(
+                              selectedFiles.isEmpty
+                                  ? Icons.attach_file_rounded
+                                  : Icons.swap_horiz_rounded,
+                            ),
+                            Text(
+                              isPickingFile
+                                  ? "Opening picker..."
+                                  : selectedFiles.isEmpty
+                                  ? "Pick files"
+                                  : "Change files",
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+            if (selectedFiles.isNotEmpty)
+              Positioned(
+                top: -8,
+                right: -8,
+                child: IconButton(
+                  tooltip: "Clear selected files",
+                  onPressed: isConnectingToSender
+                      ? null
+                      : () {
+                          setState(() {
+                            selectedFiles = [];
+                          });
+                        },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
           ],
         ),
       ),
