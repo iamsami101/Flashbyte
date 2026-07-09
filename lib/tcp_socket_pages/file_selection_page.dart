@@ -25,7 +25,7 @@ class FileSelectionPage extends StatefulWidget {
 class _FileSelectionPageState extends State<FileSelectionPage>
     with TickerProviderStateMixin {
   static const double _wideLayoutBreakpoint = 1000;
-  static const double _wideLayoutMaxWidth = 1200;
+  static const double _wideLayoutMaxWidth = 1320;
 
   final TextEditingController receiverIpController = TextEditingController();
   final TextEditingController _deviceNameController = TextEditingController();
@@ -558,24 +558,185 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Widget _buildWideLayout() {
-    final dividerColor = Theme.of(
-      context,
-    ).colorScheme.outlineVariant.withValues(alpha: 0.55);
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _wideLayoutMaxWidth),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildTabPage(_buildSendTab())),
-            Container(
-              width: 1,
-              height: MediaQuery.sizeOf(context).height * 0.76,
-              margin: const EdgeInsets.symmetric(vertical: 24),
-              color: dividerColor,
+    return ColoredBox(
+      color: colorScheme.surfaceContainerLowest,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 40),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _wideLayoutMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 24,
+              children: [
+                _buildDesktopHeader(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 24,
+                  children: [
+                    Expanded(
+                      flex: 11,
+                      child: _buildDesktopPanel(
+                        icon: Icons.north_east_rounded,
+                        title: "Send",
+                        subtitle: "Choose files and connect to a receiver",
+                        child: _buildSendTab(showHeader: false),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 9,
+                      child: _buildDesktopPanel(
+                        icon: Icons.south_west_rounded,
+                        title: "Receive",
+                        subtitle: "Keep this page open to stay discoverable",
+                        child: _buildReceiveTab(showHeader: false),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            Expanded(child: _buildTabPage(_buildReceiveTab())),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
+            children: [
+              Text(
+                "File transfer",
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              Text(
+                "Send and receive on your local network from one workspace.",
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildDesktopStatusChip(
+          icon: Icons.wifi_rounded,
+          label: "Local network",
+        ),
+        const SizedBox(width: 10),
+        _buildDesktopStatusChip(
+          icon: receiveStarted
+              ? Icons.radio_button_checked_rounded
+              : Icons.hourglass_top_rounded,
+          label: receiveStarted ? "Ready to receive" : "Starting receiver",
+          emphasized: receiveStarted,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopStatusChip({
+    required IconData icon,
+    required String label,
+    bool emphasized = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final background = emphasized
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHigh;
+    final foreground = emphasized
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurfaceVariant;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: [
+          Icon(icon, size: 18, color: foreground),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: foreground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopPanel({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 24,
+          children: [
+            Row(
+              spacing: 12,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: colorScheme.onPrimaryContainer),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            child,
           ],
         ),
       ),
@@ -596,19 +757,20 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
-  Widget _buildSendTab() {
+  Widget _buildSendTab({bool showHeader = true}) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         spacing: 20,
         children: [
-          _buildBrandHeader(
-            icon: Icons.upload_file_rounded,
-            title: "Send files",
-            subtitle:
-                "Pick files, then choose a nearby receiver or use its IP address.",
-          ),
+          if (showHeader)
+            _buildBrandHeader(
+              icon: Icons.upload_file_rounded,
+              title: "Send files",
+              subtitle:
+                  "Pick files, then choose a nearby receiver or use its IP address.",
+            ),
           _buildSelectedFilesCard(),
           _buildAvailableDevicesCard(),
           SizedBox(
@@ -699,7 +861,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
-  Widget _buildReceiveTab() {
+  Widget _buildReceiveTab({bool showHeader = true}) {
     return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -707,11 +869,13 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         mainAxisSize: MainAxisSize.min,
         spacing: 20,
         children: [
-          _buildBrandHeader(
-            icon: Icons.wifi_tethering_rounded,
-            title: "Receive files",
-            subtitle: "Scan this QR code with another device to start sharing.",
-          ),
+          if (showHeader)
+            _buildBrandHeader(
+              icon: Icons.wifi_tethering_rounded,
+              title: "Receive files",
+              subtitle:
+                  "Scan this QR code with another device to start sharing.",
+            ),
           _buildReceiverIdentityCard(),
           Card(
             margin: EdgeInsets.zero,
