@@ -126,22 +126,25 @@ class DeviceDiscoveryService {
       return;
     }
 
-    final address = service.hostAddresses.cast<String?>().firstWhere(
-      (value) =>
-          value != null &&
-          value.isNotEmpty &&
-          !InternetAddress(value).isLoopback &&
-          InternetAddress(value).type == InternetAddressType.IPv4,
-      orElse: () => service.hostAddress,
-    );
-    if (address == null || address.isEmpty) {
+    final address = service.hostAddresses
+        .map(InternetAddress.tryParse)
+        .whereType<InternetAddress>()
+        .where(
+          (address) =>
+              address.type == InternetAddressType.IPv4 &&
+              !address.isLoopback,
+        )
+        .firstOrNull;
+    if (address == null) {
+      _devices.remove(_serviceKey(service));
+      _emitDevices();
       return;
     }
 
     _devices[_serviceKey(service)] = DiscoveredDevice(
       id: deviceId,
       name: service.name,
-      address: address,
+      address: address.address,
       port: service.port,
       usesTls: service.attributes['tls'] == '1',
     );
