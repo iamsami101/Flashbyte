@@ -147,10 +147,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
               message['fileId'] as String?,
               TransferStatus.cancelled,
             );
+            break;
+          case 'transfer_cancel_ready':
             setState(() {
               isSharingInProgress = false;
             });
-            isDisconnected.value = true;
             break;
 
           case 'error':

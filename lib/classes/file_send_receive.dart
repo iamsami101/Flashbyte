@@ -31,7 +31,6 @@ void fileReceiverIsolate(List<Object> args) {
   bool isProcessing = false;
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
-  bool transferCancelClosedConnection = false;
   String? sendingFileId;
   final pausedTransfers = <String>{};
   final locallyCancelledTransfers = <String>{};
@@ -155,8 +154,7 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested ||
-                      transferCancelClosedConnection,
+                      localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -215,8 +213,7 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested ||
-                      transferCancelClosedConnection,
+                      localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -255,8 +252,7 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested ||
-                      transferCancelClosedConnection,
+                      localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -348,14 +344,10 @@ void fileReceiverIsolate(List<Object> args) {
               'type': 'file_transfer_cancel',
               'fileId': fileId,
             });
-            transferCancelClosedConnection = true;
             toUiSendPort.send({
               'status': 'transfer_cancelled',
               'fileId': fileId,
             });
-            try {
-              clientSocket?.destroy();
-            } catch (_) {}
           }
         } else if (command['command'] == "disconnect") {
           localDisconnectRequested = true;
@@ -437,11 +429,7 @@ void fileReceiverIsolate(List<Object> args) {
           'type': 'file_transfer_cancel',
           'fileId': fileId,
         });
-        transferCancelClosedConnection = true;
         toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
-        try {
-          clientSocket?.destroy();
-        } catch (_) {}
         return;
       }
     }
@@ -579,11 +567,12 @@ Future<String?> _sendFileCommand(
           'fileId': fileHeader['uuid'],
           'cancelled': true,
         });
-        try {
-          clientSocket?.destroy();
-        } catch (_) {}
         toUiSendPort.send({
           'status': 'transfer_cancelled',
+          'fileId': fileHeader['uuid'],
+        });
+        toUiSendPort.send({
+          'status': 'transfer_cancel_ready',
           'fileId': fileHeader['uuid'],
         });
         return fileHeader['uuid'] as String;
@@ -785,7 +774,6 @@ void _handleSocketConnection(
     }
 
     activeOutputTarget = null;
-    fileSink = null;
   }
 
   void sendControlFrame(Map<String, dynamic> payload) {
@@ -1054,7 +1042,9 @@ void _handleSocketConnection(
 
   Future<void> processBufferedFrames() async {
     while (!socketClosed) {
-      if (fileSink == null) {
+      final drainingCancelledFile =
+          isDiscardingCancelledFile && activeFileHeader != null;
+      if (fileSink == null && !drainingCancelledFile) {
         final frameHeader = readBuffer.tryPeekFrameHeader();
         if (frameHeader == null ||
             readBuffer.availableBytes < 8 + frameHeader.headerLength) {
@@ -1102,7 +1092,7 @@ void _handleSocketConnection(
 
       final sink = fileSink;
       final totalBytes = fileBytesLength;
-      if (sink == null || totalBytes == null) {
+      if ((!isDiscardingCancelledFile && sink == null) || totalBytes == null) {
         continue;
       }
 
@@ -1144,6 +1134,15 @@ void _handleSocketConnection(
               if (!isDiscardingCancelledFile && !wasCancelled) {
                 await completeFileFrame();
               } else {
+                final cancelledFileId =
+                    (activeFileHeader?['uuid'] ?? headerJson['fileId'])
+                        as String?;
+                if (cancelledFileId != null) {
+                  toUiSendPort.send({
+                    'status': 'transfer_cancel_ready',
+                    'fileId': cancelledFileId,
+                  });
+                }
                 resetFrameState();
               }
               continue;
@@ -1194,7 +1193,7 @@ void _handleSocketConnection(
           readBuffer.skipBytes(availableToDrain);
         } else {
           final writtenNow = readBuffer.drainToSink(
-            sink,
+            sink!,
             maxBytes: availableToDrain,
           );
           bytesWritten += writtenNow;
@@ -1216,7 +1215,7 @@ void _handleSocketConnection(
       final writtenNow = isDiscardingCancelledFile || fileSink == null
           ? min(remainingBytes, readBuffer.availableBytes)
           : readBuffer.drainToSink(
-              sink,
+              sink!,
               maxBytes: remainingBytes,
             );
       if (writtenNow == 0) {
