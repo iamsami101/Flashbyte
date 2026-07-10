@@ -18,7 +18,7 @@ class AndroidConnectionNotificationService {
   static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
   static const String _foregroundNotificationTitle = 'Flashbyte';
   static const String _foregroundNotificationText = 'Connection established';
-  static const String _notificationIcon = 'notification_icon';
+  static const String _notificationIcon = 'ic_notification';
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
