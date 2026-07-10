@@ -452,11 +452,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         return;
       }
       final port = advertisedPort ?? await AppSettings.getPort();
-      await SocketService.instance.connectToHost(
-        ip,
-        port: port,
-        useTLS: useTLS,
-      );
+      await _connectToHostWithStartupRetry(ip, port: port, useTLS: useTLS);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -465,6 +461,27 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       await _showErrorDialog(
         title: 'Connection Error',
         message: 'Could not connect to receiver:\n${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> _connectToHostWithStartupRetry(
+    String ip, {
+    required int port,
+    required bool useTLS,
+  }) async {
+    try {
+      await SocketService.instance.connectToHost(
+        ip,
+        port: port,
+        useTLS: useTLS,
+      );
+    } on SocketStartupCancelled {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await SocketService.instance.connectToHost(
+        ip,
+        port: port,
+        useTLS: useTLS,
       );
     }
   }

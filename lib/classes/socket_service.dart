@@ -10,6 +10,13 @@ import 'package:path_provider/path_provider.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
 
+class SocketStartupCancelled implements Exception {
+  const SocketStartupCancelled();
+
+  @override
+  String toString() => 'Socket startup was cancelled.';
+}
+
 class SocketService {
   SocketService._privateConstructor();
   static final SocketService instance = SocketService._privateConstructor();
@@ -219,13 +226,13 @@ class SocketService {
     );
     if (generation != _connectionGeneration) {
       receiverIsolate.kill(priority: Isolate.immediate);
-      throw StateError('Socket startup was cancelled.');
+      throw const SocketStartupCancelled();
     }
     _receiverIsolate = receiverIsolate;
 
     _toIsolateSendPort = await completer.future;
     if (generation != _connectionGeneration) {
-      throw StateError('Socket startup was cancelled.');
+      throw const SocketStartupCancelled();
     }
 
     _toIsolateSendPort!.send({
@@ -308,6 +315,7 @@ class SocketService {
 
     try {
       await disconnect().timeout(timeout);
+      stopConnection();
     } on TimeoutException {
       stopConnection();
     }
