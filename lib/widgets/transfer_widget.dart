@@ -60,7 +60,7 @@ class TransferWidget extends StatelessWidget {
               ? colorScheme.primary
               : Colors.white.withAlpha(100),
         );
-    final progressValue = isCancelled ? 0.0 : (isFinished ? 1.0 : null);
+    final progressValue = isFinished ? 1.0 : null;
 
     return Heroine(
       motion: Motion.bouncySpring(),

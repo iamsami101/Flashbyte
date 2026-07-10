@@ -31,7 +31,6 @@ void fileReceiverIsolate(List<Object> args) {
   bool isProcessing = false;
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
-  bool localTransferCancelRequested = false;
   String? sendingFileId;
   final pausedTransfers = <String>{};
   final locallyCancelledTransfers = <String>{};
@@ -155,7 +154,9 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested || localTransferCancelRequested,
+                      localDisconnectRequested,
+                  shouldCancelReceivingFile: (fileId) =>
+                      locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
@@ -212,7 +213,9 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested || localTransferCancelRequested,
+                      localDisconnectRequested,
+                  shouldCancelReceivingFile: (fileId) =>
+                      locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
@@ -249,7 +252,9 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested || localTransferCancelRequested,
+                      localDisconnectRequested,
+                  shouldCancelReceivingFile: (fileId) =>
+                      locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
@@ -334,7 +339,6 @@ void fileReceiverIsolate(List<Object> args) {
           final fileId = command['fileId'] as String?;
           if (fileId != null) {
             locallyCancelledTransfers.add(fileId);
-            localTransferCancelRequested = true;
             pausedTransfers.remove(fileId);
             await _sendTransferControlFrame(clientSocket, {
               'type': 'file_transfer_cancel',
@@ -344,9 +348,6 @@ void fileReceiverIsolate(List<Object> args) {
               'status': 'transfer_cancelled',
               'fileId': fileId,
             });
-            try {
-              clientSocket?.destroy();
-            } catch (_) {}
           }
         } else if (command['command'] == "disconnect") {
           localDisconnectRequested = true;
@@ -423,16 +424,12 @@ void fileReceiverIsolate(List<Object> args) {
       final fileId = command['fileId'] as String?;
       if (fileId != null) {
         locallyCancelledTransfers.add(fileId);
-        localTransferCancelRequested = true;
         pausedTransfers.remove(fileId);
         await _sendTransferControlFrame(clientSocket, {
           'type': 'file_transfer_cancel',
           'fileId': fileId,
         });
         toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
-        try {
-          clientSocket?.destroy();
-        } catch (_) {}
         return;
       }
     }
@@ -513,13 +510,12 @@ Future<String?> _sendFileCommand(
       };
     }
 
-    final metadataBytes = utf8.encode(jsonEncode(fileHeader));
-    final lengthHeaderBytes = ByteData(8);
-    lengthHeaderBytes.setUint32(0, metadataBytes.length, Endian.big);
-    lengthHeaderBytes.setUint32(4, fileHeader['size'] as int, Endian.big);
-
-    clientSocket.add(lengthHeaderBytes.buffer.asUint8List());
-    clientSocket.add(metadataBytes);
+    await _sendSocketFrame(clientSocket, {
+      'type': 'file_start',
+      'uuid': fileHeader['uuid'],
+      'name': fileHeader['name'],
+      'size': fileHeader['size'],
+    });
 
     toUiSendPort.send({
       'status': 'send_start',
@@ -538,6 +534,10 @@ Future<String?> _sendFileCommand(
       shouldPauseTransfer: shouldPauseTransfer,
       shouldCancelTransfer: shouldCancelTransfer,
     );
+    await _sendSocketFrame(clientSocket, {
+      'type': 'file_end',
+      'fileId': fileHeader['uuid'],
+    });
     await clientSocket.flush();
 
     stopwatch.stop();
@@ -624,8 +624,14 @@ Future<void> _sendFileWithWindowedReader({
       );
       final actualChunk = windowBuffer.sublist(offset, offset + bytesToSend);
 
-      clientSocket.add(actualChunk);
-      await clientSocket.flush();
+      await _sendSocketFrame(
+        clientSocket,
+        {
+          'type': 'file_chunk',
+          'fileId': fileId,
+        },
+        payloadBytes: actualChunk,
+      );
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
         throw const _TransferCancelled();
       }
@@ -646,16 +652,28 @@ Future<void> _sendTransferControlFrame(
   dynamic socket,
   Map<String, dynamic> payload,
 ) async {
+  await _sendSocketFrame(socket, payload);
+}
+
+Future<void> _sendSocketFrame(
+  dynamic socket,
+  Map<String, dynamic> payload, {
+  Uint8List? payloadBytes,
+}) async {
   if (socket == null) {
     return;
   }
   try {
-    final payloadBytes = utf8.encode(jsonEncode(payload));
     final header = ByteData(8);
-    header.setUint32(0, payloadBytes.length, Endian.big);
-    header.setUint32(4, 0, Endian.big);
+    final bodyBytes = payloadBytes;
+    final metadataBytes = utf8.encode(jsonEncode(payload));
+    header.setUint32(0, metadataBytes.length, Endian.big);
+    header.setUint32(4, bodyBytes?.length ?? 0, Endian.big);
     socket.add(header.buffer.asUint8List());
-    socket.add(payloadBytes);
+    socket.add(metadataBytes);
+    if (bodyBytes != null && bodyBytes.isNotEmpty) {
+      socket.add(bodyBytes);
+    }
     await socket.flush();
   } catch (_) {}
 }
@@ -666,6 +684,7 @@ void _handleSocketConnection(
   bool waitForProbe = false,
   String? configuredDownloadDirectory,
   bool Function()? shouldSuppressConnectionErrors,
+  bool Function(String fileId)? shouldCancelReceivingFile,
   void Function(String fileId)? onTransferAcknowledged,
   void Function(String fileId)? onRemoteTransferPaused,
   void Function(String fileId)? onRemoteTransferResumed,
@@ -678,6 +697,9 @@ void _handleSocketConnection(
   int? fileBytesLength;
   int bytesWritten = 0;
   int lastProgressPercent = -1;
+  int? chunkBytesRemaining;
+  bool isChunkedFileFrame = false;
+  bool isDiscardingCancelledFile = false;
   DateTime lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
   IOSink? fileSink;
@@ -704,6 +726,9 @@ void _handleSocketConnection(
     activeFileHeader = null;
     bytesWritten = 0;
     lastProgressPercent = -1;
+    chunkBytesRemaining = null;
+    isChunkedFileFrame = false;
+    isDiscardingCancelledFile = false;
   }
 
   Future<void> discardPartialOutput() async {
@@ -913,10 +938,10 @@ void _handleSocketConnection(
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
           onRemoteTransferCancelled?.call(fileId);
-          await discardPartialOutput();
-          gracefulDisconnect = true;
-          closeSocket();
-          return false;
+          if (activeFileHeader?['uuid'] == fileId) {
+            isDiscardingCancelledFile = true;
+            await discardPartialOutput();
+          }
         }
         return true;
       case 'disconnect':
@@ -932,16 +957,18 @@ void _handleSocketConnection(
 
   Future<void> beginFileFrame(
     Map<String, dynamic> headerJson,
-    int payloadLength,
-  ) async {
+    int fileSize, {
+    required bool chunked,
+  }) async {
     final fileTarget = await _createOutputTarget(
       configuredDownloadDirectory: configuredDownloadDirectory,
       originalFileName: headerJson['name'] as String,
     );
     activeOutputTarget = fileTarget;
     activeFileHeader = headerJson;
-    fileBytesLength = payloadLength;
+    fileBytesLength = fileSize;
     fileSink = fileTarget.sink;
+    isChunkedFileFrame = chunked;
     bytesWritten = 0;
     lastProgressPercent = -1;
     stopwatch
@@ -953,7 +980,7 @@ void _handleSocketConnection(
       'fileId': headerJson['uuid'],
       'fileName': fileTarget.fileName,
       'filePath': fileTarget.filePath,
-      'fileSize': payloadLength,
+      'fileSize': fileSize,
     });
   }
 
@@ -1001,9 +1028,18 @@ void _handleSocketConnection(
         final headerJson =
             jsonDecode(utf8.decode(headerBytes)) as Map<String, dynamic>;
 
+        final frameType = headerJson['type'] as String?;
         final isControlFrame =
             headerJson.containsKey('type') || headerJson.containsKey('ok');
         if (frameHeader.payloadLength == 0 && isControlFrame) {
+          if (frameType == 'file_start') {
+            final fileSize = headerJson['size'] as int?;
+            if (fileSize == null) {
+              continue;
+            }
+            await beginFileFrame(headerJson, fileSize, chunked: true);
+            continue;
+          }
           final keepReading = await handleControlFrame(headerJson);
           if (!keepReading) {
             return;
@@ -1011,12 +1047,135 @@ void _handleSocketConnection(
           continue;
         }
 
-        await beginFileFrame(headerJson, frameHeader.payloadLength);
+        if (frameType == 'file_chunk') {
+          if (readBuffer.availableBytes < frameHeader.payloadLength) {
+            return;
+          }
+          readBuffer.skipBytes(frameHeader.payloadLength);
+          continue;
+        }
+
+        await beginFileFrame(
+          headerJson,
+          frameHeader.payloadLength,
+          chunked: false,
+        );
       }
 
       final sink = fileSink;
       final totalBytes = fileBytesLength;
       if (sink == null || totalBytes == null) {
+        continue;
+      }
+
+      final activeFileId = activeFileHeader?['uuid'] as String?;
+      if (activeFileId != null &&
+          (shouldCancelReceivingFile?.call(activeFileId) ?? false) &&
+          !isDiscardingCancelledFile) {
+        isDiscardingCancelledFile = true;
+        await cleanupOpenFile();
+        try {
+          final target = activeOutputTarget;
+          if (target != null) {
+            final file = File(target.filePath);
+            if (await file.exists()) {
+              await file.delete();
+            }
+          }
+        } catch (_) {}
+        activeOutputTarget = null;
+        fileSink = null;
+      }
+
+      if (isChunkedFileFrame) {
+        if (chunkBytesRemaining == null) {
+          final frameHeader = readBuffer.tryPeekFrameHeader();
+          if (frameHeader == null ||
+              readBuffer.availableBytes < 8 + frameHeader.headerLength) {
+            return;
+          }
+
+          readBuffer.skipBytes(8);
+          final headerBytes = readBuffer.tryReadBytes(
+            frameHeader.headerLength,
+          )!;
+          final headerJson =
+              jsonDecode(utf8.decode(headerBytes)) as Map<String, dynamic>;
+          final frameType = headerJson['type'] as String?;
+
+          if (frameHeader.payloadLength == 0) {
+            if (frameType == 'file_start' && isDiscardingCancelledFile) {
+              final fileSize = headerJson['size'] as int?;
+              resetFrameState();
+              if (fileSize != null) {
+                await beginFileFrame(headerJson, fileSize, chunked: true);
+              }
+              continue;
+            }
+            if (frameType == 'file_end') {
+              if (!isDiscardingCancelledFile) {
+                await completeFileFrame();
+              } else {
+                resetFrameState();
+              }
+              continue;
+            }
+
+            final keepReading = await handleControlFrame(headerJson);
+            if (!keepReading) {
+              return;
+            }
+            continue;
+          }
+
+          if (frameType != 'file_chunk') {
+            if (readBuffer.availableBytes < frameHeader.payloadLength) {
+              return;
+            }
+            readBuffer.skipBytes(frameHeader.payloadLength);
+            continue;
+          }
+
+          final chunkFileId = headerJson['fileId'] as String?;
+          if (chunkFileId != activeFileId) {
+            if (readBuffer.availableBytes < frameHeader.payloadLength) {
+              return;
+            }
+            readBuffer.skipBytes(frameHeader.payloadLength);
+            continue;
+          }
+
+          chunkBytesRemaining = frameHeader.payloadLength;
+        }
+
+        final remainingChunkBytes = chunkBytesRemaining!;
+        if (remainingChunkBytes <= 0) {
+          chunkBytesRemaining = null;
+          continue;
+        }
+
+        final availableToDrain = min(
+          remainingChunkBytes,
+          readBuffer.availableBytes,
+        );
+        if (availableToDrain == 0) {
+          return;
+        }
+
+        if (isDiscardingCancelledFile || fileSink == null) {
+          readBuffer.skipBytes(availableToDrain);
+        } else {
+          final writtenNow = readBuffer.drainToSink(
+            sink,
+            maxBytes: availableToDrain,
+          );
+          bytesWritten += writtenNow;
+          sendProgress();
+        }
+        chunkBytesRemaining = remainingChunkBytes - availableToDrain;
+        if (chunkBytesRemaining == 0) {
+          chunkBytesRemaining = null;
+        }
         continue;
       }
 
@@ -1026,19 +1185,30 @@ void _handleSocketConnection(
         continue;
       }
 
-      final writtenNow = readBuffer.drainToSink(
-        sink,
-        maxBytes: remainingBytes,
-      );
+      final writtenNow = isDiscardingCancelledFile || fileSink == null
+          ? min(remainingBytes, readBuffer.availableBytes)
+          : readBuffer.drainToSink(
+              sink,
+              maxBytes: remainingBytes,
+            );
       if (writtenNow == 0) {
         return;
       }
+      if (isDiscardingCancelledFile || fileSink == null) {
+        readBuffer.skipBytes(writtenNow);
+      }
 
       bytesWritten += writtenNow;
-      sendProgress();
+      if (!isDiscardingCancelledFile) {
+        sendProgress();
+      }
 
       if (bytesWritten == totalBytes) {
-        await completeFileFrame();
+        if (isDiscardingCancelledFile) {
+          resetFrameState();
+        } else {
+          await completeFileFrame();
+        }
       }
     }
   }

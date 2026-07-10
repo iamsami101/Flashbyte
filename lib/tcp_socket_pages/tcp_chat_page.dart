@@ -27,7 +27,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
   final ValueNotifier<List<TransferWidget>> _fileTransferWidgets =
       ValueNotifier([]);
-  final ValueNotifier<double> _fileProgress = ValueNotifier(0);
+  final Map<String, ValueNotifier<double>> _transferProgress = {};
 
   bool isSharingInProgress = false;
   bool _sentInitialFiles = false;
@@ -84,14 +84,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'progress':
-            _fileProgress.value = message['progress'];
+            _setTransferProgress(
+              message['fileId'] as String?,
+              (message['progress'] as num?)?.toDouble(),
+            );
             break;
           case 'completed':
             replaceLastWidget(
               filePath: message['filePath'] as String?,
               fileName: message['fileName'] as String?,
             );
-            _fileProgress.value = 0;
+            _disposeTransferProgress(message['fileId'] as String?);
 
             setState(() {
               isSharingInProgress = false;
@@ -113,11 +116,14 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'send_progress':
-            _fileProgress.value = message['progress'];
+            _setTransferProgress(
+              message['fileId'] as String?,
+              (message['progress'] as num?)?.toDouble(),
+            );
             break;
           case 'send_complete':
             replaceLastWidget();
-            _fileProgress.value = 0;
+            _disposeTransferProgress(message['fileId'] as String?);
 
             setState(() {
               isSharingInProgress = false;
@@ -166,6 +172,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
   @override
   void dispose() {
     _streamSubscription?.cancel();
+    for (final notifier in _transferProgress.values) {
+      notifier.dispose();
+    }
+    _transferProgress.clear();
     if (!_disconnectSignalSent) {
       _leavingPage = true;
       SocketService.instance.disconnect();
@@ -731,13 +741,15 @@ class _TcpChatPageState extends State<TcpChatPage> {
     required bool isReceived,
   }) {
     _scrollToBottom();
+    final progress = ValueNotifier<double>(0);
+    _transferProgress[uuid] = progress;
     _fileTransferWidgets.value = [
       ..._fileTransferWidgets.value,
       TransferWidget(
         filePath: filePath,
         fileName: fileName,
         fileSize: fileSize,
-        value: _fileProgress,
+        value: progress,
         isReceived: isReceived,
         uuid: uuid,
         status: TransferStatus.inProgress,
@@ -746,6 +758,21 @@ class _TcpChatPageState extends State<TcpChatPage> {
         onCancel: () => SocketService.instance.cancelTransfer(uuid),
       ),
     ];
+  }
+
+  void _setTransferProgress(String? uuid, double? progress) {
+    if (uuid == null || progress == null) {
+      return;
+    }
+    _transferProgress[uuid]?.value = progress.clamp(0.0, 1.0);
+  }
+
+  void _disposeTransferProgress(String? uuid) {
+    if (uuid == null) {
+      return;
+    }
+    final notifier = _transferProgress.remove(uuid);
+    Future<void>.delayed(const Duration(milliseconds: 500), notifier?.dispose);
   }
 
   TransferWidget _copyTransferWidget(
