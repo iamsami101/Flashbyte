@@ -141,11 +141,6 @@ void fileReceiverIsolate(List<Object> args) {
               },
               onError: (error) {
                 print('[SERVER_TLS] listen error: $error');
-                toUiSendPort.send({
-                  'status': 'error',
-                  'fatal': 'false',
-                  'message': 'TLS connection error: $error',
-                });
               },
             );
           } else if (command['mode'] == 'client') {
@@ -243,8 +238,8 @@ void fileReceiverIsolate(List<Object> args) {
                 'status': 'error',
                 'fatal': 'true',
                 'message': useTLS
-                    ? 'TLS connection failed: ${e.toString()}'
-                    : 'Could not connect. Try enabling TLS on both devices.',
+                    ? 'This device has TLS enabled, but the other device appears to have TLS disabled or an incompatible certificate. Disable TLS on this device, or enable TLS on the other device, then try again.\n\nDetails: ${e.toString()}'
+                    : 'This device has TLS disabled, but the other device appears to require TLS. Enable TLS on this device, or disable TLS on the other device, then try again.\n\nDetails: ${e.toString()}',
               });
             }
           }
@@ -515,6 +510,7 @@ void _handleSocketConnection(
   bool connectionErrorSent = false;
   bool gracefulDisconnect = false;
   bool socketClosed = false;
+  final localUsesTls = localPeerInfo['tls'] == true;
 
   Future<void> cleanupOpenFile() async {
     if (fileSink != null) {
@@ -589,6 +585,14 @@ void _handleSocketConnection(
     });
   }
 
+  String tlsHandshakeFailureMessage() {
+    if (localUsesTls) {
+      return 'This device has TLS enabled, but the other device appears to have TLS disabled. Disable TLS on this device, or enable TLS on the other device, then try again.';
+    }
+
+    return 'This device has TLS disabled, but the other device appears to require TLS. Enable TLS on this device, or disable TLS on the other device, then try again.';
+  }
+
   void sendProgress({bool force = false}) {
     final totalBytes = fileBytesLength;
     final header = activeFileHeader;
@@ -650,14 +654,14 @@ void _handleSocketConnection(
             ? {
                 'ok': false,
                 'error':
-                    'TLS mismatch: server does not use TLS, client has TLS enabled',
+                    'This device has TLS disabled, but the connecting device has TLS enabled. Enable TLS on this device, or ask the other device to disable TLS, then try again.',
               }
             : {'ok': true, 'tls': false};
         sendControlFrame(response);
 
         if (clientWantsTls) {
           sendConnectionError(
-            'TLS settings do not match on both devices.',
+            'This device has TLS disabled, but the connecting device has TLS enabled. Enable TLS on this device, or ask the other device to disable TLS, then try again.',
             fatal: false,
           );
           closeSocket();
@@ -840,9 +844,7 @@ void _handleSocketConnection(
   if (waitForProbe) {
     Future.delayed(const Duration(seconds: 5), () {
       if (!probeHandled && !(shouldSuppressConnectionErrors?.call() ?? false)) {
-        sendConnectionError(
-          'Could not establish the connection. Check the TLS setting on both devices.',
-        );
+        sendConnectionError(tlsHandshakeFailureMessage());
         closeSocket();
       }
     });
@@ -875,9 +877,7 @@ void _handleSocketConnection(
       }
 
       if (!probeHandled && !connectionErrorSent && !suppressErrors) {
-        sendConnectionError(
-          'Connection closed before the link was established. Check the TLS setting on both devices.',
-        );
+        sendConnectionError(tlsHandshakeFailureMessage());
       } else if (!connectionErrorSent &&
           !gracefulDisconnect &&
           !suppressErrors) {
@@ -900,9 +900,7 @@ void _handleSocketConnection(
       }
 
       if (!probeHandled && !suppressErrors) {
-        sendConnectionError(
-          'Could not establish the connection. Check the TLS setting on both devices.',
-        );
+        sendConnectionError(tlsHandshakeFailureMessage());
       } else if (!connectionErrorSent &&
           !gracefulDisconnect &&
           !suppressErrors) {

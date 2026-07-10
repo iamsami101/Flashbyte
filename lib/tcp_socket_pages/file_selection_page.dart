@@ -442,7 +442,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     try {
       await DeviceDiscoveryService.instance.stopAdvertising();
       receiveStarted = false;
-      final useTLS = advertisedTls ?? await AppSettings.getUseTls();
+      final useTLS = await AppSettings.getUseTls();
+      if (advertisedTls != null && advertisedTls != useTLS) {
+        setState(() {
+          isConnectingToSender = false;
+        });
+        await _showTlsMismatchDialog(localUsesTls: useTLS);
+        await _restartServer();
+        return;
+      }
       final port = advertisedPort ?? await AppSettings.getPort();
       await SocketService.instance.connectToHost(
         ip,
@@ -467,6 +475,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       device.address,
       advertisedPort: device.port,
       advertisedTls: device.usesTls,
+    );
+  }
+
+  Future<void> _showTlsMismatchDialog({required bool localUsesTls}) {
+    return _showErrorDialog(
+      title: 'TLS Settings Do Not Match',
+      message: localUsesTls
+          ? 'This device has TLS enabled, but the selected device has TLS disabled.\n\nDisable TLS on this device, or enable TLS on the other device, then try again.'
+          : 'This device has TLS disabled, but the selected device has TLS enabled.\n\nEnable TLS on this device, or disable TLS on the other device, then try again.',
     );
   }
 
