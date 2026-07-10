@@ -208,7 +208,8 @@ class _TcpSocketsState extends State<TcpSockets> {
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () async {
-                  SocketService.instance.stopConnection();
+                  await SocketService.instance.stopConnectionGracefully();
+                  if (!context.mounted) return;
                   await Navigator.push(
                     context,
                     MaterialPageRoute(

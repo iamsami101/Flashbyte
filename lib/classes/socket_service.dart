@@ -21,6 +21,7 @@ class SocketService {
   StreamSubscription? _streamSubscription;
   bool _disconnectRequested = false;
   int _connectionGeneration = 0;
+  Completer<void>? _disconnectCompleter;
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   final _connectionStatusController = StreamController<bool>.broadcast();
@@ -106,7 +107,7 @@ class SocketService {
     required int port,
     bool useTLS = false,
   }) async {
-    stopConnection();
+    await stopConnectionGracefully();
     final generation = _connectionGeneration;
     _hostUsesTls = mode == 'host' && useTLS;
     _disconnectRequested = false;
@@ -165,6 +166,9 @@ class SocketService {
           _setConnectionEstablished(true);
         } else if (status == 'disconnect' || status == 'error') {
           _setConnectionEstablished(false);
+          if (status == 'disconnect') {
+            _completeDisconnectWaiter();
+          }
         }
         if (status == 'error' && _disconnectRequested) {
           return;
@@ -242,14 +246,15 @@ class SocketService {
     }
   }
 
-  void disconnect() {
+  Future<void> disconnect() {
     final sendPort = _toIsolateSendPort;
     if (_uiReceivePort == null || sendPort == null) {
       stopConnection();
-      return;
+      return Future.value();
     }
     _disconnectRequested = true;
     _setConnectionEstablished(false);
+    final completer = _disconnectCompleter ??= Completer<void>();
     try {
       sendPort.send({
         'command': 'disconnect',
@@ -257,11 +262,28 @@ class SocketService {
     } catch (_) {
       stopConnection();
     }
+    return completer.future;
+  }
+
+  Future<void> stopConnectionGracefully({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    if (_receiverIsolate == null && _toIsolateSendPort == null) {
+      stopConnection();
+      return;
+    }
+
+    try {
+      await disconnect().timeout(timeout);
+    } on TimeoutException {
+      stopConnection();
+    }
   }
 
   void stopConnection() {
     _connectionGeneration++;
     _setConnectionEstablished(false);
+    _completeDisconnectWaiter();
     _streamSubscription?.cancel();
     _uiReceivePort?.close();
     _receiverIsolate?.kill(priority: Isolate.immediate);
@@ -273,6 +295,14 @@ class SocketService {
     _hostIsListening = false;
     _hostUsesTls = false;
     _disconnectRequested = false;
+  }
+
+  void _completeDisconnectWaiter() {
+    final completer = _disconnectCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+    _disconnectCompleter = null;
   }
 
   void _stopConnectionIfCurrent(int generation) {

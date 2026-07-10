@@ -113,7 +113,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _networkRefreshTimer?.cancel();
     receiverIpController.dispose();
     _deviceNameController.dispose();
-    SocketService.instance.stopConnection();
+    unawaited(SocketService.instance.stopConnectionGracefully());
     unawaited(DeviceDiscoveryService.instance.stop());
     super.dispose();
   }
@@ -291,7 +291,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Future<void> _restartServer() async {
     final generation = ++_serverRestartGeneration;
     await DeviceDiscoveryService.instance.stopAdvertising();
-    SocketService.instance.stopConnection();
+    await SocketService.instance.stopConnectionGracefully();
     if (mounted) {
       setState(() {
         receiveStarted = false;
@@ -537,7 +537,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           return;
         }
         if (wasConnecting || selectedTabIndex == 0) {
-          SocketService.instance.stopConnection();
           unawaited(_restartServer());
         }
         _showErrorDialog(
