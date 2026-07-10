@@ -56,7 +56,12 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
-            if (!_leavingPage) {
+            if (!_leavingPage && isSharingInProgress) {
+              _showConnectionIssueDialog(
+                message:
+                    'Connection lost. The other device disconnected during the transfer.',
+              );
+            } else if (!_leavingPage) {
               Navigator.pop(context);
               showScaffoldSnackbar("Disconnected");
             }
@@ -122,65 +127,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
             if (_disconnectSignalSent || !mounted) {
               break;
             }
-            if (_errorDialogVisible) {
-              break;
-            }
-            isDisconnected.value = true;
-            _errorDialogVisible = true;
-            showGeneralDialog(
-              context: context,
-              barrierDismissible: true,
-              barrierLabel: "Close Dialog",
-              pageBuilder:
-                  (
-                    context,
-                    animation,
-                    secondaryAnimation,
-                  ) => AlertDialog(
-                    title: Row(
-                      spacing: 10,
-                      children: [
-                        Icon(
-                          Icons.error_rounded,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onErrorContainer,
-                        ),
-                        Text('Error'),
-                      ],
-                    ),
-                    content: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 10,
-                      children: [
-                        Text(
-                          "Connection may have been disrupted\n\nError log:",
-                        ),
-                        Card(
-                          margin: EdgeInsets.all(0),
-                          child: Padding(
-                            padding: const EdgeInsets.all(
-                              10,
-                            ),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxHeight: 200,
-                              ),
-                              child: SingleChildScrollView(
-                                child: Text(
-                                  message['message'],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-            ).then((_) {
-              _errorDialogVisible = false;
-            });
+            _showConnectionIssueDialog(
+              message: message['message'] as String? ?? 'Unknown error',
+            );
             break;
         }
       },
@@ -305,43 +254,12 @@ class _TcpChatPageState extends State<TcpChatPage> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Expanded(
-                                    child: Card.outlined(
-                                      child: ValueListenableBuilder(
-                                        valueListenable: isDisconnected,
-                                        builder: (context, value, child) => InkWell(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                                    child: ValueListenableBuilder(
+                                      valueListenable: isDisconnected,
+                                      builder: (context, value, child) =>
+                                          _buildPickFileButton(
+                                            isConnectionLost: value,
                                           ),
-                                          onTap:
-                                              value == true ||
-                                                  isSharingInProgress
-                                              ? null
-                                              : () async {
-                                                  final pickedFile =
-                                                      await FastFilePicker.pickFile();
-                                                  if (pickedFile == null) {
-                                                    return;
-                                                  }
-                                                  _sendPickedFile(
-                                                    pickedFile,
-                                                  );
-                                                },
-                                          child: Padding(
-                                            padding: EdgeInsets.all(17),
-                                            child: IntrinsicHeight(
-                                              child: Row(
-                                                spacing: 10,
-                                                children: [
-                                                  Icon(
-                                                    Icons.file_present_rounded,
-                                                  ),
-                                                  Text("Pick File"),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
                                     ),
                                   ),
                                 ],
@@ -378,6 +296,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   Widget _buildPeerDetailsPanel() {
     final colorScheme = Theme.of(context).colorScheme;
     final peer = _peerInfo;
+    final disconnected = isDisconnected.value;
 
     return ColoredBox(
       color: colorScheme.surfaceContainerLow,
@@ -434,15 +353,50 @@ class _TcpChatPageState extends State<TcpChatPage> {
                         Icon(
                           Icons.circle,
                           size: 9,
-                          color: colorScheme.primary,
+                          color: disconnected
+                              ? colorScheme.error
+                              : colorScheme.primary,
                         ),
                         Text(
-                          "Connected",
+                          disconnected ? "Disconnected" : "Connected",
                           style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(color: colorScheme.primary),
+                              ?.copyWith(
+                                color: disconnected
+                                    ? colorScheme.error
+                                    : colorScheme.primary,
+                              ),
                         ),
                       ],
                     ),
+                    if (disconnected) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        margin: EdgeInsets.zero,
+                        color: colorScheme.errorContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 10,
+                            children: [
+                              Icon(
+                                Icons.link_off_rounded,
+                                color: colorScheme.onErrorContainer,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  "This session ended. Go back to reconnect before sending more files.",
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: colorScheme.onErrorContainer,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     _buildPeerDetailRow(
                       icon: Icons.lan_rounded,
@@ -517,6 +471,92 @@ class _TcpChatPageState extends State<TcpChatPage> {
     );
   }
 
+  Widget _buildPickFileButton({required bool isConnectionLost}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final disabled = isConnectionLost || isSharingInProgress;
+    final title = isConnectionLost
+        ? "Connection lost"
+        : isSharingInProgress
+        ? "Transfer in progress"
+        : "Pick File";
+    final subtitle = isConnectionLost
+        ? "Reconnect to send more files"
+        : isSharingInProgress
+        ? "Wait for this transfer to finish"
+        : "Choose another file to send";
+    final icon = isConnectionLost
+        ? Icons.link_off_rounded
+        : isSharingInProgress
+        ? Icons.hourglass_top_rounded
+        : Icons.file_present_rounded;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: isConnectionLost
+          ? colorScheme.errorContainer
+          : colorScheme.surfaceContainerHighest,
+      elevation: isConnectionLost ? 2 : 0,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: disabled
+            ? null
+            : () async {
+                final pickedFile = await FastFilePicker.pickFile();
+                if (pickedFile == null) {
+                  return;
+                }
+                _sendPickedFile(pickedFile);
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+          child: Row(
+            spacing: 12,
+            children: [
+              AnimatedSwitcher(
+                duration: 180.ms,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: Icon(
+                  icon,
+                  key: ValueKey(icon),
+                  color: isConnectionLost
+                      ? colorScheme.onErrorContainer
+                      : colorScheme.primary,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: isConnectionLost
+                            ? colorScheme.onErrorContainer
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isConnectionLost
+                            ? colorScheme.onErrorContainer.withValues(
+                                alpha: 0.78,
+                              )
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void showScaffoldSnackbar(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -551,6 +591,59 @@ class _TcpChatPageState extends State<TcpChatPage> {
     }
 
     SocketService.instance.sendFile(fileLocation);
+  }
+
+  void _showConnectionIssueDialog({required String message}) {
+    if (_errorDialogVisible || !mounted) {
+      return;
+    }
+
+    setState(() {
+      isSharingInProgress = false;
+    });
+    isDisconnected.value = true;
+    _errorDialogVisible = true;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Close Dialog",
+      pageBuilder: (context, animation, secondaryAnimation) => AlertDialog(
+        title: Row(
+          spacing: 10,
+          children: [
+            Icon(
+              Icons.error_rounded,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+            const Text('Connection Lost'),
+          ],
+        ),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          spacing: 10,
+          children: [
+            const Text("Connection may have been disrupted\n\nError log:"),
+            Card(
+              margin: EdgeInsets.zero,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(
+                    child: SelectableText(message),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      _errorDialogVisible = false;
+    });
   }
 
   void _scrollToBottom() {
