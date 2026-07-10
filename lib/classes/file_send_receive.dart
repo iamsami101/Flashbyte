@@ -562,6 +562,11 @@ Future<String?> _sendFileCommand(
         (fileHeader != null &&
             shouldCancelTransfer(fileHeader['uuid'] as String))) {
       if (fileHeader != null) {
+        await _sendSocketFrame(clientSocket, {
+          'type': 'file_end',
+          'fileId': fileHeader['uuid'],
+          'cancelled': true,
+        });
         toUiSendPort.send({
           'status': 'transfer_cancelled',
           'fileId': fileHeader['uuid'],
@@ -1120,7 +1125,8 @@ void _handleSocketConnection(
               continue;
             }
             if (frameType == 'file_end') {
-              if (!isDiscardingCancelledFile) {
+              final wasCancelled = headerJson['cancelled'] == true;
+              if (!isDiscardingCancelledFile && !wasCancelled) {
                 await completeFileFrame();
               } else {
                 resetFrameState();
