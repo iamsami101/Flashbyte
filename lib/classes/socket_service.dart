@@ -22,6 +22,7 @@ class SocketService {
   bool _disconnectRequested = false;
   int _connectionGeneration = 0;
   Completer<void>? _disconnectCompleter;
+  Future<void> _lifecycleOperation = Future.value();
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
   final _connectionStatusController = StreamController<bool>.broadcast();
@@ -47,11 +48,13 @@ class SocketService {
     int port = 8050,
     bool useTLS = false,
   }) async {
-    await _startIsolate(
-      mode: 'host',
-      host: host,
-      port: port,
-      useTLS: useTLS,
+    await _runLifecycleOperation(
+      () => _startIsolate(
+        mode: 'host',
+        host: host,
+        port: port,
+        useTLS: useTLS,
+      ),
     );
   }
 
@@ -60,12 +63,34 @@ class SocketService {
     int port = 8050,
     bool useTLS = false,
   }) async {
-    await _startIsolate(
-      mode: 'client',
-      host: host,
-      port: port,
-      useTLS: useTLS,
+    await _runLifecycleOperation(
+      () => _startIsolate(
+        mode: 'client',
+        host: host,
+        port: port,
+        useTLS: useTLS,
+      ),
     );
+  }
+
+  Future<T> _runLifecycleOperation<T>(Future<T> Function() operation) async {
+    final previousOperation = _lifecycleOperation;
+    final operationCompleter = Completer<void>();
+    _lifecycleOperation = operationCompleter.future;
+
+    try {
+      try {
+        await previousOperation;
+      } catch (_) {
+        // A failed previous startup should not poison the next lifecycle action.
+      }
+
+      return await operation();
+    } finally {
+      if (!operationCompleter.isCompleted) {
+        operationCompleter.complete();
+      }
+    }
   }
 
   Future<String?> _copyCertToTemp(String fileName) async {
@@ -107,7 +132,7 @@ class SocketService {
     required int port,
     bool useTLS = false,
   }) async {
-    await stopConnectionGracefully();
+    await _stopConnectionGracefully();
     final generation = _connectionGeneration;
     _hostUsesTls = mode == 'host' && useTLS;
     _disconnectRequested = false;
@@ -266,6 +291,14 @@ class SocketService {
   }
 
   Future<void> stopConnectionGracefully({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    await _runLifecycleOperation(
+      () => _stopConnectionGracefully(timeout: timeout),
+    );
+  }
+
+  Future<void> _stopConnectionGracefully({
     Duration timeout = const Duration(seconds: 4),
   }) async {
     if (_receiverIsolate == null && _toIsolateSendPort == null) {
