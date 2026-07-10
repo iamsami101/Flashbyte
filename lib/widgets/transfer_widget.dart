@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:heroine/heroine.dart';
 import 'package:motor/motor.dart';
 
+enum TransferStatus { inProgress, paused, completed, cancelled }
+
 class TransferWidget extends StatelessWidget {
   final String fileName;
   final String fileSize;
@@ -15,6 +17,10 @@ class TransferWidget extends StatelessWidget {
   final String uuid;
 
   final ValueListenable<double>? value;
+  final TransferStatus status;
+  final VoidCallback? onPause;
+  final VoidCallback? onResume;
+  final VoidCallback? onCancel;
 
   const TransferWidget({
     super.key,
@@ -24,21 +30,37 @@ class TransferWidget extends StatelessWidget {
     this.value,
     required this.uuid,
     required this.filePath,
+    this.status = TransferStatus.inProgress,
+    this.onPause,
+    this.onResume,
+    this.onCancel,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isFinished = value == null;
-    final transferStateText = isFinished
-        ? (isReceived ? "received" : "sent")
-        : (isReceived ? "receiving" : "sending");
+    final isFinished = status == TransferStatus.completed;
+    final isCancelled = status == TransferStatus.cancelled;
+    final isPaused = status == TransferStatus.paused;
+    final isActive =
+        status == TransferStatus.inProgress || status == TransferStatus.paused;
+    final transferStateText = switch (status) {
+      TransferStatus.cancelled => "cancelled",
+      TransferStatus.paused => "paused",
+      TransferStatus.completed => isReceived ? "received" : "sent",
+      TransferStatus.inProgress => isReceived ? "receiving" : "sending",
+    };
     final primaryTextStyle =
         Theme.of(
           context,
         ).textTheme.labelSmall!.copyWith(
-          color: isFinished ? colorScheme.primary : Colors.white.withAlpha(100),
+          color: isCancelled
+              ? colorScheme.error
+              : isFinished
+              ? colorScheme.primary
+              : Colors.white.withAlpha(100),
         );
+    final progressValue = isCancelled ? 0.0 : (isFinished ? 1.0 : null);
 
     return Heroine(
       motion: Motion.bouncySpring(),
@@ -60,6 +82,7 @@ class TransferWidget extends StatelessWidget {
                     borderRadius: BorderRadiusGeometry.circular(13),
                   ),
                   onTap: () {
+                    if (isCancelled) return;
                     openFilePreview(context);
                   },
                   contentPadding: EdgeInsets.symmetric(
@@ -88,12 +111,16 @@ class TransferWidget extends StatelessWidget {
                         spacing: 5,
                         children: [
                           Icon(
-                            isReceived
+                            isCancelled
+                                ? Icons.block_rounded
+                                : isReceived
                                 ? Icons.arrow_downward_rounded
                                 : Icons.arrow_upward_rounded,
                             fontWeight: FontWeight.w900,
                             size: 15,
-                            color: isFinished
+                            color: isCancelled
+                                ? colorScheme.error
+                                : isFinished
                                 ? colorScheme.primary
                                 : Colors.white.withAlpha(100),
                           ),
@@ -124,8 +151,8 @@ class TransferWidget extends StatelessWidget {
                       //       )
                       //     :
                       ValueListenableBuilder(
-                        valueListenable: value == null
-                            ? ValueNotifier<double>(1.0)
+                        valueListenable: progressValue != null
+                            ? ValueNotifier<double>(progressValue)
                             : value!,
                         builder: (context, pvalue, child) => SingleMotionBuilder(
                           value: pvalue,
@@ -135,14 +162,28 @@ class TransferWidget extends StatelessWidget {
                             spacing: 10,
                             children: [
                               Text(
-                                "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
+                                isCancelled
+                                    ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
+                                    : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
                               ),
                               LinearProgressIndicator(
                                 value: value,
                                 year2023: false,
                                 stopIndicatorRadius: 1,
-                                stopIndicatorColor: colorScheme.secondary,
+                                color: isCancelled
+                                    ? colorScheme.error
+                                    : colorScheme.primary,
+                                stopIndicatorColor: isCancelled
+                                    ? colorScheme.error
+                                    : colorScheme.secondary,
                               ),
+                              if (isActive && isReceived)
+                                _TransferControls(
+                                  isPaused: isPaused,
+                                  onPause: onPause,
+                                  onResume: onResume,
+                                  onCancel: onCancel,
+                                ),
                             ],
                           ),
                         ),
@@ -169,6 +210,54 @@ class TransferWidget extends StatelessWidget {
           fileSize: fileSize,
         ),
       ),
+    );
+  }
+}
+
+class _TransferControls extends StatelessWidget {
+  const _TransferControls({
+    required this.isPaused,
+    required this.onPause,
+    required this.onResume,
+    required this.onCancel,
+  });
+
+  final bool isPaused;
+  final VoidCallback? onPause;
+  final VoidCallback? onResume;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      spacing: 8,
+      children: [
+        FilledButton.tonalIcon(
+          onPressed: isPaused ? onResume : onPause,
+          icon: Icon(
+            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+          ),
+          label: Text(isPaused ? "Continue" : "Pause"),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.centerLeft,
+          child: isPaused
+              ? FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.errorContainer,
+                    foregroundColor: colorScheme.onErrorContainer,
+                  ),
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text("Cancel"),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }

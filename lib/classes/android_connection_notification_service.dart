@@ -136,6 +136,7 @@ class AndroidConnectionNotificationService {
         break;
       case 'send_complete':
       case 'completed':
+      case 'transfer_cancelled':
       case 'error':
       case 'disconnect':
         _completeTransfer(message);

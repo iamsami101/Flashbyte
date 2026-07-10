@@ -266,6 +266,25 @@ class SocketService {
     });
   }
 
+  void pauseTransfer(String fileId) {
+    _sendTransferControl('pause_transfer', fileId);
+  }
+
+  void resumeTransfer(String fileId) {
+    _sendTransferControl('resume_transfer', fileId);
+  }
+
+  void cancelTransfer(String fileId) {
+    _sendTransferControl('cancel_transfer', fileId);
+  }
+
+  void _sendTransferControl(String command, String fileId) {
+    _toIsolateSendPort?.send({
+      'command': command,
+      'fileId': fileId,
+    });
+  }
+
   void replayTransferState() {
     for (final entry in _transferStartMessages.entries) {
       _messageStreamController.add(Map<String, dynamic>.from(entry.value));
@@ -374,7 +393,10 @@ class SocketService {
       } else if (status == 'progress' ||
           status == 'send_progress' ||
           status == 'completed' ||
-          status == 'send_complete') {
+          status == 'send_complete' ||
+          status == 'transfer_paused' ||
+          status == 'transfer_resumed' ||
+          status == 'transfer_cancelled') {
         _transferLatestMessages[fileId] = Map<String, dynamic>.from(message);
       }
     }

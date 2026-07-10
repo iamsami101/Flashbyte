@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flashbyte/widgets/transfer_widget.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -118,6 +119,27 @@ class _TcpChatPageState extends State<TcpChatPage> {
             replaceLastWidget();
             _fileProgress.value = 0;
 
+            setState(() {
+              isSharingInProgress = false;
+            });
+            break;
+          case 'transfer_paused':
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.paused,
+            );
+            break;
+          case 'transfer_resumed':
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.inProgress,
+            );
+            break;
+          case 'transfer_cancelled':
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.cancelled,
+            );
             setState(() {
               isSharingInProgress = false;
             });
@@ -678,7 +700,26 @@ class _TcpChatPageState extends State<TcpChatPage> {
         isReceived: lastWidget.isReceived,
         uuid: lastWidget.uuid,
         value: null,
+        status: TransferStatus.completed,
       ),
+    ];
+  }
+
+  void _updateTransferStatus(String? uuid, TransferStatus status) {
+    if (uuid == null) {
+      return;
+    }
+
+    final widgets = _fileTransferWidgets.value;
+    _fileTransferWidgets.value = [
+      for (final widget in widgets)
+        widget.uuid == uuid
+            ? _copyTransferWidget(
+                widget,
+                status: status,
+                value: status == TransferStatus.completed ? null : widget.value,
+              )
+            : widget,
     ];
   }
 
@@ -699,8 +740,31 @@ class _TcpChatPageState extends State<TcpChatPage> {
         value: _fileProgress,
         isReceived: isReceived,
         uuid: uuid,
+        status: TransferStatus.inProgress,
+        onPause: () => SocketService.instance.pauseTransfer(uuid),
+        onResume: () => SocketService.instance.resumeTransfer(uuid),
+        onCancel: () => SocketService.instance.cancelTransfer(uuid),
       ),
     ];
+  }
+
+  TransferWidget _copyTransferWidget(
+    TransferWidget widget, {
+    required TransferStatus status,
+    ValueListenable<double>? value,
+  }) {
+    return TransferWidget(
+      filePath: widget.filePath,
+      fileName: widget.fileName,
+      fileSize: widget.fileSize,
+      isReceived: widget.isReceived,
+      uuid: widget.uuid,
+      value: value,
+      status: status,
+      onPause: () => SocketService.instance.pauseTransfer(widget.uuid),
+      onResume: () => SocketService.instance.resumeTransfer(widget.uuid),
+      onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
+    );
   }
 
   String sizeConvert(double bytes) {

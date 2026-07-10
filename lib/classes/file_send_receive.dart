@@ -31,7 +31,27 @@ void fileReceiverIsolate(List<Object> args) {
   bool isProcessing = false;
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
+  bool localTransferCancelRequested = false;
   String? sendingFileId;
+  final pausedTransfers = <String>{};
+  final locallyCancelledTransfers = <String>{};
+  final remotelyCancelledTransfers = <String>{};
+
+  void handleRemoteTransferPaused(String fileId) {
+    pausedTransfers.add(fileId);
+    toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+  }
+
+  void handleRemoteTransferResumed(String fileId) {
+    pausedTransfers.remove(fileId);
+    toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+  }
+
+  void handleRemoteTransferCancelled(String fileId) {
+    remotelyCancelledTransfers.add(fileId);
+    pausedTransfers.remove(fileId);
+    toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+  }
 
   Future<void> processCommandQueue() async {
     if (isProcessing || commandQueue.isEmpty) return;
@@ -135,8 +155,11 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested || localTransferCancelRequested,
                   localPeerInfo: localPeerInfo,
+                  onRemoteTransferPaused: handleRemoteTransferPaused,
+                  onRemoteTransferResumed: handleRemoteTransferResumed,
+                  onRemoteTransferCancelled: handleRemoteTransferCancelled,
                 );
               },
               onError: (error) {
@@ -189,8 +212,11 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested || localTransferCancelRequested,
                   localPeerInfo: localPeerInfo,
+                  onRemoteTransferPaused: handleRemoteTransferPaused,
+                  onRemoteTransferResumed: handleRemoteTransferResumed,
+                  onRemoteTransferCancelled: handleRemoteTransferCancelled,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -223,8 +249,11 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested || localTransferCancelRequested,
                   localPeerInfo: localPeerInfo,
+                  onRemoteTransferPaused: handleRemoteTransferPaused,
+                  onRemoteTransferResumed: handleRemoteTransferResumed,
+                  onRemoteTransferCancelled: handleRemoteTransferCancelled,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -266,11 +295,58 @@ void fileReceiverIsolate(List<Object> args) {
               clientSocket!,
               toUiSendPort,
               shouldCancel: () => localDisconnectRequested,
+              shouldPauseTransfer: (fileId) => pausedTransfers.contains(fileId),
+              shouldCancelTransfer: (fileId) =>
+                  locallyCancelledTransfers.contains(fileId) ||
+                  remotelyCancelledTransfers.contains(fileId),
             );
+            if (sendingFileId != null) {
+              pausedTransfers.remove(sendingFileId);
+              locallyCancelledTransfers.remove(sendingFileId);
+              remotelyCancelledTransfers.remove(sendingFileId);
+            }
           } on _TransferCancelled {
             sendingFileId = null;
           } finally {
             isSendingFile = false;
+          }
+        } else if (command['command'] == 'pause_transfer') {
+          final fileId = command['fileId'] as String?;
+          if (fileId != null) {
+            pausedTransfers.add(fileId);
+            await _sendTransferControlFrame(clientSocket, {
+              'type': 'file_transfer_pause',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+          }
+        } else if (command['command'] == 'resume_transfer') {
+          final fileId = command['fileId'] as String?;
+          if (fileId != null) {
+            pausedTransfers.remove(fileId);
+            await _sendTransferControlFrame(clientSocket, {
+              'type': 'file_transfer_resume',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+          }
+        } else if (command['command'] == 'cancel_transfer') {
+          final fileId = command['fileId'] as String?;
+          if (fileId != null) {
+            locallyCancelledTransfers.add(fileId);
+            localTransferCancelRequested = true;
+            pausedTransfers.remove(fileId);
+            await _sendTransferControlFrame(clientSocket, {
+              'type': 'file_transfer_cancel',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({
+              'status': 'transfer_cancelled',
+              'fileId': fileId,
+            });
+            try {
+              clientSocket?.destroy();
+            } catch (_) {}
           }
         } else if (command['command'] == "disconnect") {
           localDisconnectRequested = true;
@@ -311,7 +387,7 @@ void fileReceiverIsolate(List<Object> args) {
     isProcessing = false;
   }
 
-  fromUiReceivePort.listen((message) {
+  fromUiReceivePort.listen((message) async {
     final command = message as Map<String, dynamic>;
     if (command['command'] == 'disconnect') {
       localDisconnectRequested = true;
@@ -320,6 +396,44 @@ void fileReceiverIsolate(List<Object> args) {
           clientSocket?.destroy();
           serverSocket?.close();
         } catch (_) {}
+      }
+    } else if (command['command'] == 'pause_transfer') {
+      final fileId = command['fileId'] as String?;
+      if (fileId != null) {
+        pausedTransfers.add(fileId);
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_transfer_pause',
+          'fileId': fileId,
+        });
+        toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+        return;
+      }
+    } else if (command['command'] == 'resume_transfer') {
+      final fileId = command['fileId'] as String?;
+      if (fileId != null) {
+        pausedTransfers.remove(fileId);
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_transfer_resume',
+          'fileId': fileId,
+        });
+        toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+        return;
+      }
+    } else if (command['command'] == 'cancel_transfer') {
+      final fileId = command['fileId'] as String?;
+      if (fileId != null) {
+        locallyCancelledTransfers.add(fileId);
+        localTransferCancelRequested = true;
+        pausedTransfers.remove(fileId);
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_transfer_cancel',
+          'fileId': fileId,
+        });
+        toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+        try {
+          clientSocket?.destroy();
+        } catch (_) {}
+        return;
       }
     }
     commandQueue.add(command);
@@ -356,6 +470,8 @@ Future<String?> _sendFileCommand(
   dynamic clientSocket,
   SendPort toUiSendPort, {
   required bool Function() shouldCancel,
+  required bool Function(String fileId) shouldPauseTransfer,
+  required bool Function(String fileId) shouldCancelTransfer,
 }) async {
   final filePath = command['filePath'] as String;
   File? fileToSend;
@@ -414,10 +530,13 @@ Future<String?> _sendFileCommand(
     });
 
     await _sendFileWithWindowedReader(
+      fileId: fileHeader['uuid'] as String,
       file: fileToSend,
       fileSize: fileHeader['size'] as int,
       clientSocket: clientSocket,
       shouldCancel: shouldCancel,
+      shouldPauseTransfer: shouldPauseTransfer,
+      shouldCancelTransfer: shouldCancelTransfer,
     );
     await clientSocket.flush();
 
@@ -438,7 +557,16 @@ Future<String?> _sendFileCommand(
       }
       cachedFile?.delete();
     } on Exception catch (_) {}
-    if (e is _TransferCancelled || shouldCancel()) {
+    if (e is _TransferCancelled ||
+        shouldCancel() ||
+        (fileHeader != null &&
+            shouldCancelTransfer(fileHeader['uuid'] as String))) {
+      if (fileHeader != null) {
+        toUiSendPort.send({
+          'status': 'transfer_cancelled',
+          'fileId': fileHeader['uuid'],
+        });
+      }
       return null;
     }
     toUiSendPort.send({
@@ -451,10 +579,13 @@ Future<String?> _sendFileCommand(
 }
 
 Future<void> _sendFileWithWindowedReader({
+  required String fileId,
   required File file,
   required int fileSize,
   required dynamic clientSocket,
   required bool Function() shouldCancel,
+  required bool Function(String fileId) shouldPauseTransfer,
+  required bool Function(String fileId) shouldCancelTransfer,
 }) async {
   const int windowSize = 65536;
   if (fileSize <= 0) {
@@ -473,7 +604,12 @@ Future<void> _sendFileWithWindowedReader({
     final lastWindowStart = max(0, fileSize - effectiveWindowSize);
 
     while (currentPosition < fileSize) {
-      if (shouldCancel()) {
+      while (!shouldCancel() &&
+          !shouldCancelTransfer(fileId) &&
+          shouldPauseTransfer(fileId)) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+      if (shouldCancel() || shouldCancelTransfer(fileId)) {
         throw const _TransferCancelled();
       }
       final windowStart = min(currentPosition, lastWindowStart);
@@ -490,7 +626,7 @@ Future<void> _sendFileWithWindowedReader({
 
       clientSocket.add(actualChunk);
       await clientSocket.flush();
-      if (shouldCancel()) {
+      if (shouldCancel() || shouldCancelTransfer(fileId)) {
         throw const _TransferCancelled();
       }
       currentPosition += bytesToSend;
@@ -506,6 +642,24 @@ void _configureSocketForTransfer(dynamic socket) {
   } catch (_) {}
 }
 
+Future<void> _sendTransferControlFrame(
+  dynamic socket,
+  Map<String, dynamic> payload,
+) async {
+  if (socket == null) {
+    return;
+  }
+  try {
+    final payloadBytes = utf8.encode(jsonEncode(payload));
+    final header = ByteData(8);
+    header.setUint32(0, payloadBytes.length, Endian.big);
+    header.setUint32(4, 0, Endian.big);
+    socket.add(header.buffer.asUint8List());
+    socket.add(payloadBytes);
+    await socket.flush();
+  } catch (_) {}
+}
+
 void _handleSocketConnection(
   dynamic socket,
   SendPort toUiSendPort, {
@@ -513,6 +667,9 @@ void _handleSocketConnection(
   String? configuredDownloadDirectory,
   bool Function()? shouldSuppressConnectionErrors,
   void Function(String fileId)? onTransferAcknowledged,
+  void Function(String fileId)? onRemoteTransferPaused,
+  void Function(String fileId)? onRemoteTransferResumed,
+  void Function(String fileId)? onRemoteTransferCancelled,
   required Map<String, dynamic> localPeerInfo,
 }) {
   final readBuffer = _SocketReadBuffer();
@@ -738,6 +895,28 @@ void _handleSocketConnection(
             'fileId': fileId,
             'progress': progress.clamp(0.0, 1.0),
           });
+        }
+        return true;
+      case 'file_transfer_pause':
+        final fileId = headerJson['fileId'] as String?;
+        if (fileId != null) {
+          onRemoteTransferPaused?.call(fileId);
+        }
+        return true;
+      case 'file_transfer_resume':
+        final fileId = headerJson['fileId'] as String?;
+        if (fileId != null) {
+          onRemoteTransferResumed?.call(fileId);
+        }
+        return true;
+      case 'file_transfer_cancel':
+        final fileId = headerJson['fileId'] as String?;
+        if (fileId != null) {
+          onRemoteTransferCancelled?.call(fileId);
+          await discardPartialOutput();
+          gracefulDisconnect = true;
+          closeSocket();
+          return false;
         }
         return true;
       case 'disconnect':
