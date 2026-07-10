@@ -1137,7 +1137,19 @@ void _handleSocketConnection(
                 final cancelledFileId =
                     (activeFileHeader?['uuid'] ?? headerJson['fileId'])
                         as String?;
+                final shouldReportCancellation =
+                    wasCancelled && !isDiscardingCancelledFile;
+                if (wasCancelled && !isDiscardingCancelledFile) {
+                  isDiscardingCancelledFile = true;
+                  await discardActiveOutputForCancel();
+                }
                 if (cancelledFileId != null) {
+                  if (shouldReportCancellation) {
+                    toUiSendPort.send({
+                      'status': 'transfer_cancelled',
+                      'fileId': cancelledFileId,
+                    });
+                  }
                   toUiSendPort.send({
                     'status': 'transfer_cancel_ready',
                     'fileId': cancelledFileId,

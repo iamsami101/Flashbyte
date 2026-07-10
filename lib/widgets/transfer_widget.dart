@@ -177,7 +177,7 @@ class TransferWidget extends StatelessWidget {
                                     ? colorScheme.error
                                     : colorScheme.secondary,
                               ),
-                              if (isActive && isReceived)
+                              if (isActive)
                                 _TransferControls(
                                   isPaused: isPaused,
                                   onPause: onPause,
