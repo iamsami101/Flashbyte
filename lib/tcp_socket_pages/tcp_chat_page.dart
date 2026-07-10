@@ -150,6 +150,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             setState(() {
               isSharingInProgress = false;
             });
+            isDisconnected.value = true;
             break;
 
           case 'error':

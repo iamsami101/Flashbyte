@@ -31,6 +31,7 @@ void fileReceiverIsolate(List<Object> args) {
   bool isProcessing = false;
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
+  bool transferCancelClosedConnection = false;
   String? sendingFileId;
   final pausedTransfers = <String>{};
   final locallyCancelledTransfers = <String>{};
@@ -154,7 +155,8 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested ||
+                      transferCancelClosedConnection,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -213,7 +215,8 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested ||
+                      transferCancelClosedConnection,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -252,7 +255,8 @@ void fileReceiverIsolate(List<Object> args) {
                   configuredDownloadDirectory:
                       command['downloadDirectory'] as String?,
                   shouldSuppressConnectionErrors: () =>
-                      localDisconnectRequested,
+                      localDisconnectRequested ||
+                      transferCancelClosedConnection,
                   shouldCancelReceivingFile: (fileId) =>
                       locallyCancelledTransfers.contains(fileId),
                   localPeerInfo: localPeerInfo,
@@ -344,10 +348,14 @@ void fileReceiverIsolate(List<Object> args) {
               'type': 'file_transfer_cancel',
               'fileId': fileId,
             });
+            transferCancelClosedConnection = true;
             toUiSendPort.send({
               'status': 'transfer_cancelled',
               'fileId': fileId,
             });
+            try {
+              clientSocket?.destroy();
+            } catch (_) {}
           }
         } else if (command['command'] == "disconnect") {
           localDisconnectRequested = true;
@@ -429,7 +437,11 @@ void fileReceiverIsolate(List<Object> args) {
           'type': 'file_transfer_cancel',
           'fileId': fileId,
         });
+        transferCancelClosedConnection = true;
         toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+        try {
+          clientSocket?.destroy();
+        } catch (_) {}
         return;
       }
     }
@@ -567,6 +579,9 @@ Future<String?> _sendFileCommand(
           'fileId': fileHeader['uuid'],
           'cancelled': true,
         });
+        try {
+          clientSocket?.destroy();
+        } catch (_) {}
         toUiSendPort.send({
           'status': 'transfer_cancelled',
           'fileId': fileHeader['uuid'],
