@@ -18,6 +18,7 @@ class AndroidConnectionNotificationService {
   static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
   static const String _foregroundNotificationTitle = 'Flashbyte';
   static const String _foregroundNotificationText = 'Connection established';
+  static const String _notificationIcon = 'notification_icon';
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -42,7 +43,7 @@ class AndroidConnectionNotificationService {
 
     await _localNotifications.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings(_notificationIcon),
         iOS: DarwinInitializationSettings(),
         macOS: DarwinInitializationSettings(),
       ),
@@ -95,6 +96,7 @@ class AndroidConnectionNotificationService {
             channelDescription:
                 'Shows when Flashbyte has an active TCP connection.',
             category: AndroidNotificationCategory.service,
+            icon: _notificationIcon,
             importance: Importance.low,
             priority: Priority.low,
             ongoing: true,
@@ -263,6 +265,7 @@ class AndroidConnectionNotificationService {
             _progressChannelName,
             channelDescription:
                 'Shows active Flashbyte file transfer progress.',
+            icon: _notificationIcon,
             importance: Importance.low,
             priority: Priority.low,
             onlyAlertOnce: true,
