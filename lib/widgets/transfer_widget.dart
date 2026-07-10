@@ -18,6 +18,7 @@ class TransferWidget extends StatelessWidget {
 
   final ValueListenable<double>? value;
   final TransferStatus status;
+  final bool canResume;
   final VoidCallback? onPause;
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
@@ -31,6 +32,7 @@ class TransferWidget extends StatelessWidget {
     required this.uuid,
     required this.filePath,
     this.status = TransferStatus.inProgress,
+    this.canResume = true,
     this.onPause,
     this.onResume,
     this.onCancel,
@@ -180,6 +182,7 @@ class TransferWidget extends StatelessWidget {
                               if (isActive)
                                 _TransferControls(
                                   isPaused: isPaused,
+                                  canResume: canResume,
                                   onPause: onPause,
                                   onResume: onResume,
                                   onCancel: onCancel,
@@ -217,12 +220,14 @@ class TransferWidget extends StatelessWidget {
 class _TransferControls extends StatelessWidget {
   const _TransferControls({
     required this.isPaused,
+    required this.canResume,
     required this.onPause,
     required this.onResume,
     required this.onCancel,
   });
 
   final bool isPaused;
+  final bool canResume;
   final VoidCallback? onPause;
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
@@ -235,11 +240,21 @@ class _TransferControls extends StatelessWidget {
       spacing: 8,
       children: [
         FilledButton.tonalIcon(
-          onPressed: isPaused ? onResume : onPause,
+          onPressed: isPaused && !canResume
+              ? null
+              : isPaused
+              ? onResume
+              : onPause,
           icon: Icon(
             isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
           ),
-          label: Text(isPaused ? "Continue" : "Pause"),
+          label: Text(
+            isPaused && !canResume
+                ? "Paused by other device"
+                : isPaused
+                ? "Continue"
+                : "Pause",
+          ),
         ),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),

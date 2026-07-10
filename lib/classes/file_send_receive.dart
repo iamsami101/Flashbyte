@@ -32,23 +32,47 @@ void fileReceiverIsolate(List<Object> args) {
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
   String? sendingFileId;
-  final pausedTransfers = <String>{};
+  final locallyPausedTransfers = <String>{};
+  final remotelyPausedTransfers = <String>{};
   final locallyCancelledTransfers = <String>{};
   final remotelyCancelledTransfers = <String>{};
 
+  bool isTransferPaused(String fileId) {
+    return locallyPausedTransfers.contains(fileId) ||
+        remotelyPausedTransfers.contains(fileId);
+  }
+
+  void sendTransferPausedState(String fileId) {
+    toUiSendPort.send({
+      'status': 'transfer_paused',
+      'fileId': fileId,
+      'canResume': locallyPausedTransfers.contains(fileId),
+    });
+  }
+
+  void sendTransferResumeState(String fileId) {
+    if (isTransferPaused(fileId)) {
+      sendTransferPausedState(fileId);
+      return;
+    }
+
+    toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+  }
+
   void handleRemoteTransferPaused(String fileId) {
-    pausedTransfers.add(fileId);
-    toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+    remotelyPausedTransfers.add(fileId);
+    sendTransferPausedState(fileId);
   }
 
   void handleRemoteTransferResumed(String fileId) {
-    pausedTransfers.remove(fileId);
-    toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+    remotelyPausedTransfers.remove(fileId);
+    sendTransferResumeState(fileId);
   }
 
   void handleRemoteTransferCancelled(String fileId) {
     remotelyCancelledTransfers.add(fileId);
-    pausedTransfers.remove(fileId);
+    locallyPausedTransfers.remove(fileId);
+    remotelyPausedTransfers.remove(fileId);
     toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
   }
 
@@ -300,13 +324,14 @@ void fileReceiverIsolate(List<Object> args) {
               clientSocket!,
               toUiSendPort,
               shouldCancel: () => localDisconnectRequested,
-              shouldPauseTransfer: (fileId) => pausedTransfers.contains(fileId),
+              shouldPauseTransfer: isTransferPaused,
               shouldCancelTransfer: (fileId) =>
                   locallyCancelledTransfers.contains(fileId) ||
                   remotelyCancelledTransfers.contains(fileId),
             );
             if (sendingFileId != null) {
-              pausedTransfers.remove(sendingFileId);
+              locallyPausedTransfers.remove(sendingFileId);
+              remotelyPausedTransfers.remove(sendingFileId);
               locallyCancelledTransfers.remove(sendingFileId);
               remotelyCancelledTransfers.remove(sendingFileId);
             }
@@ -318,28 +343,29 @@ void fileReceiverIsolate(List<Object> args) {
         } else if (command['command'] == 'pause_transfer') {
           final fileId = command['fileId'] as String?;
           if (fileId != null) {
-            pausedTransfers.add(fileId);
+            locallyPausedTransfers.add(fileId);
             await _sendTransferControlFrame(clientSocket, {
               'type': 'file_transfer_pause',
               'fileId': fileId,
             });
-            toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+            sendTransferPausedState(fileId);
           }
         } else if (command['command'] == 'resume_transfer') {
           final fileId = command['fileId'] as String?;
           if (fileId != null) {
-            pausedTransfers.remove(fileId);
+            locallyPausedTransfers.remove(fileId);
             await _sendTransferControlFrame(clientSocket, {
               'type': 'file_transfer_resume',
               'fileId': fileId,
             });
-            toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+            sendTransferResumeState(fileId);
           }
         } else if (command['command'] == 'cancel_transfer') {
           final fileId = command['fileId'] as String?;
           if (fileId != null) {
             locallyCancelledTransfers.add(fileId);
-            pausedTransfers.remove(fileId);
+            locallyPausedTransfers.remove(fileId);
+            remotelyPausedTransfers.remove(fileId);
             await _sendTransferControlFrame(clientSocket, {
               'type': 'file_transfer_cancel',
               'fileId': fileId,
@@ -401,30 +427,31 @@ void fileReceiverIsolate(List<Object> args) {
     } else if (command['command'] == 'pause_transfer') {
       final fileId = command['fileId'] as String?;
       if (fileId != null) {
-        pausedTransfers.add(fileId);
+        locallyPausedTransfers.add(fileId);
         await _sendTransferControlFrame(clientSocket, {
           'type': 'file_transfer_pause',
           'fileId': fileId,
         });
-        toUiSendPort.send({'status': 'transfer_paused', 'fileId': fileId});
+        sendTransferPausedState(fileId);
         return;
       }
     } else if (command['command'] == 'resume_transfer') {
       final fileId = command['fileId'] as String?;
       if (fileId != null) {
-        pausedTransfers.remove(fileId);
+        locallyPausedTransfers.remove(fileId);
         await _sendTransferControlFrame(clientSocket, {
           'type': 'file_transfer_resume',
           'fileId': fileId,
         });
-        toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
+        sendTransferResumeState(fileId);
         return;
       }
     } else if (command['command'] == 'cancel_transfer') {
       final fileId = command['fileId'] as String?;
       if (fileId != null) {
         locallyCancelledTransfers.add(fileId);
-        pausedTransfers.remove(fileId);
+        locallyPausedTransfers.remove(fileId);
+        remotelyPausedTransfers.remove(fileId);
         await _sendTransferControlFrame(clientSocket, {
           'type': 'file_transfer_cancel',
           'fileId': fileId,

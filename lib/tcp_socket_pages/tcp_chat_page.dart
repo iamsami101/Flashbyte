@@ -134,6 +134,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _updateTransferStatus(
               message['fileId'] as String?,
               TransferStatus.paused,
+              canResume: message['canResume'] as bool? ?? true,
             );
             break;
           case 'transfer_resumed':
@@ -714,12 +715,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
                 uuid: widget.uuid,
                 value: null,
                 status: TransferStatus.completed,
+                canResume: true,
               )
             : widget,
     ];
   }
 
-  void _updateTransferStatus(String? uuid, TransferStatus status) {
+  void _updateTransferStatus(
+    String? uuid,
+    TransferStatus status, {
+    bool canResume = true,
+  }) {
     if (uuid == null) {
       return;
     }
@@ -731,6 +737,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             ? _copyTransferWidget(
                 widget,
                 status: status,
+                canResume: canResume,
                 value: status == TransferStatus.completed ? null : widget.value,
               )
             : widget,
@@ -757,6 +764,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
         isReceived: isReceived,
         uuid: uuid,
         status: TransferStatus.inProgress,
+        canResume: true,
         onPause: () => SocketService.instance.pauseTransfer(uuid),
         onResume: () => SocketService.instance.resumeTransfer(uuid),
         onCancel: () => SocketService.instance.cancelTransfer(uuid),
@@ -782,6 +790,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   TransferWidget _copyTransferWidget(
     TransferWidget widget, {
     required TransferStatus status,
+    bool canResume = true,
     ValueListenable<double>? value,
   }) {
     return TransferWidget(
@@ -792,6 +801,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
       uuid: widget.uuid,
       value: value,
       status: status,
+      canResume: canResume,
       onPause: () => SocketService.instance.pauseTransfer(widget.uuid),
       onResume: () => SocketService.instance.resumeTransfer(widget.uuid),
       onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
