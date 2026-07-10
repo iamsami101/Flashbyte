@@ -237,9 +237,12 @@ void fileReceiverIsolate(List<Object> args) {
               toUiSendPort.send({
                 'status': 'error',
                 'fatal': 'true',
-                'message': useTLS
-                    ? 'This device has TLS enabled, but the other device appears to have TLS disabled or an incompatible certificate. Disable TLS on this device, or enable TLS on the other device, then try again.\n\nDetails: ${e.toString()}'
-                    : 'This device has TLS disabled, but the other device appears to require TLS. Enable TLS on this device, or disable TLS on the other device, then try again.\n\nDetails: ${e.toString()}',
+                'message': _clientConnectErrorMessage(
+                  error: e,
+                  host: command['host'] as String?,
+                  port: command['port'] as int?,
+                  useTLS: useTLS,
+                ),
               });
             }
           }
@@ -326,6 +329,26 @@ void fileReceiverIsolate(List<Object> args) {
 
 class _TransferCancelled implements Exception {
   const _TransferCancelled();
+}
+
+String _clientConnectErrorMessage({
+  required Object error,
+  required String? host,
+  required int? port,
+  required bool useTLS,
+}) {
+  final details = error.toString();
+  final endpoint = host == null || port == null
+      ? 'the receiver'
+      : '$host:$port';
+
+  if (error is SocketException) {
+    return 'Could not reach $endpoint. Check that the IP address and port are correct, both devices are on the same network, and the receiver server is running.\n\nDetails: $details';
+  }
+
+  return useTLS
+      ? 'This device has TLS enabled, but the other device appears to have TLS disabled or an incompatible certificate. Disable TLS on this device, or enable TLS on the other device, then try again.\n\nDetails: $details'
+      : 'This device has TLS disabled, but the other device appears to require TLS. Enable TLS on this device, or disable TLS on the other device, then try again.\n\nDetails: $details';
 }
 
 Future<String?> _sendFileCommand(
