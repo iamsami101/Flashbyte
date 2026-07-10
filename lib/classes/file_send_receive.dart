@@ -566,6 +566,7 @@ Future<String?> _sendFileCommand(
           'status': 'transfer_cancelled',
           'fileId': fileHeader['uuid'],
         });
+        return fileHeader['uuid'] as String;
       }
       return null;
     }
@@ -748,6 +749,23 @@ void _handleSocketConnection(
 
     activeOutputTarget = null;
     resetFrameState();
+  }
+
+  Future<void> discardActiveOutputForCancel() async {
+    final target = activeOutputTarget;
+    await cleanupOpenFile();
+
+    if (target != null) {
+      try {
+        final file = File(target.filePath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+
+    activeOutputTarget = null;
+    fileSink = null;
   }
 
   void sendControlFrame(Map<String, dynamic> payload) {
@@ -940,7 +958,7 @@ void _handleSocketConnection(
           onRemoteTransferCancelled?.call(fileId);
           if (activeFileHeader?['uuid'] == fileId) {
             isDiscardingCancelledFile = true;
-            await discardPartialOutput();
+            await discardActiveOutputForCancel();
           }
         }
         return true;
@@ -1073,18 +1091,7 @@ void _handleSocketConnection(
           (shouldCancelReceivingFile?.call(activeFileId) ?? false) &&
           !isDiscardingCancelledFile) {
         isDiscardingCancelledFile = true;
-        await cleanupOpenFile();
-        try {
-          final target = activeOutputTarget;
-          if (target != null) {
-            final file = File(target.filePath);
-            if (await file.exists()) {
-              await file.delete();
-            }
-          }
-        } catch (_) {}
-        activeOutputTarget = null;
-        fileSink = null;
+        await discardActiveOutputForCancel();
       }
 
       if (isChunkedFileFrame) {

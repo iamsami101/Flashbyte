@@ -90,7 +90,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'completed':
-            replaceLastWidget(
+            replaceTransferWidget(
+              uuid: message['fileId'] as String?,
               filePath: message['filePath'] as String?,
               fileName: message['fileName'] as String?,
             );
@@ -122,7 +123,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'send_complete':
-            replaceLastWidget();
+            replaceTransferWidget(uuid: message['fileId'] as String?);
             _disposeTransferProgress(message['fileId'] as String?);
 
             setState(() {
@@ -692,26 +693,27 @@ class _TcpChatPageState extends State<TcpChatPage> {
     }
   }
 
-  void replaceLastWidget({
+  void replaceTransferWidget({
+    required String? uuid,
     String? filePath,
     String? fileName,
   }) {
-    final lastWidget = _fileTransferWidgets.value.last;
-
-    final List<TransferWidget> tempList = List.from(_fileTransferWidgets.value);
-    tempList.removeLast();
-
+    if (uuid == null) {
+      return;
+    }
     _fileTransferWidgets.value = [
-      ...tempList,
-      TransferWidget(
-        filePath: filePath ?? lastWidget.filePath,
-        fileName: fileName ?? lastWidget.fileName,
-        fileSize: lastWidget.fileSize,
-        isReceived: lastWidget.isReceived,
-        uuid: lastWidget.uuid,
-        value: null,
-        status: TransferStatus.completed,
-      ),
+      for (final widget in _fileTransferWidgets.value)
+        widget.uuid == uuid
+            ? TransferWidget(
+                filePath: filePath ?? widget.filePath,
+                fileName: fileName ?? widget.fileName,
+                fileSize: widget.fileSize,
+                isReceived: widget.isReceived,
+                uuid: widget.uuid,
+                value: null,
+                status: TransferStatus.completed,
+              )
+            : widget,
     ];
   }
 
