@@ -1415,6 +1415,16 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     required String message,
   }) async {
     if (!mounted) return;
+    final colorScheme = Theme.of(context).colorScheme;
+    final detailsSeparator = RegExp(r'\n\nDetails:\s*');
+    final detailsMatch = detailsSeparator.firstMatch(message);
+    final visibleMessage = detailsMatch == null
+        ? message
+        : message.substring(0, detailsMatch.start).trim();
+    final errorDetails = detailsMatch == null
+        ? null
+        : message.substring(detailsMatch.end).trim();
+
     await showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -1425,7 +1435,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           children: [
             Icon(
               Icons.error_rounded,
-              color: Theme.of(context).colorScheme.onErrorContainer,
+              color: colorScheme.onErrorContainer,
             ),
             Text(title),
           ],
@@ -1435,7 +1445,27 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           mainAxisSize: MainAxisSize.min,
           spacing: 10,
           children: [
-            Text(message),
+            Text(visibleMessage),
+            if (errorDetails != null && errorDetails.isNotEmpty)
+              Card(
+                margin: EdgeInsets.zero,
+                color: colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        errorDetails,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               child: Card(
