@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:heroine/heroine.dart';
 import 'package:motor/motor.dart';
 
-enum TransferStatus { inProgress, paused, completed, cancelled }
+enum TransferStatus { pending, inProgress, paused, completed, cancelled }
 
 class TransferWidget extends StatelessWidget {
   final String fileName;
@@ -22,6 +22,8 @@ class TransferWidget extends StatelessWidget {
   final VoidCallback? onPause;
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
 
   const TransferWidget({
     super.key,
@@ -36,6 +38,8 @@ class TransferWidget extends StatelessWidget {
     this.onPause,
     this.onResume,
     this.onCancel,
+    this.onAccept,
+    this.onDecline,
   });
 
   @override
@@ -44,9 +48,11 @@ class TransferWidget extends StatelessWidget {
     final isFinished = status == TransferStatus.completed;
     final isCancelled = status == TransferStatus.cancelled;
     final isPaused = status == TransferStatus.paused;
+    final isPending = status == TransferStatus.pending;
     final isActive =
         status == TransferStatus.inProgress || status == TransferStatus.paused;
     final transferStateText = switch (status) {
+      TransferStatus.pending => isReceived ? "request" : "waiting",
       TransferStatus.cancelled => "cancelled",
       TransferStatus.paused => "paused",
       TransferStatus.completed => isReceived ? "received" : "sent",
@@ -84,7 +90,7 @@ class TransferWidget extends StatelessWidget {
                     borderRadius: BorderRadiusGeometry.circular(13),
                   ),
                   onTap: () {
-                    if (isCancelled) return;
+                    if (isCancelled || isPending) return;
                     openFilePreview(context);
                   },
                   contentPadding: EdgeInsets.symmetric(
@@ -166,6 +172,8 @@ class TransferWidget extends StatelessWidget {
                               Text(
                                 isCancelled
                                     ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
+                                    : isPending
+                                    ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
                                     : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
                               ),
                               LinearProgressIndicator(
@@ -186,6 +194,12 @@ class TransferWidget extends StatelessWidget {
                                   onPause: onPause,
                                   onResume: onResume,
                                   onCancel: onCancel,
+                                ),
+                              if (isPending)
+                                _TransferAcceptanceControls(
+                                  isReceived: isReceived,
+                                  onAccept: onAccept,
+                                  onDecline: onDecline,
                                 ),
                             ],
                           ),
@@ -288,6 +302,69 @@ class _TransferControls extends StatelessWidget {
                   )
                 : const SizedBox(width: 0, height: 24),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransferAcceptanceControls extends StatelessWidget {
+  const _TransferAcceptanceControls({
+    required this.isReceived,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final bool isReceived;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (!isReceived) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          spacing: 10,
+          children: [
+            SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            Expanded(
+              child: Text(
+                "Waiting for receiver to accept",
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      spacing: 8,
+      children: [
+        FilledButton.icon(
+          onPressed: onAccept,
+          icon: const Icon(Icons.check_rounded),
+          label: const Text("Accept"),
+        ),
+        FilledButton.tonalIcon(
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.errorContainer,
+            foregroundColor: colorScheme.onErrorContainer,
+          ),
+          onPressed: onDecline,
+          icon: const Icon(Icons.close_rounded),
+          label: const Text("Decline"),
         ),
       ],
     );

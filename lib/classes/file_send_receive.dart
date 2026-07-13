@@ -36,6 +36,8 @@ void fileReceiverIsolate(List<Object> args) {
   final remotelyPausedTransfers = <String, String>{};
   final locallyCancelledTransfers = <String>{};
   final remotelyCancelledTransfers = <String>{};
+  final acceptedTransfers = <String>{};
+  final declinedTransfers = <String>{};
 
   bool isTransferPaused(String fileId) {
     return locallyPausedTransfers.containsKey(fileId) ||
@@ -79,6 +81,20 @@ void fileReceiverIsolate(List<Object> args) {
     locallyPausedTransfers.remove(fileId);
     remotelyPausedTransfers.remove(fileId);
     toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+  }
+
+  void handleRemoteTransferAccepted(String fileId) {
+    acceptedTransfers.add(fileId);
+    declinedTransfers.remove(fileId);
+    toUiSendPort.send({'status': 'transfer_accepted', 'fileId': fileId});
+  }
+
+  void handleRemoteTransferDeclined(String fileId) {
+    declinedTransfers.add(fileId);
+    acceptedTransfers.remove(fileId);
+    remotelyCancelledTransfers.add(fileId);
+    toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+    toUiSendPort.send({'status': 'transfer_cancel_ready', 'fileId': fileId});
   }
 
   String transferControlType(String role, String action) {
@@ -195,6 +211,8 @@ void fileReceiverIsolate(List<Object> args) {
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
                   onRemoteTransferCancelled: handleRemoteTransferCancelled,
+                  onRemoteTransferAccepted: handleRemoteTransferAccepted,
+                  onRemoteTransferDeclined: handleRemoteTransferDeclined,
                 );
               },
               onError: (error) {
@@ -254,6 +272,8 @@ void fileReceiverIsolate(List<Object> args) {
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
                   onRemoteTransferCancelled: handleRemoteTransferCancelled,
+                  onRemoteTransferAccepted: handleRemoteTransferAccepted,
+                  onRemoteTransferDeclined: handleRemoteTransferDeclined,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -293,6 +313,8 @@ void fileReceiverIsolate(List<Object> args) {
                   onRemoteTransferPaused: handleRemoteTransferPaused,
                   onRemoteTransferResumed: handleRemoteTransferResumed,
                   onRemoteTransferCancelled: handleRemoteTransferCancelled,
+                  onRemoteTransferAccepted: handleRemoteTransferAccepted,
+                  onRemoteTransferDeclined: handleRemoteTransferDeclined,
                   onTransferAcknowledged: (fileId) {
                     if (sendingFileId == fileId) {
                       sendingFileId = null;
@@ -338,6 +360,10 @@ void fileReceiverIsolate(List<Object> args) {
               shouldCancelTransfer: (fileId) =>
                   locallyCancelledTransfers.contains(fileId) ||
                   remotelyCancelledTransfers.contains(fileId),
+              shouldAcceptTransfer: (fileId) =>
+                  acceptedTransfers.contains(fileId),
+              shouldDeclineTransfer: (fileId) =>
+                  declinedTransfers.contains(fileId),
               onPaused: (fileId) async {
                 final role = locallyPausedTransfers[fileId];
                 if (role == null) {
@@ -354,6 +380,8 @@ void fileReceiverIsolate(List<Object> args) {
               remotelyPausedTransfers.remove(sendingFileId);
               locallyCancelledTransfers.remove(sendingFileId);
               remotelyCancelledTransfers.remove(sendingFileId);
+              acceptedTransfers.remove(sendingFileId);
+              declinedTransfers.remove(sendingFileId);
             }
           } on _TransferCancelled {
             sendingFileId = null;
@@ -394,6 +422,38 @@ void fileReceiverIsolate(List<Object> args) {
             });
             toUiSendPort.send({
               'status': 'transfer_cancelled',
+              'fileId': fileId,
+            });
+          }
+        } else if (command['command'] == 'accept_transfer') {
+          final fileId = command['fileId'] as String?;
+          if (fileId != null) {
+            acceptedTransfers.add(fileId);
+            declinedTransfers.remove(fileId);
+            await _sendTransferControlFrame(clientSocket, {
+              'type': 'file_transfer_accept',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({
+              'status': 'transfer_accepted',
+              'fileId': fileId,
+            });
+          }
+        } else if (command['command'] == 'decline_transfer') {
+          final fileId = command['fileId'] as String?;
+          if (fileId != null) {
+            declinedTransfers.add(fileId);
+            locallyCancelledTransfers.add(fileId);
+            await _sendTransferControlFrame(clientSocket, {
+              'type': 'file_transfer_decline',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({
+              'status': 'transfer_cancelled',
+              'fileId': fileId,
+            });
+            toUiSendPort.send({
+              'status': 'transfer_cancel_ready',
               'fileId': fileId,
             });
           }
@@ -483,6 +543,34 @@ void fileReceiverIsolate(List<Object> args) {
         toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
         return;
       }
+    } else if (command['command'] == 'accept_transfer') {
+      final fileId = command['fileId'] as String?;
+      if (fileId != null) {
+        acceptedTransfers.add(fileId);
+        declinedTransfers.remove(fileId);
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_transfer_accept',
+          'fileId': fileId,
+        });
+        toUiSendPort.send({'status': 'transfer_accepted', 'fileId': fileId});
+        return;
+      }
+    } else if (command['command'] == 'decline_transfer') {
+      final fileId = command['fileId'] as String?;
+      if (fileId != null) {
+        declinedTransfers.add(fileId);
+        locallyCancelledTransfers.add(fileId);
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_transfer_decline',
+          'fileId': fileId,
+        });
+        toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+        toUiSendPort.send({
+          'status': 'transfer_cancel_ready',
+          'fileId': fileId,
+        });
+        return;
+      }
     }
     commandQueue.add(command);
     processCommandQueue();
@@ -520,6 +608,8 @@ Future<String?> _sendFileCommand(
   required bool Function() shouldCancel,
   required bool Function(String fileId) shouldPauseTransfer,
   required bool Function(String fileId) shouldCancelTransfer,
+  required bool Function(String fileId) shouldAcceptTransfer,
+  required bool Function(String fileId) shouldDeclineTransfer,
   Future<void> Function(String fileId)? onPaused,
 }) async {
   final filePath = command['filePath'] as String;
@@ -530,6 +620,7 @@ Future<String?> _sendFileCommand(
 
   File? cachedFile;
   int? androidFileDescriptor;
+  var fileStarted = false;
 
   try {
     if (Platform.isAndroid) {
@@ -563,7 +654,7 @@ Future<String?> _sendFileCommand(
     }
 
     await _sendSocketFrame(clientSocket, {
-      'type': 'file_start',
+      'type': 'file_offer',
       'uuid': fileHeader['uuid'],
       'name': fileHeader['name'],
       'size': fileHeader['size'],
@@ -575,10 +666,32 @@ Future<String?> _sendFileCommand(
       'fileName': fileHeader['name'],
       'fileSize': fileHeader['size'],
       'filePath': command['filePath'],
+      'pendingAcceptance': true,
     });
 
+    final fileId = fileHeader['uuid'] as String;
+    while (!shouldCancel() &&
+        !shouldCancelTransfer(fileId) &&
+        !shouldDeclineTransfer(fileId) &&
+        !shouldAcceptTransfer(fileId)) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    if (shouldCancel() ||
+        shouldCancelTransfer(fileId) ||
+        shouldDeclineTransfer(fileId)) {
+      throw const _TransferCancelled();
+    }
+
+    await _sendSocketFrame(clientSocket, {
+      'type': 'file_start',
+      'uuid': fileHeader['uuid'],
+      'name': fileHeader['name'],
+      'size': fileHeader['size'],
+    });
+    fileStarted = true;
+
     await _sendFileWithWindowedReader(
-      fileId: fileHeader['uuid'] as String,
+      fileId: fileId,
       file: fileToSend,
       fileSize: fileHeader['size'] as int,
       clientSocket: clientSocket,
@@ -615,6 +728,17 @@ Future<String?> _sendFileCommand(
         (fileHeader != null &&
             shouldCancelTransfer(fileHeader['uuid'] as String))) {
       if (fileHeader != null) {
+        if (!fileStarted) {
+          toUiSendPort.send({
+            'status': 'transfer_cancelled',
+            'fileId': fileHeader['uuid'],
+          });
+          toUiSendPort.send({
+            'status': 'transfer_cancel_ready',
+            'fileId': fileHeader['uuid'],
+          });
+          return fileHeader['uuid'] as String;
+        }
         await _sendSocketFrame(clientSocket, {
           'type': 'file_end',
           'fileId': fileHeader['uuid'],
@@ -761,6 +885,8 @@ void _handleSocketConnection(
   void Function(String fileId, {String? pausedBy})? onRemoteTransferPaused,
   void Function(String fileId, {String? pausedBy})? onRemoteTransferResumed,
   void Function(String fileId)? onRemoteTransferCancelled,
+  void Function(String fileId)? onRemoteTransferAccepted,
+  void Function(String fileId)? onRemoteTransferDeclined,
   required Map<String, dynamic> localPeerInfo,
 }) {
   final readBuffer = _SocketReadBuffer();
@@ -1008,6 +1134,33 @@ void _handleSocketConnection(
             'fileId': fileId,
             'progress': progress.clamp(0.0, 1.0),
           });
+        }
+        return true;
+      case 'file_offer':
+        final fileId = headerJson['uuid'] as String?;
+        final fileName = headerJson['name'] as String?;
+        final fileSize = headerJson['size'] as int?;
+        if (fileId != null && fileName != null && fileSize != null) {
+          toUiSendPort.send({
+            'status': 'start',
+            'fileId': fileId,
+            'fileName': fileName,
+            'filePath': '',
+            'fileSize': fileSize,
+            'pendingAcceptance': true,
+          });
+        }
+        return true;
+      case 'file_transfer_accept':
+        final fileId = headerJson['fileId'] as String?;
+        if (fileId != null) {
+          onRemoteTransferAccepted?.call(fileId);
+        }
+        return true;
+      case 'file_transfer_decline':
+        final fileId = headerJson['fileId'] as String?;
+        if (fileId != null) {
+          onRemoteTransferDeclined?.call(fileId);
         }
         return true;
       case 'sender_paused':

@@ -286,6 +286,14 @@ class SocketService {
     _sendTransferControl('cancel_transfer', fileId);
   }
 
+  void acceptTransfer(String fileId) {
+    _sendTransferControl('accept_transfer', fileId);
+  }
+
+  void declineTransfer(String fileId) {
+    _sendTransferControl('decline_transfer', fileId);
+  }
+
   void _sendTransferControl(String command, String fileId, {String? role}) {
     _toIsolateSendPort?.send({
       'command': command,
@@ -405,6 +413,8 @@ class SocketService {
           status == 'send_complete' ||
           status == 'transfer_paused' ||
           status == 'transfer_resumed' ||
+          status == 'transfer_pending' ||
+          status == 'transfer_accepted' ||
           status == 'transfer_cancelled') {
         _transferLatestMessages[fileId] = Map<String, dynamic>.from(message);
       }

@@ -72,7 +72,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
             }
             break;
           case 'start':
-            if (isSharingInProgress) break;
+            if (isSharingInProgress &&
+                message['pendingAcceptance'] != true &&
+                !_hasTransferWidget(message['fileId'] as String?)) {
+              break;
+            }
 
             print("FILE UID = ${message['fileId']}");
 
@@ -85,6 +89,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
               uuid: message['fileId'],
               isReceived: true,
+              status: message['pendingAcceptance'] == true
+                  ? TransferStatus.pending
+                  : TransferStatus.inProgress,
             );
             break;
           case 'progress':
@@ -106,7 +113,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
             });
             break;
           case 'send_start':
-            if (isSharingInProgress == true) break;
+            if (isSharingInProgress == true &&
+                message['pendingAcceptance'] != true &&
+                !_hasTransferWidget(message['fileId'] as String?)) {
+              break;
+            }
 
             setState(() {
               isSharingInProgress = true;
@@ -118,6 +129,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
               fileName: message['fileName'],
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
               isReceived: false,
+              status: message['pendingAcceptance'] == true
+                  ? TransferStatus.pending
+                  : TransferStatus.inProgress,
             );
             break;
           case 'send_progress':
@@ -143,6 +157,12 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'transfer_resumed':
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.inProgress,
+            );
+            break;
+          case 'transfer_accepted':
             _updateTransferStatus(
               message['fileId'] as String?,
               TransferStatus.inProgress,
@@ -784,8 +804,24 @@ class _TcpChatPageState extends State<TcpChatPage> {
     required String fileSize,
     required String filePath,
     required bool isReceived,
+    TransferStatus status = TransferStatus.inProgress,
   }) {
     _scrollToBottom();
+    if (_fileTransferWidgets.value.any((widget) => widget.uuid == uuid)) {
+      _fileTransferWidgets.value = [
+        for (final widget in _fileTransferWidgets.value)
+          widget.uuid == uuid
+              ? _copyTransferWidget(
+                  widget,
+                  status: status,
+                  filePath: filePath.isEmpty ? widget.filePath : filePath,
+                  fileName: fileName,
+                  value: widget.value,
+                )
+              : widget,
+      ];
+      return;
+    }
     final progress = ValueNotifier<double>(0);
     _transferProgress[uuid] = progress;
     final pendingStatus =
@@ -804,15 +840,24 @@ class _TcpChatPageState extends State<TcpChatPage> {
         value: progress,
         isReceived: isReceived,
         uuid: uuid,
-        status: pendingStatus,
+        status: status == TransferStatus.inProgress ? pendingStatus : status,
         canResume: pendingCanResume,
         onPause: () =>
             SocketService.instance.pauseTransfer(uuid, isReceiver: isReceived),
         onResume: () =>
             SocketService.instance.resumeTransfer(uuid, isReceiver: isReceived),
         onCancel: () => SocketService.instance.cancelTransfer(uuid),
+        onAccept: () => SocketService.instance.acceptTransfer(uuid),
+        onDecline: () => SocketService.instance.declineTransfer(uuid),
       ),
     ];
+  }
+
+  bool _hasTransferWidget(String? uuid) {
+    if (uuid == null) {
+      return false;
+    }
+    return _fileTransferWidgets.value.any((widget) => widget.uuid == uuid);
   }
 
   void _setTransferProgress(String? uuid, double? progress) {
@@ -834,11 +879,13 @@ class _TcpChatPageState extends State<TcpChatPage> {
     TransferWidget widget, {
     required TransferStatus status,
     bool canResume = true,
+    String? filePath,
+    String? fileName,
     ValueListenable<double>? value,
   }) {
     return TransferWidget(
-      filePath: widget.filePath,
-      fileName: widget.fileName,
+      filePath: filePath ?? widget.filePath,
+      fileName: fileName ?? widget.fileName,
       fileSize: widget.fileSize,
       isReceived: widget.isReceived,
       uuid: widget.uuid,
@@ -854,6 +901,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
         isReceiver: widget.isReceived,
       ),
       onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
+      onAccept: () => SocketService.instance.acceptTransfer(widget.uuid),
+      onDecline: () => SocketService.instance.declineTransfer(widget.uuid),
     );
   }
 
