@@ -30,6 +30,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   final Map<String, ValueNotifier<double>> _transferProgress = {};
   final Map<String, TransferStatus> _pendingTransferStatuses = {};
   final Map<String, bool> _pendingTransferCanResume = {};
+  final Map<String, String> _pendingTransferPausedBy = {};
 
   bool isSharingInProgress = false;
   bool _sentInitialFiles = false;
@@ -136,6 +137,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _updateTransferStatus(
               message['fileId'] as String?,
               TransferStatus.paused,
+              pausedBy: message['pausedBy'] as String?,
               canResume: message['canResume'] as bool? ?? false,
             );
             break;
@@ -726,6 +728,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   void _updateTransferStatus(
     String? uuid,
     TransferStatus status, {
+    String? pausedBy,
     bool canResume = true,
   }) {
     if (uuid == null) {
@@ -740,7 +743,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
           _copyTransferWidget(
             widget,
             status: status,
-            canResume: canResume,
+            canResume: pausedBy == null
+                ? canResume
+                : _transferRole(widget.isReceived) == pausedBy,
             value: status == TransferStatus.completed ? null : widget.value,
           ),
         ] else
@@ -750,11 +755,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
     if (didUpdate) {
       _pendingTransferStatuses.remove(uuid);
       _pendingTransferCanResume.remove(uuid);
+      _pendingTransferPausedBy.remove(uuid);
       return;
     }
 
     _pendingTransferStatuses[uuid] = status;
     _pendingTransferCanResume[uuid] = canResume;
+    if (pausedBy == null) {
+      _pendingTransferPausedBy.remove(uuid);
+    } else {
+      _pendingTransferPausedBy[uuid] = pausedBy;
+    }
   }
 
   void addFileWidget({
@@ -769,7 +780,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
     _transferProgress[uuid] = progress;
     final pendingStatus =
         _pendingTransferStatuses.remove(uuid) ?? TransferStatus.inProgress;
-    final pendingCanResume = _pendingTransferCanResume.remove(uuid) ?? true;
+    final pendingPausedBy = _pendingTransferPausedBy.remove(uuid);
+    final pendingCanResumeFallback = _pendingTransferCanResume.remove(uuid);
+    final pendingCanResume = pendingPausedBy == null
+        ? pendingCanResumeFallback ?? true
+        : _transferRole(isReceived) == pendingPausedBy;
     _fileTransferWidgets.value = [
       ..._fileTransferWidgets.value,
       TransferWidget(
@@ -830,6 +845,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
       ),
       onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
     );
+  }
+
+  String _transferRole(bool isReceived) {
+    return isReceived ? 'receiver' : 'sender';
   }
 
   String sizeConvert(double bytes) {

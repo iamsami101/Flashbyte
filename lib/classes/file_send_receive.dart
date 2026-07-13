@@ -32,21 +32,26 @@ void fileReceiverIsolate(List<Object> args) {
   bool isSendingFile = false;
   bool localDisconnectRequested = false;
   String? sendingFileId;
-  final locallyPausedTransfers = <String>{};
-  final remotelyPausedTransfers = <String>{};
+  final locallyPausedTransfers = <String, String>{};
+  final remotelyPausedTransfers = <String, String>{};
   final locallyCancelledTransfers = <String>{};
   final remotelyCancelledTransfers = <String>{};
 
   bool isTransferPaused(String fileId) {
-    return locallyPausedTransfers.contains(fileId) ||
-        remotelyPausedTransfers.contains(fileId);
+    return locallyPausedTransfers.containsKey(fileId) ||
+        remotelyPausedTransfers.containsKey(fileId);
   }
 
-  void sendTransferPausedState(String fileId) {
+  void sendTransferPausedState(String fileId, {String? pausedBy}) {
+    final owner =
+        pausedBy ??
+        locallyPausedTransfers[fileId] ??
+        remotelyPausedTransfers[fileId];
     toUiSendPort.send({
       'status': 'transfer_paused',
       'fileId': fileId,
-      'canResume': locallyPausedTransfers.contains(fileId),
+      'pausedBy': ?owner,
+      'canResume': locallyPausedTransfers.containsKey(fileId),
     });
   }
 
@@ -59,12 +64,12 @@ void fileReceiverIsolate(List<Object> args) {
     toUiSendPort.send({'status': 'transfer_resumed', 'fileId': fileId});
   }
 
-  void handleRemoteTransferPaused(String fileId) {
-    remotelyPausedTransfers.add(fileId);
-    sendTransferPausedState(fileId);
+  void handleRemoteTransferPaused(String fileId, {String? pausedBy}) {
+    remotelyPausedTransfers[fileId] = pausedBy ?? 'remote';
+    sendTransferPausedState(fileId, pausedBy: pausedBy);
   }
 
-  void handleRemoteTransferResumed(String fileId) {
+  void handleRemoteTransferResumed(String fileId, {String? pausedBy}) {
     remotelyPausedTransfers.remove(fileId);
     sendTransferResumeState(fileId);
   }
@@ -349,7 +354,7 @@ void fileReceiverIsolate(List<Object> args) {
           final fileId = command['fileId'] as String?;
           final role = command['role'] as String? ?? 'receiver';
           if (fileId != null) {
-            locallyPausedTransfers.add(fileId);
+            locallyPausedTransfers[fileId] = role;
             await _sendTransferControlFrame(clientSocket, {
               'type': transferControlType(role, 'paused'),
               'fileId': fileId,
@@ -435,7 +440,7 @@ void fileReceiverIsolate(List<Object> args) {
       final fileId = command['fileId'] as String?;
       final role = command['role'] as String? ?? 'receiver';
       if (fileId != null) {
-        locallyPausedTransfers.add(fileId);
+        locallyPausedTransfers[fileId] = role;
         await _sendTransferControlFrame(clientSocket, {
           'type': transferControlType(role, 'paused'),
           'fileId': fileId,
@@ -732,8 +737,8 @@ void _handleSocketConnection(
   bool Function()? shouldSuppressConnectionErrors,
   bool Function(String fileId)? shouldCancelReceivingFile,
   void Function(String fileId)? onTransferAcknowledged,
-  void Function(String fileId)? onRemoteTransferPaused,
-  void Function(String fileId)? onRemoteTransferResumed,
+  void Function(String fileId, {String? pausedBy})? onRemoteTransferPaused,
+  void Function(String fileId, {String? pausedBy})? onRemoteTransferResumed,
   void Function(String fileId)? onRemoteTransferCancelled,
   required Map<String, dynamic> localPeerInfo,
 }) {
@@ -989,7 +994,13 @@ void _handleSocketConnection(
       case 'file_transfer_pause':
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
-          onRemoteTransferPaused?.call(fileId);
+          final frameType = headerJson['type'] as String?;
+          final pausedBy = switch (frameType) {
+            'sender_paused' => 'sender',
+            'receiver_paused' => 'receiver',
+            _ => null,
+          };
+          onRemoteTransferPaused?.call(fileId, pausedBy: pausedBy);
         }
         return true;
       case 'sender_resumed':
@@ -997,7 +1008,13 @@ void _handleSocketConnection(
       case 'file_transfer_resume':
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
-          onRemoteTransferResumed?.call(fileId);
+          final frameType = headerJson['type'] as String?;
+          final pausedBy = switch (frameType) {
+            'sender_resumed' => 'sender',
+            'receiver_resumed' => 'receiver',
+            _ => null,
+          };
+          onRemoteTransferResumed?.call(fileId, pausedBy: pausedBy);
         }
         return true;
       case 'file_transfer_cancel':
