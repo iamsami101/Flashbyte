@@ -338,6 +338,16 @@ void fileReceiverIsolate(List<Object> args) {
               shouldCancelTransfer: (fileId) =>
                   locallyCancelledTransfers.contains(fileId) ||
                   remotelyCancelledTransfers.contains(fileId),
+              onPaused: (fileId) async {
+                final role = locallyPausedTransfers[fileId];
+                if (role == null) {
+                  return;
+                }
+                await _sendTransferControlFrame(clientSocket, {
+                  'type': transferControlType(role, 'paused'),
+                  'fileId': fileId,
+                });
+              },
             );
             if (sendingFileId != null) {
               locallyPausedTransfers.remove(sendingFileId);
@@ -510,6 +520,7 @@ Future<String?> _sendFileCommand(
   required bool Function() shouldCancel,
   required bool Function(String fileId) shouldPauseTransfer,
   required bool Function(String fileId) shouldCancelTransfer,
+  Future<void> Function(String fileId)? onPaused,
 }) async {
   final filePath = command['filePath'] as String;
   File? fileToSend;
@@ -574,6 +585,7 @@ Future<String?> _sendFileCommand(
       shouldCancel: shouldCancel,
       shouldPauseTransfer: shouldPauseTransfer,
       shouldCancelTransfer: shouldCancelTransfer,
+      onPaused: onPaused,
     );
     await _sendSocketFrame(clientSocket, {
       'type': 'file_end',
@@ -637,6 +649,7 @@ Future<void> _sendFileWithWindowedReader({
   required bool Function() shouldCancel,
   required bool Function(String fileId) shouldPauseTransfer,
   required bool Function(String fileId) shouldCancelTransfer,
+  Future<void> Function(String fileId)? onPaused,
 }) async {
   const int windowSize = 65536;
   if (fileSize <= 0) {
@@ -653,11 +666,19 @@ Future<void> _sendFileWithWindowedReader({
   try {
     var currentPosition = 0;
     final lastWindowStart = max(0, fileSize - effectiveWindowSize);
+    var lastPauseNoticeAt = DateTime.fromMillisecondsSinceEpoch(0);
 
     while (currentPosition < fileSize) {
       while (!shouldCancel() &&
           !shouldCancelTransfer(fileId) &&
           shouldPauseTransfer(fileId)) {
+        final now = DateTime.now();
+        if (onPaused != null &&
+            now.difference(lastPauseNoticeAt) >=
+                const Duration(milliseconds: 500)) {
+          lastPauseNoticeAt = now;
+          await onPaused(fileId);
+        }
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
