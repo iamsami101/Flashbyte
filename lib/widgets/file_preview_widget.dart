@@ -35,6 +35,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   bool previewFileIsTemp = false;
 
   bool isLoading = false;
+  bool _isOpeningFile = false;
 
   @override
   void initState() {
@@ -226,9 +227,18 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: GestureDetector(
-                  onTap: () async {
-                    openFile(widget.filePath);
-                  },
+                  onTap: _isOpeningFile
+                      ? null
+                      : () async {
+                          setState(() => _isOpeningFile = true);
+                          try {
+                            await openFile(widget.filePath);
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isOpeningFile = false);
+                            }
+                          }
+                        },
                   child: Container(
                     padding: EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -240,7 +250,24 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
                         bottom: Radius.circular(15),
                       ),
                     ),
-                    child: Center(child: Text("Open file")),
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: _isOpeningFile
+                            ? const SizedBox(
+                                key: ValueKey('opening-file'),
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                ),
+                              )
+                            : const Text(
+                                "Open file",
+                                key: ValueKey('open-file-label'),
+                              ),
+                      ),
+                    ),
                   ),
                 ),
               ),
