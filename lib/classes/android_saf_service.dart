@@ -82,17 +82,4 @@ class AndroidSafService {
       name: name,
     );
   }
-
-  static Future<void> openDocumentUri({
-    required String uri,
-    required String mimeType,
-  }) async {
-    await _channel.invokeMethod<void>(
-      'openDocumentUri',
-      {
-        'uri': uri,
-        'mimeType': mimeType,
-      },
-    );
-  }
 }

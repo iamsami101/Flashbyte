@@ -5,10 +5,9 @@ import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
-import 'package:open_filex/open_filex.dart';
+import 'package:open_file/open_file.dart';
 import 'package:process_run/process_run.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 import 'package:widget_zoom/widget_zoom.dart';
@@ -340,7 +339,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
       await run('xdg-open "$folderPath"', runInShell: true);
     } else if (Platform.isAndroid || Platform.isIOS) {
       final downloadsPath = await AppSettings.getDownloadDirectory();
-      final result = await OpenFilex.open("$downloadsPath/");
+      final result = await OpenFile.open("$downloadsPath/");
       if (result.type == ResultType.fileNotFound) {
         showScaffoldSnackbar("Couldn't open that folder");
       }
@@ -348,25 +347,12 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   }
 
   Future<void> openFile(String filePath) async {
-    if (Platform.isAndroid) {
-      try {
-        await AndroidSafService.openDocumentUri(
-          uri: filePath,
-          mimeType: _androidOpenMimeType(widget.fileName),
-        );
-      } on PlatformException catch (error) {
-        if (error.code == 'NO_APP_TO_OPEN') {
-          showScaffoldSnackbar("No app available to open this file");
-        } else {
-          showScaffoldSnackbar("File may have been moved or deleted.");
-        }
-      }
-      return;
-    }
-
     String pathToOpen = filePath;
 
-    final result = await OpenFilex.open(pathToOpen);
+    final result = await OpenFile.open(
+      pathToOpen,
+      type: Platform.isAndroid ? _androidOpenMimeType(widget.fileName) : null,
+    );
 
     switch (result.type) {
       case ResultType.error:

@@ -22,7 +22,7 @@ dependencies:
   mime: ^2.0.0
   mobile_scanner: ^7.0.1
   motor: ^1.0.1
-  open_filex: ^4.7.0
+  open_file: ^4.0.0
   path_provider: ^2.1.5
   process_run: ^1.2.4
   qr_flutter: ^4.1.0
