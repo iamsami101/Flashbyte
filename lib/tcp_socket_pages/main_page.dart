@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
@@ -117,6 +118,7 @@ class _TcpSocketsState extends State<TcpSockets> {
             if (_chatOpen) {
               break;
             }
+            final error = UserFacingError.from(message['message']);
             setState(() {
               _isConnecting = false;
             });
@@ -141,23 +143,34 @@ class _TcpSocketsState extends State<TcpSockets> {
                       mainAxisSize: MainAxisSize.min,
                       spacing: 10,
                       children: [
-                        Text(
-                          "Failed to establish connection.\n\nError log:",
-                        ),
-                        Card(
-                          margin: EdgeInsets.all(0),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(maxHeight: 200),
-                              child: SingleChildScrollView(
-                                child: Text(
-                                  message['message'] ?? 'Unknown error',
+                        Text(error.message),
+                        if (error.hasDetails)
+                          Card(
+                            margin: EdgeInsets.zero,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 200,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: SelectableText(
+                                    error.details!,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          fontFamily: 'monospace',
+                                        ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
                         const SizedBox(height: 5),
                         SizedBox(
                           width: double.infinity,

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/widgets/transfer_widget.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -637,6 +638,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
     if (_errorDialogVisible || !mounted) {
       return;
     }
+    final error = UserFacingError.from(message);
+    final colorScheme = Theme.of(context).colorScheme;
 
     setState(() {
       isSharingInProgress = false;
@@ -654,7 +657,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
           children: [
             Icon(
               Icons.error_rounded,
-              color: Theme.of(context).colorScheme.onErrorContainer,
+              color: colorScheme.onErrorContainer,
             ),
             const Text('Connection Lost'),
           ],
@@ -664,20 +667,27 @@ class _TcpChatPageState extends State<TcpChatPage> {
           mainAxisSize: MainAxisSize.min,
           spacing: 10,
           children: [
-            const Text("Connection may have been disrupted\n\nError log:"),
-            Card(
-              margin: EdgeInsets.zero,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: SingleChildScrollView(
-                    child: SelectableText(message),
+            Text(error.message),
+            if (error.hasDetails)
+              Card(
+                margin: EdgeInsets.zero,
+                color: colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        error.details!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

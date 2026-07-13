@@ -6,6 +6,7 @@ import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
@@ -1432,14 +1433,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }) async {
     if (!mounted) return;
     final colorScheme = Theme.of(context).colorScheme;
-    final detailsSeparator = RegExp(r'\n\nDetails:\s*');
-    final detailsMatch = detailsSeparator.firstMatch(message);
-    final visibleMessage = detailsMatch == null
-        ? message
-        : message.substring(0, detailsMatch.start).trim();
-    final errorDetails = detailsMatch == null
-        ? null
-        : message.substring(detailsMatch.end).trim();
+    final error = UserFacingError.from(message);
 
     await showGeneralDialog(
       context: context,
@@ -1461,8 +1455,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           mainAxisSize: MainAxisSize.min,
           spacing: 10,
           children: [
-            Text(visibleMessage),
-            if (errorDetails != null && errorDetails.isNotEmpty)
+            Text(error.message),
+            if (error.hasDetails)
               Card(
                 margin: EdgeInsets.zero,
                 color: colorScheme.surfaceContainerHighest,
@@ -1472,7 +1466,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     constraints: const BoxConstraints(maxHeight: 180),
                     child: SingleChildScrollView(
                       child: SelectableText(
-                        errorDetails,
+                        error.details!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontFamily: 'monospace',
