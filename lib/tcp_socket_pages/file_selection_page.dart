@@ -9,6 +9,7 @@ import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/incoming_transfer_offer_page.dart';
+import 'package:flashbyte/tcp_socket_pages/outgoing_transfer_offer_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +47,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool receiveStarted = false;
   bool chatOpened = false;
   bool _incomingOfferOpen = false;
+  bool _outgoingOfferOpen = false;
   bool isDiscovering = true;
   int selectedTabIndex = 0;
 
@@ -607,7 +609,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         }
         break;
       case 'connected_to_host':
-        _openChatIfNeeded(initialFiles: selectedFiles);
+        _openOutgoingOffer();
         break;
       case 'hosting':
         setState(() {});
@@ -670,6 +672,44 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             _openChatIfNeeded(initialFiles: const []);
           }
         });
+  }
+
+  void _openOutgoingOffer() {
+    if (_outgoingOfferOpen || chatOpened || selectedFiles.isEmpty) {
+      return;
+    }
+
+    _outgoingOfferOpen = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => OutgoingTransferOfferPage(
+              files: List<FastFilePickerPath>.from(selectedFiles),
+              onStartSending: _sendSelectedFiles,
+              onCancel: SocketService.instance.disconnect,
+            ),
+          ),
+        )
+        .then((accepted) async {
+          if (!mounted) return;
+          _outgoingOfferOpen = false;
+          if (accepted == true) {
+            _openChatIfNeeded(initialFiles: const []);
+          } else {
+            await _restartServer();
+          }
+        });
+  }
+
+  void _sendSelectedFiles() {
+    for (final pickedFile in selectedFiles) {
+      final fileLocation = Platform.isAndroid && pickedFile.uri != null
+          ? pickedFile.uri
+          : pickedFile.path;
+      if (fileLocation != null) {
+        SocketService.instance.sendFile(fileLocation);
+      }
+    }
   }
 
   void _openChatIfNeeded({
