@@ -25,6 +25,8 @@ class FileSelectionPage extends StatefulWidget {
   State<FileSelectionPage> createState() => _FileSelectionPageState();
 }
 
+enum _ServerNetworkMode { hotspot, wifi, mobile, ethernet, vpn, offline, other }
+
 class _FileSelectionPageState extends State<FileSelectionPage>
     with TickerProviderStateMixin {
   static const double _wideLayoutBreakpoint = 1000;
@@ -55,6 +57,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Timer? _nameSaveDebounce;
   Timer? _networkRefreshTimer;
   int _serverRestartGeneration = 0;
+  bool _receiveServerIntentionallyStopped = false;
+  _ServerNetworkMode? _serverNetworkMode;
   String _networkLabel = "Checking network";
   IconData _networkIcon = Icons.network_check_rounded;
 
@@ -140,8 +144,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       }
     }
 
+    final nextNetworkMode = _networkModeFor(results, isHotspot: isHotspot);
+    final previousNetworkMode = _serverNetworkMode;
+
     if (!mounted) return;
     setState(() {
+      _serverNetworkMode = nextNetworkMode;
       if (isHotspot) {
         _networkLabel = "Hotspot active";
         _networkIcon = Icons.wifi_tethering_rounded;
@@ -165,6 +173,41 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     if (SocketService.instance.isHosting) {
       unawaited(_loadReceiveIpAddress());
     }
+    if (previousNetworkMode != null &&
+        previousNetworkMode != nextNetworkMode &&
+        _shouldReconnectServerFor(nextNetworkMode)) {
+      unawaited(_restartServer());
+    }
+  }
+
+  _ServerNetworkMode _networkModeFor(
+    List<ConnectivityResult> results, {
+    required bool isHotspot,
+  }) {
+    if (isHotspot) {
+      return _ServerNetworkMode.hotspot;
+    }
+    if (results.contains(ConnectivityResult.wifi)) {
+      return _ServerNetworkMode.wifi;
+    }
+    if (results.contains(ConnectivityResult.mobile)) {
+      return _ServerNetworkMode.mobile;
+    }
+    if (results.contains(ConnectivityResult.ethernet)) {
+      return _ServerNetworkMode.ethernet;
+    }
+    if (results.contains(ConnectivityResult.vpn)) {
+      return _ServerNetworkMode.vpn;
+    }
+    if (results.contains(ConnectivityResult.none)) {
+      return _ServerNetworkMode.offline;
+    }
+    return _ServerNetworkMode.other;
+  }
+
+  bool _shouldReconnectServerFor(_ServerNetworkMode mode) {
+    return mode == _ServerNetworkMode.hotspot ||
+        mode == _ServerNetworkMode.mobile;
   }
 
   Future<void> _initializeNetworking() async {
@@ -235,6 +278,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Future<void> _ensureReceiveReady() async {
+    _receiveServerIntentionallyStopped = false;
     if (!SocketService.instance.isHosting && receiveStarted) {
       receiveStarted = false;
     }
@@ -291,6 +335,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Future<void> _restartServer() async {
     final generation = ++_serverRestartGeneration;
+    _receiveServerIntentionallyStopped = false;
     await DeviceDiscoveryService.instance.stopAdvertising();
     await SocketService.instance.stopConnectionGracefully();
     if (mounted) {
@@ -304,6 +349,21 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       return;
     }
     await _ensureReceiveReady();
+  }
+
+  Future<void> _stopReceiveServer({bool intentional = true}) async {
+    final generation = ++_serverRestartGeneration;
+    await DeviceDiscoveryService.instance.stopAdvertising();
+    await SocketService.instance.stopConnectionGracefully();
+    if (!mounted || generation != _serverRestartGeneration) {
+      return;
+    }
+    setState(() {
+      _receiveServerIntentionallyStopped = intentional;
+      receiveStarted = false;
+      isReceiveStarting = false;
+      receiveIpAddress = null;
+    });
   }
 
   Future<void> _refreshAdvertisement() async {
@@ -586,7 +646,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         chatOpened = false;
         isConnectingToSender = false;
       });
-      await _restartServer();
+      await _stopReceiveServer();
     });
   }
 
@@ -1008,7 +1068,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                         child: AnimatedSize(
                           duration: const Duration(milliseconds: 500),
                           curve: Curves.easeOutCubic,
-                          child: (isReceiveStarting || receiveIpAddress == null)
+                          child: _receiveServerIntentionallyStopped
+                              ? Icon(
+                                  Icons.portable_wifi_off_rounded,
+                                  size: 84,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                )
+                              : (isReceiveStarting || receiveIpAddress == null)
                               ? const Center(
                                   child: LoadingIndicatorM3E(),
                                 )
@@ -1022,7 +1090,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     ),
                   ),
                   SelectableText(
-                    receiveIpAddress ?? "Fetching...",
+                    _receiveServerIntentionallyStopped
+                        ? "Server stopped"
+                        : receiveIpAddress ?? "Fetching...",
                     style: const TextStyle(fontSize: 16),
                   ),
                 ],
@@ -1310,7 +1380,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       ),
     );
     if (!mounted) return;
-    await _ensureReceiveReady();
+    if (!_receiveServerIntentionallyStopped) {
+      await _ensureReceiveReady();
+    }
   }
 
   Widget _buildSelectedFilesCard() {
