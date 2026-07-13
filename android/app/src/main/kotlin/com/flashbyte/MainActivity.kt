@@ -77,7 +77,7 @@ class MainActivity : FlutterActivity() {
                         }
 
                         try {
-                            startActivity(intent)
+                            startActivity(Intent.createChooser(intent, "Open with"))
                             result.success(null)
                         } catch (_: ActivityNotFoundException) {
                             result.error("NO_APP_TO_OPEN", "No app available to open this file.", null)

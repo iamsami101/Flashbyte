@@ -352,8 +352,7 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
       try {
         await AndroidSafService.openDocumentUri(
           uri: filePath,
-          mimeType:
-              lookupMimeType(widget.fileName) ?? 'application/octet-stream',
+          mimeType: _androidOpenMimeType(widget.fileName),
         );
       } on PlatformException catch (error) {
         if (error.code == 'NO_APP_TO_OPEN') {
@@ -382,6 +381,25 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
         break;
       default:
     }
+  }
+
+  String _androidOpenMimeType(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    const archiveExtensions = {
+      'zip',
+      'rar',
+      '7z',
+      'tar',
+      'gz',
+      'bz2',
+      'xz',
+    };
+
+    if (archiveExtensions.contains(extension)) {
+      return '*/*';
+    }
+
+    return lookupMimeType(fileName) ?? 'application/octet-stream';
   }
 
   void showScaffoldSnackbar(String message) {
