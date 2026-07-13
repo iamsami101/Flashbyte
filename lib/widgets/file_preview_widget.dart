@@ -385,21 +385,18 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
 
   String _androidOpenMimeType(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
-    const archiveExtensions = {
-      'zip',
-      'rar',
-      '7z',
-      'tar',
-      'gz',
-      'bz2',
-      'xz',
+
+    return switch (extension) {
+      'apk' => 'application/vnd.android.package-archive',
+      'zip' => 'application/zip',
+      'rar' => 'application/vnd.rar',
+      '7z' => 'application/x-7z-compressed',
+      'tar' => 'application/x-tar',
+      'gz' => 'application/gzip',
+      'bz2' => 'application/x-bzip2',
+      'xz' => 'application/x-xz',
+      _ => lookupMimeType(fileName) ?? 'application/octet-stream',
     };
-
-    if (archiveExtensions.contains(extension)) {
-      return '*/*';
-    }
-
-    return lookupMimeType(fileName) ?? 'application/octet-stream';
   }
 
   void showScaffoldSnackbar(String message) {

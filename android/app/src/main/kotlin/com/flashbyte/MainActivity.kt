@@ -2,6 +2,7 @@ package com.flashbyte
 
 import androidx.documentfile.provider.DocumentFile
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
@@ -72,12 +73,13 @@ class MainActivity : FlutterActivity() {
                         val uri = Uri.parse(uriString)
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, mimeType)
+                            clipData = ClipData.newUri(contentResolver, "Flashbyte file", uri)
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
 
                         try {
-                            startActivity(Intent.createChooser(intent, "Open with"))
+                            startActivity(intent)
                             result.success(null)
                         } catch (_: ActivityNotFoundException) {
                             result.error("NO_APP_TO_OPEN", "No app available to open this file.", null)
