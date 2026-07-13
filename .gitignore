@@ -7,6 +7,12 @@
 .buildlog/
 .history
 
+# IDE and machine-local project files
+.idea/
+**/.idea/
+*.iml
+**/local.properties
+
 # TLS private keys (generated locally, never committed)
 certificates/server.key
 assets/certificates/server.key
