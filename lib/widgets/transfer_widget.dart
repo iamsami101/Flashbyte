@@ -250,7 +250,7 @@ class _TransferControls extends StatelessWidget {
           ),
           label: Text(
             isPaused && !canResume
-                ? "Paused by other device"
+                ? "Pause"
                 : isPaused
                 ? "Continue"
                 : "Pause",
