@@ -211,6 +211,11 @@ class TransferWidget extends StatelessWidget {
           filePath: filePath,
           fileName: fileName,
           fileSize: fileSize,
+          initialTransferProgress: status == TransferStatus.completed
+              ? 1
+              : value?.value ?? 0,
+          isTransferComplete: status == TransferStatus.completed,
+          isTransferCancelled: status == TransferStatus.cancelled,
         ),
       ),
     );

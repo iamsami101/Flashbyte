@@ -1,8 +1,11 @@
 package com.flashbyte
 
 import androidx.documentfile.provider.DocumentFile
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiManager
+import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -57,6 +60,30 @@ class MainActivity : FlutterActivity() {
                         )
                     } catch (error: Exception) {
                         result.error("ANDROID_SAF_ERROR", error.message, null)
+                    }
+                }
+
+                "openDocumentUri" -> {
+                    try {
+                        val uriString = call.argument<String>("uri")
+                            ?: throw IllegalArgumentException("Missing uri")
+                        val mimeType = call.argument<String>("mimeType")
+                            ?: "application/octet-stream"
+                        val uri = Uri.parse(uriString)
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, mimeType)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+
+                        try {
+                            startActivity(intent)
+                            result.success(null)
+                        } catch (_: ActivityNotFoundException) {
+                            result.error("NO_APP_TO_OPEN", "No app available to open this file.", null)
+                        }
+                    } catch (error: Exception) {
+                        result.error("ANDROID_OPEN_URI_ERROR", error.message, null)
                     }
                 }
 
