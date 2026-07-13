@@ -256,21 +256,38 @@ class _TransferControls extends StatelessWidget {
                 : "Pause",
           ),
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.centerLeft,
-          child: isPaused
-              ? FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.errorContainer,
-                    foregroundColor: colorScheme.onErrorContainer,
-                  ),
-                  onPressed: onCancel,
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text("Cancel"),
-                )
-              : const SizedBox.shrink(),
+        SizedBox(
+          height: 40,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 40),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              backgroundColor: colorScheme.errorContainer,
+              foregroundColor: colorScheme.onErrorContainer,
+              disabledBackgroundColor: Colors.transparent,
+              disabledForegroundColor: Colors.transparent,
+            ),
+            onPressed: isPaused ? onCancel : null,
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.centerLeft,
+              child: isPaused
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 8,
+                        children: [
+                          Icon(Icons.close_rounded),
+                          Text("Cancel"),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(width: 0, height: 24),
+            ),
+          ),
         ),
       ],
     );
