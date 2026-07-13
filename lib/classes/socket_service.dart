@@ -266,22 +266,31 @@ class SocketService {
     });
   }
 
-  void pauseTransfer(String fileId) {
-    _sendTransferControl('pause_transfer', fileId);
+  void pauseTransfer(String fileId, {required bool isReceiver}) {
+    _sendTransferControl(
+      'pause_transfer',
+      fileId,
+      role: isReceiver ? 'receiver' : 'sender',
+    );
   }
 
-  void resumeTransfer(String fileId) {
-    _sendTransferControl('resume_transfer', fileId);
+  void resumeTransfer(String fileId, {required bool isReceiver}) {
+    _sendTransferControl(
+      'resume_transfer',
+      fileId,
+      role: isReceiver ? 'receiver' : 'sender',
+    );
   }
 
   void cancelTransfer(String fileId) {
     _sendTransferControl('cancel_transfer', fileId);
   }
 
-  void _sendTransferControl(String command, String fileId) {
+  void _sendTransferControl(String command, String fileId, {String? role}) {
     _toIsolateSendPort?.send({
       'command': command,
       'fileId': fileId,
+      'role': ?role,
     });
   }
 

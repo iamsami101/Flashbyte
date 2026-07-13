@@ -76,6 +76,11 @@ void fileReceiverIsolate(List<Object> args) {
     toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
   }
 
+  String transferControlType(String role, String action) {
+    final normalizedRole = role == 'sender' ? 'sender' : 'receiver';
+    return '${normalizedRole}_$action';
+  }
+
   Future<void> processCommandQueue() async {
     if (isProcessing || commandQueue.isEmpty) return;
     isProcessing = true;
@@ -342,20 +347,22 @@ void fileReceiverIsolate(List<Object> args) {
           }
         } else if (command['command'] == 'pause_transfer') {
           final fileId = command['fileId'] as String?;
+          final role = command['role'] as String? ?? 'receiver';
           if (fileId != null) {
             locallyPausedTransfers.add(fileId);
             await _sendTransferControlFrame(clientSocket, {
-              'type': 'file_transfer_pause',
+              'type': transferControlType(role, 'paused'),
               'fileId': fileId,
             });
             sendTransferPausedState(fileId);
           }
         } else if (command['command'] == 'resume_transfer') {
           final fileId = command['fileId'] as String?;
+          final role = command['role'] as String? ?? 'receiver';
           if (fileId != null) {
             locallyPausedTransfers.remove(fileId);
             await _sendTransferControlFrame(clientSocket, {
-              'type': 'file_transfer_resume',
+              'type': transferControlType(role, 'resumed'),
               'fileId': fileId,
             });
             sendTransferResumeState(fileId);
@@ -426,10 +433,11 @@ void fileReceiverIsolate(List<Object> args) {
       }
     } else if (command['command'] == 'pause_transfer') {
       final fileId = command['fileId'] as String?;
+      final role = command['role'] as String? ?? 'receiver';
       if (fileId != null) {
         locallyPausedTransfers.add(fileId);
         await _sendTransferControlFrame(clientSocket, {
-          'type': 'file_transfer_pause',
+          'type': transferControlType(role, 'paused'),
           'fileId': fileId,
         });
         sendTransferPausedState(fileId);
@@ -437,10 +445,11 @@ void fileReceiverIsolate(List<Object> args) {
       }
     } else if (command['command'] == 'resume_transfer') {
       final fileId = command['fileId'] as String?;
+      final role = command['role'] as String? ?? 'receiver';
       if (fileId != null) {
         locallyPausedTransfers.remove(fileId);
         await _sendTransferControlFrame(clientSocket, {
-          'type': 'file_transfer_resume',
+          'type': transferControlType(role, 'resumed'),
           'fileId': fileId,
         });
         sendTransferResumeState(fileId);
@@ -975,12 +984,16 @@ void _handleSocketConnection(
           });
         }
         return true;
+      case 'sender_paused':
+      case 'receiver_paused':
       case 'file_transfer_pause':
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
           onRemoteTransferPaused?.call(fileId);
         }
         return true;
+      case 'sender_resumed':
+      case 'receiver_resumed':
       case 'file_transfer_resume':
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {

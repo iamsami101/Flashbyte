@@ -781,8 +781,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
         uuid: uuid,
         status: pendingStatus,
         canResume: pendingCanResume,
-        onPause: () => SocketService.instance.pauseTransfer(uuid),
-        onResume: () => SocketService.instance.resumeTransfer(uuid),
+        onPause: () =>
+            SocketService.instance.pauseTransfer(uuid, isReceiver: isReceived),
+        onResume: () =>
+            SocketService.instance.resumeTransfer(uuid, isReceiver: isReceived),
         onCancel: () => SocketService.instance.cancelTransfer(uuid),
       ),
     ];
@@ -818,8 +820,14 @@ class _TcpChatPageState extends State<TcpChatPage> {
       value: value,
       status: status,
       canResume: canResume,
-      onPause: () => SocketService.instance.pauseTransfer(widget.uuid),
-      onResume: () => SocketService.instance.resumeTransfer(widget.uuid),
+      onPause: () => SocketService.instance.pauseTransfer(
+        widget.uuid,
+        isReceiver: widget.isReceived,
+      ),
+      onResume: () => SocketService.instance.resumeTransfer(
+        widget.uuid,
+        isReceiver: widget.isReceived,
+      ),
       onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
     );
   }
