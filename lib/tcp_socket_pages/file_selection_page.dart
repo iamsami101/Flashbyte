@@ -8,6 +8,7 @@ import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
+import 'package:flashbyte/tcp_socket_pages/incoming_transfer_offer_page.dart';
 import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +45,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool isReceiveStarting = false;
   bool receiveStarted = false;
   bool chatOpened = false;
+  bool _incomingOfferOpen = false;
   bool isDiscovering = true;
   int selectedTabIndex = 0;
 
@@ -598,7 +600,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     switch (status) {
       case 'client_connected':
         unawaited(DeviceDiscoveryService.instance.stopAdvertising());
-        _openChatIfNeeded(initialFiles: const []);
+        break;
+      case 'start':
+        if (message['pendingAcceptance'] == true && !chatOpened) {
+          _openIncomingOffer(message);
+        }
         break;
       case 'connected_to_host':
         _openChatIfNeeded(initialFiles: selectedFiles);
@@ -623,6 +629,47 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         );
         break;
     }
+  }
+
+  void _openIncomingOffer(Map<String, dynamic> message) {
+    if (_incomingOfferOpen || chatOpened) {
+      return;
+    }
+
+    final fileId = message['fileId'] as String?;
+    final fileName = message['fileName'] as String?;
+    final fileSize = message['fileSize'] as int?;
+    if (fileId == null || fileName == null || fileSize == null) {
+      return;
+    }
+
+    _incomingOfferOpen = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => IncomingTransferOfferPage(
+              fileId: fileId,
+              fileName: fileName,
+              fileSize: fileSize,
+              sender: SocketService.instance.connectedPeerInfo,
+              onAccept: () {
+                SocketService.instance.acceptTransfer(fileId);
+                Navigator.of(context).pop(true);
+              },
+              onDecline: () {
+                SocketService.instance.declineTransfer(fileId);
+                Navigator.of(context).pop(false);
+              },
+            ),
+          ),
+        )
+        .then((accepted) {
+          if (!mounted) return;
+          _incomingOfferOpen = false;
+          if (accepted == true) {
+            _openChatIfNeeded(initialFiles: const []);
+          }
+        });
   }
 
   void _openChatIfNeeded({
