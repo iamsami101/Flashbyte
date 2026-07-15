@@ -973,6 +973,30 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Widget _buildReceiveTab({bool showHeader = true, bool fillHeight = false}) {
+    if (fillHeight) {
+      return CustomScrollView(
+        primary: false,
+        slivers: [
+          if (showHeader) ...[
+            SliverToBoxAdapter(
+              child: _buildBrandHeader(
+                icon: Icons.broadcast_on_personal_rounded,
+                title: "Receive files",
+                subtitle: "Stay visible to nearby devices while you wait.",
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ],
+          SliverToBoxAdapter(child: _buildReceiverIdentityCard()),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildReceiverVisualCard(fillHeight: true),
+          ),
+        ],
+      );
+    }
+
     final content = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -986,13 +1010,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             subtitle: "Stay visible to nearby devices while you wait.",
           ),
         _buildReceiverIdentityCard(),
-        if (fillHeight)
-          Expanded(child: _buildReceiverVisualCard(fillHeight: true))
-        else
-          _buildReceiverVisualCard(fillHeight: false),
+        _buildReceiverVisualCard(fillHeight: false),
       ],
     );
-    return fillHeight ? content : SingleChildScrollView(child: content);
+    return SingleChildScrollView(child: content);
   }
 
   Widget _buildReceiverVisualCard({required bool fillHeight}) {
