@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
+import 'package:motor/motor.dart';
 
 class InteractiveStarWidget extends StatefulWidget {
   const InteractiveStarWidget({
@@ -32,29 +32,27 @@ class _InteractiveStarWidgetState extends State<InteractiveStarWidget>
     MaterialShapes.arch,
   ];
 
-  late final AnimationController _idleController;
   late final AnimationController _morphController;
   late Morph _morph;
   Timer? _resumeTimer;
-  double _gestureRotation = 0;
-  double _idleRotation = 0;
+  double _rotationTarget = 0;
+  Motion _rotationMotion = const Motion.curved(
+    Duration(milliseconds: 2200),
+    Curves.linear,
+  );
   int _currentShape = 0;
-  int _lastIdleSegment = -1;
+  int _idleGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _morph = Morph(_shapes.first, _shapes.first);
-    _idleController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 9),
-    )..addListener(_advanceIdle);
     _morphController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 280),
     );
     if (widget.isActive) {
-      _idleController.repeat();
+      _startIdleLoop();
     }
   }
 
@@ -63,36 +61,61 @@ class _InteractiveStarWidgetState extends State<InteractiveStarWidget>
     super.didUpdateWidget(oldWidget);
     if (widget.isActive == oldWidget.isActive) return;
     if (widget.isActive) {
-      _idleController.repeat();
+      _startIdleLoop();
     } else {
-      _idleController.stop();
+      _pauseIdle();
     }
   }
 
-  void _advanceIdle() {
-    final phase = _idleController.value;
-    _idleRotation = _idleTurns(phase) * math.pi * 2;
-    final segment = (phase * 4).floor();
-    if (segment != _lastIdleSegment) {
-      _lastIdleSegment = segment;
-      if (segment == 1 || segment == 3) {
-        _goToShape((_currentShape + 1) % _shapes.length);
-      }
-    }
-    if (mounted) setState(() {});
+  void _startIdleLoop() {
+    final generation = ++_idleGeneration;
+    _runIdleCycle(generation);
   }
 
-  double _idleTurns(double phase) {
-    if (phase < 0.25) return phase * 2.4;
-    if (phase < 0.5) {
-      final t = Curves.easeIn.transform((phase - 0.25) * 4);
-      return 0.6 + (t * 1.05);
+  Future<void> _runIdleCycle(int generation) async {
+    while (mounted && widget.isActive && generation == _idleGeneration) {
+      _setIdleRotation(
+        turns: 0.7,
+        duration: const Duration(milliseconds: 2200),
+        curve: Curves.linear,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      if (!_shouldContinueIdle(generation)) return;
+
+      _setIdleRotation(
+        turns: 1.35,
+        duration: const Duration(milliseconds: 1500),
+        curve: Curves.easeInCubic,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 720));
+      if (!_shouldContinueIdle(generation)) return;
+      _goToShape((_currentShape + 1) % _shapes.length);
+      await Future<void>.delayed(const Duration(milliseconds: 780));
+      if (!_shouldContinueIdle(generation)) return;
+
+      _setIdleRotation(
+        turns: 0.65,
+        duration: const Duration(milliseconds: 1700),
+        curve: Curves.easeOutCubic,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 1700));
     }
-    if (phase < 0.75) {
-      final t = Curves.easeOut.transform((phase - 0.5) * 4);
-      return 1.65 + (t * 0.75);
-    }
-    return 2.4 + ((phase - 0.75) * 2.4);
+  }
+
+  bool _shouldContinueIdle(int generation) {
+    return mounted && widget.isActive && generation == _idleGeneration;
+  }
+
+  void _setIdleRotation({
+    required double turns,
+    required Duration duration,
+    required Curve curve,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _rotationTarget += turns * 6.283185307179586;
+      _rotationMotion = Motion.curved(duration, curve);
+    });
   }
 
   void _goToShape(int next) {
@@ -103,21 +126,21 @@ class _InteractiveStarWidgetState extends State<InteractiveStarWidget>
 
   void _pauseIdle() {
     _resumeTimer?.cancel();
-    _idleController.stop();
+    _idleGeneration++;
+    setState(() => _rotationMotion = const Motion.interactiveSpring());
   }
 
   void _resumeIdle() {
     _resumeTimer?.cancel();
     if (!widget.isActive) return;
     _resumeTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted && widget.isActive) _idleController.repeat();
+      if (mounted && widget.isActive) _startIdleLoop();
     });
   }
 
   @override
   void dispose() {
     _resumeTimer?.cancel();
-    _idleController.dispose();
     _morphController.dispose();
     super.dispose();
   }
@@ -129,8 +152,9 @@ class _InteractiveStarWidgetState extends State<InteractiveStarWidget>
       onPanStart: (_) => _pauseIdle(),
       onPanUpdate: (details) {
         setState(() {
-          _gestureRotation += details.delta.dx / 75;
-          _gestureRotation += details.delta.dy / -75;
+          _rotationTarget += details.delta.dx / 75;
+          _rotationTarget += details.delta.dy / -75;
+          _rotationMotion = const Motion.interactiveSpring();
         });
       },
       onPanEnd: (details) {
@@ -146,18 +170,22 @@ class _InteractiveStarWidgetState extends State<InteractiveStarWidget>
         _resumeIdle();
       },
       onPanCancel: _resumeIdle,
-      child: AnimatedBuilder(
-        animation: _morphController,
-        builder: (context, child) {
+      child: SingleMotionBuilder(
+        value: _rotationTarget,
+        motion: _rotationMotion,
+        builder: (context, rotation, child) {
           return Transform.rotate(
-            angle: _idleRotation + _gestureRotation,
-            child: CustomPaint(
-              painter: _InteractiveMorphPainter(
-                color: Theme.of(context).colorScheme.primary,
-                morph: _morph,
-                progress: _morphController.value,
+            angle: rotation,
+            child: AnimatedBuilder(
+              animation: _morphController,
+              builder: (context, child) => CustomPaint(
+                painter: _InteractiveMorphPainter(
+                  color: Theme.of(context).colorScheme.primary,
+                  morph: _morph,
+                  progress: _morphController.value,
+                ),
+                child: SizedBox.square(dimension: widget.size),
               ),
-              child: SizedBox.square(dimension: widget.size),
             ),
           );
         },
