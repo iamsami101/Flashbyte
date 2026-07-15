@@ -145,11 +145,17 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
 
+      - name: Create macOS DMG
+        uses: L-Super/create-dmg-actions@v1.0.3
+        with:
+          dmg_name: flashbyte-macos
+          src_dir: build/macos/Build/Products/Release/flashbyte.app
+
       - name: Package Apple artifacts
         run: |
           mkdir -p release/apple
           ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app release/apple/flashbyte-ios-unsigned-runner-app.zip
-          ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Release/flashbyte.app release/apple/flashbyte-macos.zip
+          cp flashbyte-macos.dmg release/apple/flashbyte-macos.dmg
 
       - name: Upload Apple artifacts
         uses: actions/upload-artifact@v4
@@ -182,13 +188,13 @@ jobs:
           tag_name: build-${{ github.sha }}
           name: Flashbyte ${{ github.sha }}
           body: |
-            Automated release for commit `${{ github.sha }}`.
+            Release for commit `${{ github.sha }}`.
 
             Artifacts:
             - Android APK and AAB
             - Linux x64 bundle
             - Windows x64 bundle
-            - macOS app bundle
+            - macOS DMG
             - unsigned iOS Runner.app bundle
           files: release-assets/**/*
           fail_on_unmatched_files: true
@@ -203,6 +209,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import os
+          import textwrap
 
           readme = Path("README.md")
           text = readme.read_text()
@@ -211,15 +218,16 @@ jobs:
           tag = os.environ["RELEASE_TAG"]
           repo = os.environ["REPOSITORY"]
           base = f"https://github.com/{repo}/releases/download/{tag}"
-          section = f"""{start}
-          | Platform | Status | Download |
-          |----------|--------|----------|
-          | Android | Automated release | [APK]({base}/flashbyte-android.apk) \\| [AAB]({base}/flashbyte-android.aab) |
-          | Linux | Automated release | [Linux tarball]({base}/flashbyte-linux-x64.tar.gz) |
-          | macOS | Automated release | [macOS app zip]({base}/flashbyte-macos.zip) |
-          | iOS | Unsigned CI artifact | [Unsigned Runner.app zip]({base}/flashbyte-ios-unsigned-runner-app.zip) |
-          | Windows | Automated release | [Windows zip]({base}/flashbyte-windows-x64.zip) |
-          {end}"""
+          section = textwrap.dedent(f"""\
+          {start}
+          | Platform | Download |
+          |----------|----------|
+          | Android | [APK]({base}/flashbyte-android.apk) \\| [AAB]({base}/flashbyte-android.aab) |
+          | Linux | [Linux tarball]({base}/flashbyte-linux-x64.tar.gz) |
+          | macOS | [DMG installer]({base}/flashbyte-macos.dmg) |
+          | iOS | [Unsigned Runner.app zip]({base}/flashbyte-ios-unsigned-runner-app.zip) |
+          | Windows | [Windows zip]({base}/flashbyte-windows-x64.zip) |
+          {end}""")
           before, marker, rest = text.partition(start)
           if not marker:
               raise SystemExit("README release download start marker not found")

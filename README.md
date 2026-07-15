@@ -23,13 +23,13 @@ Flashbyte uses pure TCP sockets to establish a connection between two devices on
 You can try out Flashbyte on the following platforms:
 
 <!-- BEGIN AUTO RELEASE DOWNLOADS -->
-| Platform | Status | Download |
-|----------|--------|----------|
-| Android | Automated release | [APK](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| Linux | Automated release | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| macOS | Automated release | [macOS app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| iOS | Unsigned CI artifact | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| Windows | Automated release | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Platform | Download |
+|----------|----------|
+| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ## Installation instructions:
@@ -143,6 +143,48 @@ rm -f ~/.local/share/icons/hicolor/*/apps/flashbyte.png
 update-desktop-database ~/.local/share/applications
 gtk-update-icon-cache ~/.local/share/icons/hicolor
 ```
+
+- ### Windows:
+Download `flashbyte-windows-x64.zip` from the [releases](https://github.com/iamsami101/Flashbyte/releases) page.
+
+Extract the zip file, then run:
+
+```powershell
+flashbyte.exe
+```
+
+If Windows SmartScreen warns you that the app is from an unknown publisher, choose **More info** and then **Run anyway**. To remove Flashbyte, delete the extracted folder.
+
+- ### macOS:
+Download `flashbyte-macos.dmg` from the [releases](https://github.com/iamsami101/Flashbyte/releases) page.
+
+Open the DMG, drag **flashbyte.app** into **Applications**, then launch it from Applications.
+
+If macOS blocks the app because it is not signed/notarized yet, open **System Settings > Privacy & Security** and allow Flashbyte, or right-click the app and choose **Open**.
+
+- ### iOS:
+The current iOS release artifact is an unsigned `Runner.app` zip. It is useful for CI output and local signing, but it cannot be installed on normal iPhones directly.
+
+To install on a device, build/sign from source with an Apple Developer account:
+
+```bash
+flutter build ipa --release
+```
+
+Then distribute the signed `.ipa` through TestFlight, Apple Configurator, or your own MDM/internal distribution setup.
+
+## Signing release builds
+
+The GitHub workflow builds release artifacts and packages macOS as a DMG, but platform signing requires private certificates and provisioning files that should be stored as GitHub Actions secrets.
+
+To sign Android releases, add an upload keystore and configure Gradle signing with secrets such as `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+
+To sign and notarize macOS releases, use an Apple Developer ID Application certificate plus notarization credentials, commonly stored as `APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64`, `APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`.
+
+To create an installable iOS release, add an Apple Distribution certificate and provisioning profile, commonly stored as `APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`, and `APPLE_TEAM_ID`.
+
+To sign Windows releases, use a Windows code-signing certificate with `signtool`, commonly stored as `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`.
+
 ## Building from Source
 
 If you'd like to build Flashbyte yourself instead of using a prebuilt release, you'll need Flutter installed and set up for the platform(s) you're targeting.
