@@ -30,27 +30,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Patch uri_to_file Android namespace
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          candidates = list(Path.home().glob(".pub-cache/hosted/pub.dev/uri_to_file-*/android/build.gradle"))
-          if not candidates:
-              raise SystemExit("uri_to_file Android build.gradle not found in pub cache")
-
-          build_file = candidates[0]
-          text = build_file.read_text()
-          if "namespace" in text:
-              raise SystemExit(0)
-          if "android {" not in text:
-              raise SystemExit(f"android block not found in {build_file}")
-
-          text = text.replace("android {", "android {\n    namespace 'com.flashbyte.uri_to_file'", 1)
-          build_file.write_text(text)
-          print(f"Patched namespace in {build_file}")
-          PY
-
       - name: Build APK
         run: flutter build apk --release
 

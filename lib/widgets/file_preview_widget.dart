@@ -9,7 +9,6 @@ import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
 import 'package:open_file/open_file.dart';
 import 'package:process_run/process_run.dart';
-import 'package:uri_to_file/uri_to_file.dart';
 import 'package:widget_zoom/widget_zoom.dart';
 
 class FilePreviewWidget extends StatefulWidget {
@@ -41,7 +40,6 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   late final String mimeType;
 
   File? previewFile;
-  bool previewFileIsTemp = false;
 
   bool isLoading = false;
   bool _isOpeningFile = false;
@@ -58,24 +56,21 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     _transferCancelled = widget.isTransferCancelled;
     _listenForTransferUpdates();
 
-    if (Platform.isAndroid) {
-      mimeType = widget.filePath.split("/").last;
-    } else {
-      mimeType = lookupMimeType(widget.filePath) ?? "";
-    }
+    mimeType =
+        lookupMimeType(widget.fileName) ??
+        lookupMimeType(widget.filePath) ??
+        "";
 
-    if (!mimeType.startsWith("image")) return;
+    if (!mimeType.startsWith("image") ||
+        (Platform.isAndroid && widget.filePath.contains("://"))) {
+      return;
+    }
     _loadFile();
   }
 
   @override
   void dispose() {
     _transferSubscription?.cancel();
-    // delete only if it's a temporary file created by toFile()
-    if (previewFileIsTemp && previewFile?.existsSync() == true) {
-      previewFile!.delete();
-    }
-
     super.dispose();
   }
 
@@ -131,17 +126,14 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   Future<void> _loadFile() async {
     setState(() => isLoading = true);
 
-    File file;
+    final file = File(widget.filePath);
 
-    if (widget.filePath.contains("://") && Platform.isAndroid) {
-      file = await toFile(widget.filePath);
-      previewFileIsTemp = true; // mark as temp
-    } else {
-      file = File(widget.filePath);
-      previewFileIsTemp = false; // don't delete real files
+    if (!file.existsSync()) {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+      return;
     }
-
-    if (!file.existsSync()) return;
 
     if (!mounted) return;
 
@@ -189,7 +181,9 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
               Expanded(
                 child: SizedBox(
                   width: double.infinity,
-                  child: mimeType.startsWith("image")
+                  child:
+                      mimeType.startsWith("image") &&
+                          (isLoading || previewFile != null)
                       ? isLoading
                             ? Center(
                                 child: LoadingIndicatorM3E(

@@ -28,7 +28,6 @@ dependencies:
   qr_flutter: ^4.1.0
   saf_util: ^0.10.0
   shared_preferences: ^2.3.0
-  uri_to_file: ^1.0.0
   uuid: ^4.5.1
   widget_zoom: ^0.0.4
   windowed_file_reader: ^1.0.3

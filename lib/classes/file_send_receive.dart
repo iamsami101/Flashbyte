@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
-import 'package:uri_to_file/uri_to_file.dart';
 import 'package:uuid/uuid.dart';
 import 'package:windowed_file_reader/windowed_file_reader.dart';
 
@@ -634,7 +633,6 @@ Future<String?> _sendFileCommand(
 
   final stopwatch = Stopwatch()..start();
 
-  File? cachedFile;
   int? androidFileDescriptor;
   var fileStarted = false;
 
@@ -645,13 +643,8 @@ Future<String?> _sendFileCommand(
         throw Exception('Could not read selected file metadata.');
       }
 
-      try {
-        androidFileDescriptor = await SafUtil().getFileDescriptor(filePath);
-        fileToSend = File('/proc/self/fd/$androidFileDescriptor');
-      } catch (_) {
-        cachedFile = await toFile(filePath);
-        fileToSend = cachedFile;
-      }
+      androidFileDescriptor = await SafUtil().getFileDescriptor(filePath);
+      fileToSend = File('/proc/self/fd/$androidFileDescriptor');
 
       fileHeader = {
         'uuid': Uuid().v4(),
@@ -728,7 +721,6 @@ Future<String?> _sendFileCommand(
       if (androidFileDescriptor != null) {
         await SafUtil().closeFileDescriptor(androidFileDescriptor);
       }
-      cachedFile?.delete();
     } on Exception catch (_) {}
     return fileHeader['uuid'] as String;
   } catch (e) {
@@ -737,7 +729,6 @@ Future<String?> _sendFileCommand(
       if (androidFileDescriptor != null) {
         await SafUtil().closeFileDescriptor(androidFileDescriptor);
       }
-      cachedFile?.delete();
     } on Exception catch (_) {}
     if (e is _TransferCancelled ||
         shouldCancel() ||
