@@ -259,6 +259,17 @@ void fileReceiverIsolate(List<Object> args) {
                   rawSocket,
                   host: TlsIdentityService.certificateCommonName,
                   context: securityContext,
+                  onBadCertificate: (certificate) {
+                    if (expectedCertificateFingerprint == null) {
+                      return false;
+                    }
+
+                    final actualFingerprint =
+                        TlsIdentityService.certificateFingerprint(
+                          certificate.pem,
+                        );
+                    return actualFingerprint == expectedCertificateFingerprint;
+                  },
                 );
                 final peerCertificate = finalSocket.peerCertificate;
                 if (expectedCertificateFingerprint != null &&
