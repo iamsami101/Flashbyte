@@ -22,13 +22,15 @@ Flashbyte uses pure TCP sockets to establish a connection between two devices on
 
 You can try out Flashbyte on the following platforms:
 
-| Platform | Status                    | Download                                                                                     |
-|----------|---------------------------|----------------------------------------------------------------------------------------------|
-| Android  | Supported                 | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-android-arm64.apk) |
-| Linux    | Supported                 | [Installation Script](#installation-script-recommended) \| [Linux Tarball](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-linux-x86_64.tar.gz) |
-| macOS    | Supported in v0.1.0 only | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v0.1.0/Flashbyte.0.1.0.dmg) |
-| iOS      | In development            | N/A                                                                                          |
-| Windows  | In development            | N/A                                                                                          |
+<!-- BEGIN AUTO RELEASE DOWNLOADS -->
+| Platform | Status | Download |
+|----------|--------|----------|
+| Android | Automated release | [APK](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Linux | Automated release | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| macOS | Automated release | [macOS app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| iOS | Unsigned CI artifact | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Windows | Automated release | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+<!-- END AUTO RELEASE DOWNLOADS -->
 
 ## Installation instructions:
 - ### Android:
