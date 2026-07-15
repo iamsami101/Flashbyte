@@ -694,6 +694,7 @@ class _StarWidgetState extends State<StarWidget>
     MaterialShapes.pill,
     MaterialShapes.flower,
     MaterialShapes.oval,
+    MaterialShapes.diamond,
     MaterialShapes.sunny,
     MaterialShapes.arch,
   ];

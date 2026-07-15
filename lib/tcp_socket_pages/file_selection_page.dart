@@ -10,13 +10,12 @@ import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/incoming_transfer_offer_page.dart';
 import 'package:flashbyte/tcp_socket_pages/outgoing_transfer_offer_page.dart';
-import 'package:flashbyte/tcp_socket_pages/qr_code_scan.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
+import 'package:flashbyte/widgets/interactive_star_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 class FileSelectionPage extends StatefulWidget {
   final int initialTabIndex;
@@ -34,9 +33,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   static const double _wideLayoutBreakpoint = 1000;
   static const double _wideLayoutMaxWidth = 1320;
 
-  final TextEditingController receiverIpController = TextEditingController();
   final TextEditingController _deviceNameController = TextEditingController();
-  late final AnimationController _connectShakeController;
   final Map<String, AnimationController> _deviceShakeControllers = {};
   List<FastFilePickerPath> selectedFiles = [];
   late final TabController _tabController;
@@ -51,7 +48,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool isDiscovering = true;
   int selectedTabIndex = 0;
 
-  String? receiveIpAddress;
   String? deviceName;
   String? _deviceId;
   List<DiscoveredDevice> discoveredDevices = const [];
@@ -74,10 +70,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       length: 2,
       vsync: this,
       initialIndex: widget.initialTabIndex,
-    );
-    _connectShakeController = AnimationController(
-      vsync: this,
-      duration: 420.ms,
     );
     _tabController.addListener(_handleTabChanged);
 
@@ -111,7 +103,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   void dispose() {
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
-    _connectShakeController.dispose();
     for (final controller in _deviceShakeControllers.values) {
       controller.dispose();
     }
@@ -120,7 +111,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _connectivitySubscription?.cancel();
     _nameSaveDebounce?.cancel();
     _networkRefreshTimer?.cancel();
-    receiverIpController.dispose();
     _deviceNameController.dispose();
     unawaited(SocketService.instance.stopConnectionGracefully());
     unawaited(DeviceDiscoveryService.instance.stop());
@@ -174,9 +164,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         _networkIcon = Icons.signal_wifi_off_rounded;
       }
     });
-    if (SocketService.instance.isHosting) {
-      unawaited(_loadReceiveIpAddress());
-    }
     if (previousNetworkMode != null &&
         previousNetworkMode != nextNetworkMode &&
         _shouldReconnectServerFor(nextNetworkMode)) {
@@ -292,9 +279,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
 
     if (receiveStarted || isReceiveStarting) {
-      if (receiveIpAddress == null) {
-        await _loadReceiveIpAddress();
-      }
       return;
     }
 
@@ -321,7 +305,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         usesTls: useTLS,
       );
       receiveStarted = true;
-      await _loadReceiveIpAddress();
     } catch (e) {
       if (!mounted) return;
       await _showErrorDialog(
@@ -345,7 +328,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     if (mounted) {
       setState(() {
         receiveStarted = false;
-        receiveIpAddress = null;
       });
     }
 
@@ -366,7 +348,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       _receiveServerIntentionallyStopped = intentional;
       receiveStarted = false;
       isReceiveStarting = false;
-      receiveIpAddress = null;
     });
   }
 
@@ -431,59 +412,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       _deviceNameController.text = name;
     });
     await _refreshAdvertisement();
-  }
-
-  Future<void> _loadReceiveIpAddress() async {
-    String? foundIp;
-
-    for (final interface in await NetworkInterface.list()) {
-      for (final address in interface.addresses) {
-        if (address.type == InternetAddressType.IPv4 &&
-            !address.isLoopback &&
-            !address.address.startsWith('169.254.')) {
-          foundIp = address.address;
-          if (foundIp.startsWith('192.168.')) {
-            break;
-          }
-        }
-      }
-      if (foundIp != null && foundIp.startsWith('192.168.')) {
-        break;
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      receiveIpAddress = foundIp;
-    });
-  }
-
-  void _submitReceiverAddress(String value) {
-    final ip = value.trim();
-    if (ip.isEmpty) {
-      showScaffoldSnackbar("Receiver IP can't be empty");
-      return;
-    }
-
-    _connectToReceiver(ip);
-  }
-
-  Future<void> _scanReceiverQr() async {
-    final ip = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QrCodeScanPage(
-          onScanned: (value) => Navigator.pop(context, value),
-        ),
-      ),
-    );
-
-    if (!mounted || ip == null || ip.isEmpty) {
-      return;
-    }
-
-    receiverIpController.text = ip;
-    _connectToReceiver(ip);
   }
 
   Future<void> _connectToReceiver(
@@ -552,7 +480,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   void _connectToDiscoveredDevice(DiscoveredDevice device) {
-    receiverIpController.text = device.address;
     _connectToReceiver(
       device.address,
       advertisedPort: device.port,
@@ -567,14 +494,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           ? 'This device has TLS enabled, but the selected device has TLS disabled.\n\nDisable TLS on this device, or enable TLS on the other device, then try again.'
           : 'This device has TLS disabled, but the selected device has TLS enabled.\n\nEnable TLS on this device, or disable TLS on the other device, then try again.',
     );
-  }
-
-  void _handleManualConnect() {
-    if (selectedFiles.isEmpty) {
-      _showFileRequiredFeedback(_connectShakeController);
-      return;
-    }
-    _submitReceiverAddress(receiverIpController.text);
   }
 
   void _handleDiscoveredDeviceTap(DiscoveredDevice device) {
@@ -1034,93 +953,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             _buildBrandHeader(
               icon: Icons.upload_file_rounded,
               title: "Send files",
-              subtitle:
-                  "Pick files, then choose a nearby receiver or use its IP address.",
+              subtitle: "Pick files, then choose a nearby receiver.",
             ),
           _buildSelectedFilesCard(),
           _buildAvailableDevicesCard(),
-          SizedBox(
-            height: 52,
-            child: Row(
-              spacing: 12,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: receiverIpController,
-                    enabled: !isPickingFile && !isConnectingToSender,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: _submitReceiverAddress,
-                    onTapOutside: (_) =>
-                        FocusManager.instance.primaryFocus?.unfocus(),
-                    decoration: InputDecoration(
-                      label: const Text("Receiver IP"),
-                      hintText: "192.168.xx.xx",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  height: double.infinity,
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: isConnectingToSender
-                          ? null
-                          : (!Platform.isAndroid && !Platform.isIOS)
-                          ? () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  behavior: SnackBarBehavior.floating,
-                                  content: Text(
-                                    "QR Scanning is not supported on this OS.",
-                                  ),
-                                ),
-                              );
-                            }
-                          : _scanReceiverQr,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Icon(
-                          Icons.qr_code_scanner_rounded,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-                height: 50,
-                child: FilledButton.icon(
-                  onPressed: isPickingFile || isConnectingToSender
-                      ? null
-                      : _handleManualConnect,
-                  icon: const Icon(Icons.link_rounded),
-                  label: Text(
-                    isConnectingToSender ? "Connecting..." : "Connect",
-                  ),
-                ),
-              )
-              .animate(
-                controller: _connectShakeController,
-                autoPlay: false,
-              )
-              .shake(
-                duration: 420.ms,
-                hz: 4,
-                offset: const Offset(8, 0),
-                rotation: 0,
-              ),
           if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
         ],
       ),
@@ -1137,10 +973,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         children: [
           if (showHeader)
             _buildBrandHeader(
-              icon: Icons.wifi_tethering_rounded,
+              icon: Icons.broadcast_on_personal_rounded,
               title: "Receive files",
-              subtitle:
-                  "Scan this QR code with another device to start sharing.",
+              subtitle: "Stay visible to nearby devices while you wait.",
             ),
           _buildReceiverIdentityCard(),
           Card(
@@ -1149,48 +984,42 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                spacing: 20,
+                spacing: 18,
                 children: [
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: 360,
-                      maxHeight: 360,
-                      minWidth: 160,
-                      minHeight: 160,
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      child: SizedBox.square(
-                        dimension: 360,
-                        child: AnimatedSize(
-                          duration: const Duration(milliseconds: 500),
-                          curve: Curves.easeOutCubic,
-                          child: _receiveServerIntentionallyStopped
-                              ? Icon(
-                                  Icons.portable_wifi_off_rounded,
-                                  size: 84,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                )
-                              : (isReceiveStarting || receiveIpAddress == null)
-                              ? const Center(
-                                  child: LoadingIndicatorM3E(),
-                                )
-                              : QrImageView(
-                                  data: receiveIpAddress!,
-                                  padding: const EdgeInsets.all(20),
-                                  backgroundColor: Colors.white,
-                                ),
-                        ),
-                      ),
-                    ),
+                  InteractiveStarWidget(
+                    size:
+                        MediaQuery.sizeOf(context).width >=
+                            _wideLayoutBreakpoint
+                        ? 300
+                        : 220,
+                    isActive:
+                        !_receiveServerIntentionallyStopped &&
+                        !isReceiveStarting,
                   ),
-                  SelectableText(
-                    _receiveServerIntentionallyStopped
-                        ? "Server stopped"
-                        : receiveIpAddress ?? "Fetching...",
-                    style: const TextStyle(fontSize: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: 8,
+                    children: [
+                      Icon(
+                        _receiveServerIntentionallyStopped
+                            ? Icons.portable_wifi_off_rounded
+                            : isReceiveStarting
+                            ? Icons.hourglass_top_rounded
+                            : Icons.broadcast_on_personal_rounded,
+                        size: 18,
+                        color: _receiveServerIntentionallyStopped
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.primary,
+                      ),
+                      Text(
+                        _receiveServerIntentionallyStopped
+                            ? 'Receiver stopped'
+                            : isReceiveStarting
+                            ? 'Starting receiver'
+                            : 'Visible to nearby devices',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1329,7 +1158,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                           Text(
-                            "${device.address}:${device.port}${device.usesTls ? ' • Secure' : ''}",
+                            device.usesTls
+                                ? 'Nearby receiver • Secure'
+                                : 'Nearby receiver',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: colorScheme.onSurfaceVariant,
