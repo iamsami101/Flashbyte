@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
@@ -743,39 +744,46 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     return ColoredBox(
       color: colorScheme.surfaceContainerLowest,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(32, 24, 32, 40),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _wideLayoutMaxWidth),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 24,
               children: [
                 _buildDesktopHeader(),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 24,
-                  children: [
-                    Expanded(
-                      flex: 11,
-                      child: _buildDesktopPanel(
-                        icon: Icons.north_east_rounded,
-                        title: "Send",
-                        subtitle: "Choose files and connect to a receiver",
-                        child: _buildSendTab(showHeader: false),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 24,
+                    children: [
+                      Expanded(
+                        flex: 11,
+                        child: _buildDesktopPanel(
+                          icon: Icons.north_east_rounded,
+                          title: "Send",
+                          subtitle: "Choose files and connect to a receiver",
+                          fillHeight: true,
+                          child: _buildSendTab(showHeader: false),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      flex: 9,
-                      child: _buildDesktopPanel(
-                        icon: Icons.south_west_rounded,
-                        title: "Receive",
-                        subtitle: "Keep this page open to stay discoverable",
-                        child: _buildReceiveTab(showHeader: false),
+                      Expanded(
+                        flex: 9,
+                        child: _buildDesktopPanel(
+                          icon: Icons.south_west_rounded,
+                          title: "Receive",
+                          subtitle: "Keep this page open to stay discoverable",
+                          fillHeight: true,
+                          child: _buildReceiveTab(
+                            showHeader: false,
+                            fillHeight: true,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -872,6 +880,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     required String title,
     required String subtitle,
     required Widget child,
+    bool fillHeight = false,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -921,7 +930,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                 ),
               ],
             ),
-            child,
+            if (fillHeight) Expanded(child: child) else child,
           ],
         ),
       ),
@@ -963,69 +972,87 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
-  Widget _buildReceiveTab({bool showHeader = true}) {
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        spacing: 20,
-        children: [
-          if (showHeader)
-            _buildBrandHeader(
-              icon: Icons.broadcast_on_personal_rounded,
-              title: "Receive files",
-              subtitle: "Stay visible to nearby devices while you wait.",
-            ),
-          _buildReceiverIdentityCard(),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 18,
-                children: [
-                  SlowM3ELoadingIndicator(
-                    size:
-                        MediaQuery.sizeOf(context).width >=
-                            _wideLayoutBreakpoint
-                        ? 300
-                        : 220,
-                    isActive:
-                        !_receiveServerIntentionallyStopped &&
-                        !isReceiveStarting,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    spacing: 8,
-                    children: [
-                      Icon(
-                        _receiveServerIntentionallyStopped
-                            ? Icons.portable_wifi_off_rounded
-                            : isReceiveStarting
-                            ? Icons.hourglass_top_rounded
-                            : Icons.broadcast_on_personal_rounded,
-                        size: 18,
-                        color: _receiveServerIntentionallyStopped
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.primary,
-                      ),
-                      Text(
-                        _receiveServerIntentionallyStopped
-                            ? 'Receiver stopped'
-                            : isReceiveStarting
-                            ? 'Starting receiver'
-                            : 'Visible to nearby devices',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+  Widget _buildReceiveTab({bool showHeader = true, bool fillHeight = false}) {
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: 20,
+      children: [
+        if (showHeader)
+          _buildBrandHeader(
+            icon: Icons.broadcast_on_personal_rounded,
+            title: "Receive files",
+            subtitle: "Stay visible to nearby devices while you wait.",
           ),
-        ],
+        _buildReceiverIdentityCard(),
+        if (fillHeight)
+          Expanded(child: _buildReceiverVisualCard(fillHeight: true))
+        else
+          _buildReceiverVisualCard(fillHeight: false),
+      ],
+    );
+    return fillHeight ? content : SingleChildScrollView(child: content);
+  }
+
+  Widget _buildReceiverVisualCard({required bool fillHeight}) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final indicatorSize = fillHeight
+                ? math
+                      .min(
+                        300,
+                        math.min(
+                          constraints.maxWidth - 40,
+                          constraints.maxHeight - 76,
+                        ),
+                      )
+                      .clamp(120.0, 300.0)
+                : 220.0;
+            return Column(
+              mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+              children: [
+                if (fillHeight) const Spacer(),
+                SlowM3ELoadingIndicator(
+                  size: indicatorSize.toDouble(),
+                  isActive:
+                      !_receiveServerIntentionallyStopped && !isReceiveStarting,
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Icon(
+                      _receiveServerIntentionallyStopped
+                          ? Icons.portable_wifi_off_rounded
+                          : isReceiveStarting
+                          ? Icons.hourglass_top_rounded
+                          : Icons.broadcast_on_personal_rounded,
+                      size: 18,
+                      color: _receiveServerIntentionallyStopped
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                    Text(
+                      _receiveServerIntentionallyStopped
+                          ? 'Receiver stopped'
+                          : isReceiveStarting
+                          ? 'Starting receiver'
+                          : 'Visible to nearby devices',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ],
+                ),
+                if (fillHeight) const Spacer(),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
