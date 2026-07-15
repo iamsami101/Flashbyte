@@ -207,14 +207,12 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                         ),
                         itemBuilder: (context, index) {
                           final file = widget.files[index];
-                          final path = file.path ?? file.uri ?? 'Unknown file';
-                          final name = path.split('/').last;
                           return ListTile(
                             leading: const Icon(
                               Icons.insert_drive_file_outlined,
                             ),
                             title: Text(
-                              name,
+                              file.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

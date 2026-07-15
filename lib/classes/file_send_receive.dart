@@ -648,7 +648,7 @@ Future<String?> _sendFileCommand(
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': fileStats.name,
+        'name': _displayFileName(fileStats.name),
         'size': fileStats.length,
       };
     } else {
@@ -657,7 +657,7 @@ Future<String?> _sendFileCommand(
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': filePath.split('/').last,
+        'name': _displayFileName(filePath.split('/').last),
         'size': fileStats.size,
       };
     }
@@ -772,6 +772,20 @@ Future<String?> _sendFileCommand(
     });
     rethrow;
   }
+}
+
+String _displayFileName(String value) {
+  var name = value;
+  try {
+    name = Uri.decodeComponent(name);
+  } on FormatException {
+    // Use the original value when a provider returns malformed escaping.
+  }
+  if (name.startsWith('primary:')) {
+    name = name.substring('primary:'.length);
+  }
+  final separator = name.lastIndexOf('/');
+  return separator == -1 ? name : name.substring(separator + 1);
 }
 
 Future<void> _sendFileWithWindowedReader({

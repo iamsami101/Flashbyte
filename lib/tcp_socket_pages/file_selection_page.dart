@@ -694,7 +694,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         )
         .then((accepted) async {
           if (!mounted) return;
-          _outgoingOfferOpen = false;
+          setState(() {
+            _outgoingOfferOpen = false;
+            isConnectingToSender = false;
+          });
           if (accepted == true) {
             _openChatIfNeeded(initialFiles: const []);
           } else {

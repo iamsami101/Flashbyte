@@ -38,6 +38,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   bool _errorDialogVisible = false;
   bool _disconnectSignalSent = false;
   bool _leavingPage = false;
+  bool _ignoreNextConnectionIssueAfterSenderCancel = false;
   Map<String, dynamic>? _peerInfo;
 
   StreamSubscription? _streamSubscription;
@@ -61,6 +62,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
+            if (_ignoreNextConnectionIssueAfterSenderCancel) {
+              isDisconnected.value = true;
+              break;
+            }
             if (!_leavingPage && isSharingInProgress) {
               _showConnectionIssueDialog(
                 message:
@@ -178,10 +183,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
             setState(() {
               isSharingInProgress = false;
             });
+            if (_ignoreNextConnectionIssueAfterSenderCancel) {
+              Future<void>.delayed(const Duration(seconds: 2), () {
+                _ignoreNextConnectionIssueAfterSenderCancel = false;
+              });
+            }
             break;
 
           case 'error':
-            if (_disconnectSignalSent || !mounted) {
+            if (_disconnectSignalSent ||
+                _ignoreNextConnectionIssueAfterSenderCancel ||
+                !mounted) {
               break;
             }
             _showConnectionIssueDialog(
@@ -846,7 +858,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
             SocketService.instance.pauseTransfer(uuid, isReceiver: isReceived),
         onResume: () =>
             SocketService.instance.resumeTransfer(uuid, isReceiver: isReceived),
-        onCancel: () => SocketService.instance.cancelTransfer(uuid),
+        onCancel: () => _cancelTransfer(uuid, isReceived: isReceived),
         onAccept: () => SocketService.instance.acceptTransfer(uuid),
         onDecline: () => SocketService.instance.declineTransfer(uuid),
       ),
@@ -900,7 +912,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
         widget.uuid,
         isReceiver: widget.isReceived,
       ),
-      onCancel: () => SocketService.instance.cancelTransfer(widget.uuid),
+      onCancel: () =>
+          _cancelTransfer(widget.uuid, isReceived: widget.isReceived),
       onAccept: () => SocketService.instance.acceptTransfer(widget.uuid),
       onDecline: () => SocketService.instance.declineTransfer(widget.uuid),
     );
@@ -908,6 +921,13 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
   String _transferRole(bool isReceived) {
     return isReceived ? 'receiver' : 'sender';
+  }
+
+  void _cancelTransfer(String fileId, {required bool isReceived}) {
+    if (!isReceived) {
+      _ignoreNextConnectionIssueAfterSenderCancel = true;
+    }
+    SocketService.instance.cancelTransfer(fileId);
   }
 
   String sizeConvert(double bytes) {
