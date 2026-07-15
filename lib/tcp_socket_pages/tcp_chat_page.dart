@@ -38,7 +38,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   bool _errorDialogVisible = false;
   bool _disconnectSignalSent = false;
   bool _leavingPage = false;
-  bool _ignoreNextConnectionIssueAfterSenderCancel = false;
+  bool _suppressNextConnectionIssueAfterCancellation = false;
   Map<String, dynamic>? _peerInfo;
 
   StreamSubscription? _streamSubscription;
@@ -62,7 +62,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
-            if (_ignoreNextConnectionIssueAfterSenderCancel) {
+            if (_suppressNextConnectionIssueAfterCancellation) {
               isDisconnected.value = true;
               break;
             }
@@ -174,6 +174,9 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'transfer_cancelled':
+            if (message['cancelledBy'] == 'remote') {
+              _suppressNextConnectionIssueAfterCancellation = true;
+            }
             _updateTransferStatus(
               message['fileId'] as String?,
               TransferStatus.cancelled,
@@ -183,16 +186,16 @@ class _TcpChatPageState extends State<TcpChatPage> {
             setState(() {
               isSharingInProgress = false;
             });
-            if (_ignoreNextConnectionIssueAfterSenderCancel) {
+            if (_suppressNextConnectionIssueAfterCancellation) {
               Future<void>.delayed(const Duration(seconds: 2), () {
-                _ignoreNextConnectionIssueAfterSenderCancel = false;
+                _suppressNextConnectionIssueAfterCancellation = false;
               });
             }
             break;
 
           case 'error':
             if (_disconnectSignalSent ||
-                _ignoreNextConnectionIssueAfterSenderCancel ||
+                _suppressNextConnectionIssueAfterCancellation ||
                 !mounted) {
               break;
             }
@@ -925,7 +928,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
   void _cancelTransfer(String fileId, {required bool isReceived}) {
     if (!isReceived) {
-      _ignoreNextConnectionIssueAfterSenderCancel = true;
+      _suppressNextConnectionIssueAfterCancellation = true;
     }
     SocketService.instance.cancelTransfer(fileId);
   }

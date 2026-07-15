@@ -80,7 +80,12 @@ void fileReceiverIsolate(List<Object> args) {
     remotelyCancelledTransfers.add(fileId);
     locallyPausedTransfers.remove(fileId);
     remotelyPausedTransfers.remove(fileId);
-    toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+    toUiSendPort.send({
+      'status': 'transfer_cancelled',
+      'fileId': fileId,
+      'cancelledBy': 'remote',
+    });
+    toUiSendPort.send({'status': 'transfer_cancel_ready', 'fileId': fileId});
   }
 
   void handleRemoteTransferAccepted(String fileId) {
