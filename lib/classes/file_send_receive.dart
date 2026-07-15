@@ -1194,6 +1194,7 @@ void _handleSocketConnection(
         }
         return true;
       case 'file_offer_cancelled':
+        gracefulDisconnect = true;
         toUiSendPort.send({'status': 'offer_cancelled_by_sender'});
         return true;
       case 'sender_paused':

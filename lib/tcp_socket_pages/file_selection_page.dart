@@ -535,7 +535,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         setState(() {
           isConnectingToSender = false;
         });
-        if (chatOpened) {
+        if (chatOpened || _incomingOfferOpen || _outgoingOfferOpen) {
           return;
         }
         if (wasConnecting || selectedTabIndex == 0) {
