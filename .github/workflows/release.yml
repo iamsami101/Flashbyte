@@ -206,13 +206,20 @@ jobs:
           fail_on_unmatched_files: true
           make_latest: true
 
-      - name: Update README release links
+      - name: Commit README release links
         if: github.ref == 'refs/heads/main'
         env:
           RELEASE_TAG: build-${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          python3 - <<'PY'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+
+            python3 - <<'PY'
           from pathlib import Path
           import os
           import textwrap
@@ -243,15 +250,19 @@ jobs:
           readme.write_text(before + section + after)
           PY
 
-      - name: Commit README release links
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if git diff --quiet README.md; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "docs: update release downloads [skip ci]"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+            if git diff --quiet README.md; then
+              exit 0
+            fi
+
+            git add README.md
+            git commit -m "docs: update release downloads [skip ci]"
+
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+
+            git reset --hard HEAD~1
+          done
+
+          echo "Could not push README release links after 3 attempts."
+          exit 1
