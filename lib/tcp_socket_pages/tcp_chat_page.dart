@@ -62,19 +62,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
           case 'disconnect':
             if (!mounted) return;
             _disconnectSignalSent = true;
-            if (_suppressNextConnectionIssueAfterCancellation) {
-              isDisconnected.value = true;
-              break;
-            }
-            if (!_leavingPage && isSharingInProgress) {
-              _showConnectionIssueDialog(
-                message:
-                    'Connection lost. The other device disconnected during the transfer.',
-              );
-            } else if (!_leavingPage) {
-              Navigator.pop(context);
-              showScaffoldSnackbar("Disconnected");
-            }
+            _handleDisconnectAfterCancellationWindow();
             break;
           case 'start':
             if (isSharingInProgress &&
@@ -194,13 +182,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
             break;
 
           case 'error':
-            if (_disconnectSignalSent ||
-                _suppressNextConnectionIssueAfterCancellation ||
-                !mounted) {
-              break;
-            }
-            _showConnectionIssueDialog(
-              message: message['message'] as String? ?? 'Unknown error',
+            _showErrorAfterCancellationWindow(
+              message['message'] as String? ?? 'Unknown error',
             );
             break;
         }
@@ -931,6 +914,35 @@ class _TcpChatPageState extends State<TcpChatPage> {
       _suppressNextConnectionIssueAfterCancellation = true;
     }
     SocketService.instance.cancelTransfer(fileId);
+  }
+
+  Future<void> _handleDisconnectAfterCancellationWindow() async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted || _suppressNextConnectionIssueAfterCancellation) {
+      if (mounted) {
+        isDisconnected.value = true;
+      }
+      return;
+    }
+    if (!_leavingPage && isSharingInProgress) {
+      _showConnectionIssueDialog(
+        message:
+            'Connection lost. The other device disconnected during the transfer.',
+      );
+    } else if (!_leavingPage) {
+      Navigator.pop(context);
+      showScaffoldSnackbar("Disconnected");
+    }
+  }
+
+  Future<void> _showErrorAfterCancellationWindow(String message) async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted ||
+        _disconnectSignalSent ||
+        _suppressNextConnectionIssueAfterCancellation) {
+      return;
+    }
+    _showConnectionIssueDialog(message: message);
   }
 
   String sizeConvert(double bytes) {
