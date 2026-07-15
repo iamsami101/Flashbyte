@@ -15,11 +15,17 @@ migration:
     - platform: root
       create_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
       base_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+    - platform: ios
+      create_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      base_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+    - platform: macos
+      create_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      base_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
     - platform: windows
       create_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
       base_revision: c9a6c484230f8b5e408ec57be1ef71dee1e77020
 
-  # User provided section
+# User provided section
 
   # List of Local paths (relative to this file) that should be
   # ignored by the migrate tool.
