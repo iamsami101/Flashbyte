@@ -25,11 +25,11 @@ You can try out Flashbyte on the following platforms:
 <!-- BEGIN AUTO RELEASE DOWNLOADS -->
 | Platform | Download |
 |----------|----------|
-| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
-| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/latest) |
+| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-android.aab) |
+| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-linux-x64.tar.gz) |
+| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-macos.dmg) |
+| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-ios-unsigned-runner-app.zip) |
+| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/build-50972238d076d958a3ed9b0ea7a6219d88ba2015/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ## Installation instructions:
