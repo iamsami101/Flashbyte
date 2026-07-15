@@ -16,7 +16,6 @@ import 'package:flashbyte/widgets/slow_m3e_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:heroine/heroine.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 
 class FileSelectionPage extends StatefulWidget {
@@ -34,6 +33,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     with TickerProviderStateMixin {
   static const double _wideLayoutBreakpoint = 1000;
   static const double _wideLayoutMaxWidth = 1320;
+  static const double _mobileLayoutMaxWidth = 560;
   static const double _receiverVisualMinHeight = 280;
 
   final TextEditingController _deviceNameController = TextEditingController();
@@ -564,12 +564,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _incomingOfferOpen = true;
     Navigator.of(context)
         .push(
-          MaterialPageRoute(
-            builder: (_) => IncomingTransferOfferPage(
+          _buildApprovalRoute(
+            IncomingTransferOfferPage(
               fileId: fileId,
               fileName: fileName,
               fileSize: fileSize,
               sender: SocketService.instance.connectedPeerInfo,
+              receiverName: deviceName ?? _deviceNameController.text,
+              receiverType: _localDeviceType,
+              receiverUsesTls: SocketService.instance.isSecureHosting,
               onAccept: () {
                 SocketService.instance.acceptTransfer(fileId);
                 Navigator.of(context).pop(true);
@@ -601,8 +604,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final receiverPreview = _selectedReceiverPreview;
     Navigator.of(context)
         .push(
-          MaterialPageRoute(
-            builder: (_) => OutgoingTransferOfferPage(
+          _buildApprovalRoute(
+            OutgoingTransferOfferPage(
               files: List<FastFilePickerPath>.from(selectedFiles),
               onStartSending: _sendSelectedFiles,
               onCancel: _cancelOutgoingOffer,
@@ -626,6 +629,28 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             await _restartServer();
           }
         });
+  }
+
+  PageRouteBuilder<T> _buildApprovalRoute<T>(Widget page) {
+    return PageRouteBuilder<T>(
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionDuration: 260.ms,
+      reverseTransitionDuration: 200.ms,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.08, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
   }
 
   DiscoveredDeviceType get _localDeviceType =>
@@ -678,10 +703,18 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Widget build(BuildContext context) {
     final useWideLayout =
         MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: useWideLayout
+          ? colorScheme.surface
+          : colorScheme.surfaceContainerLowest,
       appBar: AppBar(
         title: const Text("Flashbyte"),
+        centerTitle: !useWideLayout,
+        backgroundColor: useWideLayout
+            ? colorScheme.surface
+            : colorScheme.surfaceContainerLowest,
         actions: [
           IconButton(
             tooltip: 'Settings',
@@ -693,54 +726,42 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       body: SafeArea(
         child: useWideLayout
             ? _buildWideLayout()
-            : TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildTabPage(_buildSendTab()),
-                  _buildTabPage(_buildReceiveTab()),
-                ],
+            : ColoredBox(
+                color: colorScheme.surfaceContainerLowest,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildTabPage(_buildSendTab()),
+                    _buildTabPage(_buildReceiveTab()),
+                  ],
+                ),
               ),
       ),
       bottomNavigationBar: useWideLayout
           ? null
-          : Material(
-              color: Theme.of(context).colorScheme.surface,
-              child: SafeArea(
-                top: false,
-                child: TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  dividerHeight: 0,
-                  indicatorAnimation: TabIndicatorAnimation.elastic,
-                  labelColor: Theme.of(
-                    context,
-                  ).colorScheme.onPrimaryContainer,
-                  controller: _tabController,
-                  onTap: (index) {
-                    if (selectedTabIndex != index) {
-                      setState(() {
-                        selectedTabIndex = index;
-                      });
-                    }
-                  },
-                  tabs: const [
-                    Tab(
-                      iconMargin: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 3,
-                      ),
-                      icon: Icon(Icons.upload_rounded),
-                      text: "Send",
-                    ),
-                    Tab(
-                      iconMargin: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 3,
-                      ),
-                      icon: Icon(Icons.download_rounded),
-                      text: "Receive",
-                    ),
-                  ],
-                ),
+          : SafeArea(
+              top: false,
+              child: NavigationBar(
+                selectedIndex: selectedTabIndex,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: (index) {
+                  _tabController.animateTo(index);
+                  setState(() {
+                    selectedTabIndex = index;
+                  });
+                },
+                destinations: const [
+                  NavigationDestination(
+                    selectedIcon: Icon(Icons.upload_file_rounded),
+                    icon: Icon(Icons.upload_file_outlined),
+                    label: "Send",
+                  ),
+                  NavigationDestination(
+                    selectedIcon: Icon(Icons.download_for_offline_rounded),
+                    icon: Icon(Icons.download_for_offline_outlined),
+                    label: "Receive",
+                  ),
+                ],
               ),
             ),
     );
@@ -946,12 +967,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildTabPage(Widget child) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Center(
         child: ConstrainedBox(
-          constraints: (Platform.isAndroid || Platform.isIOS)
-              ? const BoxConstraints()
-              : const BoxConstraints(maxWidth: 500),
+          constraints: const BoxConstraints(maxWidth: _mobileLayoutMaxWidth),
           child: child,
         ),
       ),
@@ -960,10 +979,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildSendTab({bool showHeader = true}) {
     return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(0, showHeader ? 12 : 0, 0, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        spacing: 20,
+        spacing: 14,
         children: [
           if (showHeader)
             _buildBrandHeader(
@@ -971,6 +991,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               title: "Send files",
               subtitle: "Pick files, then choose a nearby receiver.",
             ),
+          if (showHeader) _buildMobileStatusStrip(),
           _buildSelectedFilesCard(),
           _buildAvailableDevicesCard(),
           if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
@@ -1022,7 +1043,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
-      spacing: 20,
+      spacing: 14,
       children: [
         if (showHeader)
           _buildBrandHeader(
@@ -1030,66 +1051,112 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             title: "Receive files",
             subtitle: "Stay visible to nearby devices while you wait.",
           ),
+        if (showHeader) _buildMobileStatusStrip(),
         _buildReceiverIdentityCard(),
         _buildReceiverVisualCard(fillHeight: false),
       ],
     );
-    return SingleChildScrollView(child: content);
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(0, showHeader ? 12 : 0, 0, 24),
+      child: content,
+    );
   }
 
   Widget _buildReceiverVisualCard({required bool fillHeight}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final showHelperText = !fillHeight || constraints.maxHeight >= 390;
+            final indicatorStatusGap = showHelperText ? 18.0 : 12.0;
+            final helperGap = showHelperText ? 10.0 : 0.0;
+            final reservedHeight =
+                44.0 +
+                indicatorStatusGap +
+                helperGap +
+                (showHelperText ? 16.0 : 0.0);
+            final availableIndicatorHeight = math.max(
+              0.0,
+              constraints.maxHeight - reservedHeight,
+            );
             final indicatorSize = fillHeight
-                ? math
-                      .min(
-                        300,
-                        math.min(
-                          constraints.maxWidth - 40,
-                          constraints.maxHeight - 76,
-                        ),
-                      )
-                      .clamp(120.0, 300.0)
+                ? math.min(
+                    300.0,
+                    math.min(
+                      math.max(0.0, constraints.maxWidth - 40),
+                      availableIndicatorHeight,
+                    ),
+                  )
                 : 220.0;
             return Column(
               mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
               children: [
                 if (fillHeight) const Spacer(),
-                SlowM3ELoadingIndicator(
-                  size: indicatorSize.toDouble(),
-                  isActive:
-                      !_receiveServerIntentionallyStopped && !isReceiveStarting,
+                if (indicatorSize >= 48)
+                  SlowM3ELoadingIndicator(
+                    size: indicatorSize.toDouble(),
+                    isActive:
+                        !_receiveServerIntentionallyStopped &&
+                        !isReceiveStarting,
+                  ),
+                if (indicatorSize >= 48) SizedBox(height: indicatorStatusGap),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: _receiveServerIntentionallyStopped
+                        ? colorScheme.errorContainer
+                        : colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: 8,
+                    children: [
+                      Icon(
+                        _receiveServerIntentionallyStopped
+                            ? Icons.portable_wifi_off_rounded
+                            : isReceiveStarting
+                            ? Icons.hourglass_top_rounded
+                            : Icons.broadcast_on_personal_rounded,
+                        size: 18,
+                        color: _receiveServerIntentionallyStopped
+                            ? colorScheme.onErrorContainer
+                            : colorScheme.onPrimaryContainer,
+                      ),
+                      Text(
+                        _receiveServerIntentionallyStopped
+                            ? 'Receiver stopped'
+                            : isReceiveStarting
+                            ? 'Starting receiver'
+                            : 'Visible to nearby devices',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: _receiveServerIntentionallyStopped
+                              ? colorScheme.onErrorContainer
+                              : colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  spacing: 8,
-                  children: [
-                    Icon(
-                      _receiveServerIntentionallyStopped
-                          ? Icons.portable_wifi_off_rounded
-                          : isReceiveStarting
-                          ? Icons.hourglass_top_rounded
-                          : Icons.broadcast_on_personal_rounded,
-                      size: 18,
-                      color: _receiveServerIntentionallyStopped
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.primary,
+                if (showHelperText) ...[
+                  SizedBox(height: helperGap),
+                  Text(
+                    "Keep Flashbyte open so senders can find this device.",
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
-                    Text(
-                      _receiveServerIntentionallyStopped
-                          ? 'Receiver stopped'
-                          : isReceiveStarting
-                          ? 'Starting receiver'
-                          : 'Visible to nearby devices',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
                 if (fillHeight) const Spacer(),
               ],
             );
@@ -1099,24 +1166,111 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
+  Widget _buildMobileStatusStrip() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final serverRunning = SocketService.instance.isHosting;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.06),
+            offset: const Offset(0, 8),
+            blurRadius: 22,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(_networkIcon, color: colorScheme.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _networkLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(minHeight: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: serverRunning
+                  ? colorScheme.primaryContainer
+                  : colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 6,
+              children: [
+                Icon(
+                  serverRunning
+                      ? Icons.dns_rounded
+                      : Icons.portable_wifi_off_rounded,
+                  size: 16,
+                  color: serverRunning
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+                Text(
+                  serverRunning ? "Ready" : "Offline",
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: serverRunning
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAvailableDevicesCard() {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surface,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 12,
+          spacing: 14,
           children: [
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    "Available nearby",
-                    style: Theme.of(context).textTheme.titleMedium,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        "Nearby receivers",
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        "Tap a device to offer the selected files.",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 AnimatedSwitcher(
@@ -1124,7 +1278,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   child: isDiscovering
                       ? SizedBox.square(
                           key: const ValueKey('discovering'),
-                          dimension: 18,
+                          dimension: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: colorScheme.primary,
@@ -1133,7 +1287,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       : Icon(
                           Icons.radar_rounded,
                           key: const ValueKey('ready'),
-                          size: 20,
+                          size: 22,
                           color: colorScheme.primary,
                         ),
                 ),
@@ -1144,23 +1298,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               child: discoveredDevices.isEmpty
-                  ? Padding(
-                      key: const ValueKey('no-devices'),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        isDiscovering
-                            ? "Looking for receivers on this network..."
-                            : "No ones around to send to.",
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
+                  ? _buildEmptyDevicesState(colorScheme)
                   : Column(
                       key: ValueKey(
                         discoveredDevices.map((device) => device.id).join(),
                       ),
-                      spacing: 8,
+                      spacing: 10,
                       children: [
                         for (final (index, device) in discoveredDevices.indexed)
                           _buildDeviceTile(device)
@@ -1183,6 +1326,50 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
+  Widget _buildEmptyDevicesState(ColorScheme colorScheme) {
+    return Container(
+      key: const ValueKey('no-devices'),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        spacing: 10,
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isDiscovering ? Icons.radar_rounded : Icons.devices_rounded,
+              color: colorScheme.onPrimaryContainer,
+            ),
+          ),
+          Text(
+            isDiscovering ? "Scanning this network" : "No receivers found",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            isDiscovering
+                ? "Receivers will appear here as soon as they are discoverable."
+                : "Make sure the other device is open on Receive and connected to this network.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDeviceTile(DiscoveredDevice device) {
     final colorScheme = Theme.of(context).colorScheme;
     final canTap = !isPickingFile && !isConnectingToSender;
@@ -1192,27 +1379,32 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
 
     final deviceCard = Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(14),
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         onTap: canTap ? () => _handleDiscoveredDeviceTap(device) : null,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
+          constraints: const BoxConstraints(minHeight: 72),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
             child: Row(
               spacing: 12,
               children: [
-                CircleAvatar(
-                  backgroundColor: colorScheme.primaryContainer,
-                  foregroundColor: colorScheme.onPrimaryContainer,
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Icon(
                     device.type == DiscoveredDeviceType.laptop
                         ? Icons.laptop_rounded
                         : Icons.smartphone_rounded,
                     size: 20,
+                    color: colorScheme.onPrimaryContainer,
                   ),
                 ),
                 Expanded(
@@ -1224,12 +1416,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                         device.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       Text(
                         device.usesTls
-                            ? 'Nearby receiver • Secure'
-                            : 'Nearby receiver',
+                            ? 'Local receiver - secure'
+                            : 'Local receiver',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontFeatures: const [
@@ -1240,11 +1434,24 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  color: canTap
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  decoration: BoxDecoration(
+                    color: canTap
+                        ? colorScheme.primary
+                        : colorScheme.surfaceContainerHigh,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 20,
+                    color: canTap
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
                 ),
               ],
             ),
@@ -1253,11 +1460,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       ),
     );
 
-    return Heroine(
-          tag: outgoingReceiverHeroineTag(device.id),
-          motion: CupertinoMotion.bouncy(),
-          child: deviceCard,
-        )
+    return deviceCard
         .animate(
           controller: shakeController,
           autoPlay: false,
@@ -1275,15 +1478,25 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
       color: colorScheme.primaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         child: Row(
           spacing: 12,
           children: [
-            Icon(
-              Icons.broadcast_on_personal_rounded,
-              color: colorScheme.onPrimaryContainer,
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colorScheme.onPrimaryContainer.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                Icons.broadcast_on_personal_rounded,
+                color: colorScheme.onPrimaryContainer,
+              ),
             ),
             Expanded(
               child: Column(
@@ -1331,6 +1544,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               onPressed: _settingsLocked ? null : _generateDeviceName,
               icon: const Icon(Icons.refresh_rounded),
               color: colorScheme.onPrimaryContainer,
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(44),
+              ),
             ),
           ],
         ),
@@ -1343,26 +1559,37 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     required String title,
     required String subtitle,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Column(
-      spacing: 12,
+      spacing: 8,
       children: [
-        Icon(
-          icon,
-          size: 48,
-          color: Theme.of(context).colorScheme.primaryFixed,
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(
+            icon,
+            size: 30,
+            color: colorScheme.onPrimaryContainer,
+          ),
         ),
         Text(
           title,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w800,
           ),
         ),
         Text(
           subtitle,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.secondary,
+            color: colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -1388,21 +1615,43 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Widget _buildSelectedFilesCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          spacing: 14,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 16,
           children: [
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    _selectionSummary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        _selectionSummary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        selectedFiles.isEmpty
+                            ? "Choose what you want to send."
+                            : "Ready to send after you pick a receiver.",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (selectedFiles.isNotEmpty)
@@ -1416,38 +1665,37 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                             });
                           },
                     icon: const Icon(Icons.close_rounded),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size.square(44),
+                    ),
                   ),
               ],
             ),
             if (selectedFiles.isNotEmpty)
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 160),
+                constraints: const BoxConstraints(maxHeight: 176),
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: selectedFiles.length,
                   separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(
-                      selectedFiles[index].name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                      const SizedBox(height: 8),
+                  itemBuilder: (context, index) =>
+                      _buildSelectedFileTile(selectedFiles[index]),
                 ),
               ),
             Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
+              color: selectedFiles.isEmpty
+                  ? colorScheme.primaryContainer
+                  : colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(20),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(20),
                 onTap: isPickingFile || isConnectingToSender
                     ? null
                     : _pickFiles,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 52),
+                  constraints: const BoxConstraints(minHeight: 58),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
@@ -1458,6 +1706,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                           selectedFiles.isEmpty
                               ? Icons.attach_file_rounded
                               : Icons.swap_horiz_rounded,
+                          color: selectedFiles.isEmpty
+                              ? colorScheme.onPrimaryContainer
+                              : colorScheme.onSurfaceVariant,
                         ),
                         Text(
                           isPickingFile
@@ -1465,6 +1716,13 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                               : selectedFiles.isEmpty
                               ? "Pick files"
                               : "Change files",
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: selectedFiles.isEmpty
+                                    ? colorScheme.onPrimaryContainer
+                                    : colorScheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ],
                     ),
@@ -1476,6 +1734,97 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         ),
       ),
     );
+  }
+
+  Widget _buildSelectedFileTile(FastFilePickerPath file) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final extension = _fileExtensionLabel(file.name);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        spacing: 12,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _fileTypeIcon(file.name),
+              size: 20,
+              color: colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              file.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Container(
+            constraints: const BoxConstraints(minHeight: 30),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              extension,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _fileTypeIcon(String fileName) {
+    final extension = _fileExtensionLabel(fileName).toLowerCase();
+    if (const {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'}.contains(
+      extension,
+    )) {
+      return Icons.image_rounded;
+    }
+    if (const {'mp4', 'mov', 'mkv', 'webm', 'avi'}.contains(extension)) {
+      return Icons.movie_rounded;
+    }
+    if (const {'mp3', 'wav', 'flac', 'm4a', 'aac'}.contains(extension)) {
+      return Icons.music_note_rounded;
+    }
+    if (const {'pdf', 'doc', 'docx', 'txt', 'ppt', 'pptx'}.contains(
+      extension,
+    )) {
+      return Icons.description_rounded;
+    }
+    if (const {'zip', 'rar', '7z', 'tar', 'gz'}.contains(extension)) {
+      return Icons.archive_rounded;
+    }
+    return Icons.insert_drive_file_rounded;
+  }
+
+  String _fileExtensionLabel(String fileName) {
+    final extensionIndex = fileName.lastIndexOf('.');
+    if (extensionIndex <= 0 || extensionIndex == fileName.length - 1) {
+      return "FILE";
+    }
+    final extension = fileName.substring(extensionIndex + 1).toUpperCase();
+    return extension.length > 5 ? extension.substring(0, 5) : extension;
   }
 
   String get _selectionSummary {

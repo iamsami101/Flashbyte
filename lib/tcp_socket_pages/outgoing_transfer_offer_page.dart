@@ -5,11 +5,6 @@ import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:heroine/heroine.dart';
-
-String outgoingReceiverHeroineTag(String deviceId) {
-  return 'outgoing-receiver-$deviceId';
-}
 
 class OutgoingTransferOfferPage extends StatefulWidget {
   const OutgoingTransferOfferPage({
@@ -121,7 +116,10 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
         }
       },
       child: Scaffold(
+        backgroundColor: colorScheme.surfaceContainerLowest,
         appBar: AppBar(
+          backgroundColor: colorScheme.surfaceContainerLowest,
+          centerTitle: true,
           leading: IconButton(
             tooltip: 'Cancel transfer',
             onPressed: _cancel,
@@ -161,55 +159,43 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     DiscoveredDeviceType receiverType,
     bool receiverUsesTls,
   ) {
-    final receiverTag = widget.receiverPreview == null
-        ? null
-        : outgoingReceiverHeroineTag(widget.receiverPreview!.id);
+    final receiverPort =
+        (_receiver?['port'] as int?) ?? widget.receiverPreview?.port;
+    final totalFiles = widget.files.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(
-              Icons.hourglass_top_rounded,
-              size: 48,
-              color: colorScheme.primary,
+        _ApprovalHeader(
+              icon: Icons.schedule_send_rounded,
+              title: 'Waiting for approval',
+              message:
+                  'The receiver needs to accept this request before sending begins.',
             )
-            .animate(onPlay: (controller) => controller.repeat())
-            .rotate(duration: 1600.ms, curve: Curves.easeInOut),
-        const SizedBox(height: 16),
-        Text(
-          'Waiting for approval',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall,
-        ).animate().fadeIn(delay: 60.ms, duration: 180.ms),
-        const SizedBox(height: 8),
-        Text(
-          'The receiver needs to accept these files before sending begins.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ).animate().fadeIn(delay: 110.ms, duration: 180.ms),
-        const SizedBox(height: 28),
+            .animate()
+            .fadeIn(duration: 180.ms)
+            .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+        const SizedBox(height: 20),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 720;
               final deviceCard = _OfferSurface(
+                title: 'Devices',
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    spacing: 10,
+                    spacing: 12,
                     children: [
                       _ApprovalDeviceRow(
                             label: 'This device',
                             name: widget.senderName,
-                            detail: _deviceDetail(
-                              widget.senderType,
-                              widget.senderUsesTls,
-                              null,
-                            ),
+                            detail: _deviceTypeLabel(widget.senderType),
                             type: widget.senderType,
+                            address: 'Local sender',
+                            port: null,
+                            usesTls: widget.senderUsesTls,
                             color: colorScheme.secondaryContainer,
                             foregroundColor: colorScheme.onSecondaryContainer,
                           )
@@ -220,74 +206,56 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                             end: 0,
                             curve: Curves.easeOutCubic,
                           ),
-                      if (receiverTag == null)
-                        _ApprovalDeviceRow(
-                          label: 'Receiver',
-                          name: receiverName,
-                          detail: _deviceDetail(
-                            receiverType,
-                            receiverUsesTls,
-                            receiverAddress,
-                          ),
-                          type: receiverType,
-                          color: colorScheme.primaryContainer,
-                          foregroundColor: colorScheme.onPrimaryContainer,
-                        )
-                      else
-                        Heroine(
-                          tag: receiverTag,
-                          motion: CupertinoMotion.bouncy(),
-                          child: _ApprovalDeviceRow(
+                      _TransferDirectionDivider(
+                        secure: receiverUsesTls && widget.senderUsesTls,
+                      ),
+                      _ApprovalDeviceRow(
                             label: 'Receiver',
                             name: receiverName,
-                            detail: _deviceDetail(
-                              receiverType,
-                              receiverUsesTls,
-                              receiverAddress,
-                            ),
+                            detail: _deviceTypeLabel(receiverType),
                             type: receiverType,
+                            address: receiverAddress ?? 'Address pending',
+                            port: receiverPort,
+                            usesTls: receiverUsesTls,
                             color: colorScheme.primaryContainer,
                             foregroundColor: colorScheme.onPrimaryContainer,
+                          )
+                          .animate()
+                          .fadeIn(delay: 220.ms, duration: 180.ms)
+                          .slideY(
+                            begin: 0.05,
+                            end: 0,
+                            curve: Curves.easeOutCubic,
                           ),
-                        ),
                     ],
                   ),
                 ),
               );
               final filesCard = _OfferSurface(
+                title:
+                    '$totalFiles ${totalFiles == 1 ? 'file' : 'files'} selected',
+                fillChild: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-                      child: Text(
-                        '${widget.files.length} ${widget.files.length == 1 ? 'file' : 'files'} selected',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                    ),
                     Expanded(
                       child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                         itemCount: widget.files.length,
-                        separatorBuilder: (_, _) => Divider(
-                          height: 1,
-                          indent: 56,
-                          color: colorScheme.outlineVariant.withValues(
-                            alpha: 0.55,
-                          ),
-                        ),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final file = widget.files[index];
-                          return ListTile(
-                            leading: const Icon(
-                              Icons.insert_drive_file_outlined,
-                            ),
-                            title: Text(
-                              file.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
+                          return _ApprovalFileRow(fileName: file.name)
+                              .animate()
+                              .fadeIn(
+                                delay: (180 + index * 45).ms,
+                                duration: 160.ms,
+                              )
+                              .slideY(
+                                begin: 0.05,
+                                end: 0,
+                                curve: Curves.easeOutCubic,
+                              );
                         },
                       ),
                     ),
@@ -305,6 +273,7 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                 );
               }
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   deviceCard,
                   const SizedBox(height: 12),
@@ -312,14 +281,24 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                 ],
               );
             },
-          ).animate().fadeIn(delay: 160.ms, duration: 200.ms),
+          ).animate().fadeIn(delay: 140.ms, duration: 180.ms),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
-          onPressed: _cancel,
-          icon: const Icon(Icons.close_rounded),
-          label: const Text('Cancel transfer'),
-        ).animate().fadeIn(delay: 300.ms, duration: 180.ms),
+              onPressed: _cancel,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel transfer'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+            )
+            .animate()
+            .fadeIn(delay: 300.ms, duration: 180.ms)
+            .slideY(
+              begin: 0.05,
+              end: 0,
+              curve: Curves.easeOutCubic,
+            ),
       ],
     );
   }
@@ -368,33 +347,152 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     );
   }
 
-  String _deviceDetail(
-    DiscoveredDeviceType type,
-    bool usesTls,
-    String? address,
-  ) {
-    final parts = <String>[
-      type == DiscoveredDeviceType.laptop ? 'Laptop' : 'Phone',
-      if (usesTls) 'Secure',
-      ?address,
-    ];
-    return parts.join(' • ');
+  String _deviceTypeLabel(DiscoveredDeviceType type) {
+    return type == DiscoveredDeviceType.laptop ? 'Desktop or laptop' : 'Phone';
   }
 }
 
 enum _OutgoingOfferOutcome { declined, connectionEnded }
 
 class _OfferSurface extends StatelessWidget {
-  const _OfferSurface({required this.child});
+  const _OfferSurface({
+    required this.title,
+    required this.child,
+    this.fillChild = false,
+  });
 
+  final String title;
   final Widget child;
+  final bool fillChild;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      child: child,
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (fillChild) Expanded(child: child) else child,
+        ],
+      ),
+    );
+  }
+}
+
+class _ApprovalHeader extends StatelessWidget {
+  const _ApprovalHeader({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      spacing: 8,
+      children: [
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(icon, size: 30, color: colorScheme.onPrimaryContainer),
+        ),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransferDirectionDivider extends StatelessWidget {
+  const _TransferDirectionDivider({required this.secure});
+
+  final bool secure;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Divider(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        Container(
+          constraints: const BoxConstraints(minHeight: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: secure
+                ? colorScheme.primaryContainer
+                : colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(17),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 6,
+            children: [
+              Icon(
+                secure ? Icons.lock_rounded : Icons.lock_open_rounded,
+                size: 16,
+                color: secure
+                    ? colorScheme.onPrimaryContainer
+                    : colorScheme.onSurfaceVariant,
+              ),
+              Text(
+                secure ? 'Secure request' : 'Unencrypted request',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: secure
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurfaceVariant,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Divider(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -405,6 +503,9 @@ class _ApprovalDeviceRow extends StatelessWidget {
     required this.name,
     required this.detail,
     required this.type,
+    required this.address,
+    required this.port,
+    required this.usesTls,
     required this.color,
     required this.foregroundColor,
   });
@@ -413,6 +514,9 @@ class _ApprovalDeviceRow extends StatelessWidget {
   final String name;
   final String detail;
   final DiscoveredDeviceType type;
+  final String address;
+  final int? port;
+  final bool usesTls;
   final Color color;
   final Color foregroundColor;
 
@@ -421,64 +525,197 @@ class _ApprovalDeviceRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(14),
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.68),
+      borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 72),
+        constraints: const BoxConstraints(minHeight: 124),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-          child: Row(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 12,
             children: [
-              CircleAvatar(
-                backgroundColor: color,
-                foregroundColor: foregroundColor,
-                child: Icon(
-                  type == DiscoveredDeviceType.laptop
-                      ? Icons.laptop_rounded
-                      : Icons.smartphone_rounded,
-                  size: 20,
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 2,
-                  children: [
-                    Row(
-                      spacing: 8,
+              Row(
+                spacing: 12,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      type == DiscoveredDeviceType.laptop
+                          ? Icons.laptop_rounded
+                          : Icons.smartphone_rounded,
+                      size: 22,
+                      color: foregroundColor,
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 2,
                       children: [
                         Text(
                           label,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
-                        Expanded(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
-                    Text(
-                      detail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailPill(
+                    icon: Icons.devices_rounded,
+                    label: detail,
+                  ),
+                  _DetailPill(
+                    icon: Icons.lan_rounded,
+                    label: address,
+                  ),
+                  if (port != null)
+                    _DetailPill(
+                      icon: Icons.numbers_rounded,
+                      label: 'Port $port',
                     ),
-                  ],
-                ),
+                  _DetailPill(
+                    icon: usesTls
+                        ? Icons.lock_rounded
+                        : Icons.lock_open_rounded,
+                    label: usesTls ? 'TLS enabled' : 'Unencrypted',
+                  ),
+                ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ApprovalFileRow extends StatelessWidget {
+  const _ApprovalFileRow({required this.fileName});
+
+  final String fileName;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final extension = _extensionLabel(fileName);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 58),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        spacing: 12,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _fileIcon(extension),
+              size: 20,
+              color: colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          _DetailPill(icon: Icons.description_rounded, label: extension),
+        ],
+      ),
+    );
+  }
+
+  static IconData _fileIcon(String extension) {
+    final lower = extension.toLowerCase();
+    if (const {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'}.contains(lower)) {
+      return Icons.image_rounded;
+    }
+    if (const {'mp4', 'mov', 'mkv', 'webm', 'avi'}.contains(lower)) {
+      return Icons.movie_rounded;
+    }
+    if (const {'mp3', 'wav', 'flac', 'm4a', 'aac'}.contains(lower)) {
+      return Icons.music_note_rounded;
+    }
+    if (const {'zip', 'rar', '7z', 'tar', 'gz'}.contains(lower)) {
+      return Icons.archive_rounded;
+    }
+    return Icons.insert_drive_file_rounded;
+  }
+
+  static String _extensionLabel(String fileName) {
+    final extensionIndex = fileName.lastIndexOf('.');
+    if (extensionIndex <= 0 || extensionIndex == fileName.length - 1) {
+      return 'FILE';
+    }
+    final extension = fileName.substring(extensionIndex + 1).toUpperCase();
+    return extension.length > 5 ? extension.substring(0, 5) : extension;
+  }
+}
+
+class _DetailPill extends StatelessWidget {
+  const _DetailPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 6,
+        children: [
+          Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }
