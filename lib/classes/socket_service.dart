@@ -29,6 +29,7 @@ class SocketService {
   bool _disconnectRequested = false;
   int _connectionGeneration = 0;
   Completer<void>? _disconnectCompleter;
+  Completer<void>? _outgoingOfferCancelCompleter;
   Future<void> _lifecycleOperation = Future.value();
 
   final _messageStreamController = StreamController<IsolateMessage>.broadcast();
@@ -202,6 +203,13 @@ class SocketService {
             _completeDisconnectWaiter();
           }
         }
+        if (status == 'outgoing_offer_cancelled') {
+          final completer = _outgoingOfferCancelCompleter;
+          if (completer != null && !completer.isCompleted) {
+            completer.complete();
+          }
+          _outgoingOfferCancelCompleter = null;
+        }
         if (status == 'error' && _disconnectRequested) {
           return;
         }
@@ -294,6 +302,22 @@ class SocketService {
     _sendTransferControl('decline_transfer', fileId);
   }
 
+  Future<void> cancelOutgoingOffer() async {
+    final sendPort = _toIsolateSendPort;
+    if (sendPort == null) return;
+    final completer = _outgoingOfferCancelCompleter ??= Completer<void>();
+    sendPort.send({'command': 'cancel_outgoing_offer'});
+    try {
+      await completer.future.timeout(const Duration(seconds: 1));
+    } on TimeoutException {
+      // The following graceful disconnect still cleans up a closed socket.
+    } finally {
+      if (identical(_outgoingOfferCancelCompleter, completer)) {
+        _outgoingOfferCancelCompleter = null;
+      }
+    }
+  }
+
   void _sendTransferControl(String command, String fileId, {String? role}) {
     _toIsolateSendPort?.send({
       'command': command,
@@ -380,6 +404,11 @@ class SocketService {
       completer.complete();
     }
     _disconnectCompleter = null;
+    final offerCompleter = _outgoingOfferCancelCompleter;
+    if (offerCompleter != null && !offerCompleter.isCompleted) {
+      offerCompleter.complete();
+    }
+    _outgoingOfferCancelCompleter = null;
   }
 
   void _stopConnectionIfCurrent(int generation) {
@@ -415,6 +444,7 @@ class SocketService {
           status == 'transfer_resumed' ||
           status == 'transfer_pending' ||
           status == 'transfer_accepted' ||
+          status == 'transfer_declined' ||
           status == 'transfer_cancelled') {
         _transferLatestMessages[fileId] = Map<String, dynamic>.from(message);
       }

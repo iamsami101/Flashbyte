@@ -93,7 +93,7 @@ void fileReceiverIsolate(List<Object> args) {
     declinedTransfers.add(fileId);
     acceptedTransfers.remove(fileId);
     remotelyCancelledTransfers.add(fileId);
-    toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
+    toUiSendPort.send({'status': 'transfer_declined', 'fileId': fileId});
     toUiSendPort.send({'status': 'transfer_cancel_ready', 'fileId': fileId});
   }
 
@@ -571,6 +571,15 @@ void fileReceiverIsolate(List<Object> args) {
         });
         return;
       }
+    } else if (command['command'] == 'cancel_outgoing_offer') {
+      try {
+        await _sendTransferControlFrame(clientSocket, {
+          'type': 'file_offer_cancelled',
+        });
+      } finally {
+        toUiSendPort.send({'status': 'outgoing_offer_cancelled'});
+      }
+      return;
     }
     commandQueue.add(command);
     processCommandQueue();
@@ -1162,6 +1171,9 @@ void _handleSocketConnection(
         if (fileId != null) {
           onRemoteTransferDeclined?.call(fileId);
         }
+        return true;
+      case 'file_offer_cancelled':
+        toUiSendPort.send({'status': 'offer_cancelled_by_sender'});
         return true;
       case 'sender_paused':
       case 'receiver_paused':

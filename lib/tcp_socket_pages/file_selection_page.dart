@@ -670,6 +670,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           _incomingOfferOpen = false;
           if (accepted == true) {
             _openChatIfNeeded(initialFiles: const []);
+          } else {
+            unawaited(_restartServer());
           }
         });
   }
@@ -686,7 +688,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             builder: (_) => OutgoingTransferOfferPage(
               files: List<FastFilePickerPath>.from(selectedFiles),
               onStartSending: _sendSelectedFiles,
-              onCancel: SocketService.instance.disconnect,
+              onCancel: _cancelOutgoingOffer,
             ),
           ),
         )
@@ -710,6 +712,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         SocketService.instance.sendFile(fileLocation);
       }
     }
+  }
+
+  Future<void> _cancelOutgoingOffer() async {
+    await SocketService.instance.cancelOutgoingOffer();
+    await SocketService.instance.disconnect();
   }
 
   void _openChatIfNeeded({
