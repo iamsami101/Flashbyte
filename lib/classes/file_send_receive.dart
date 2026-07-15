@@ -463,10 +463,12 @@ void fileReceiverIsolate(List<Object> args) {
             });
           }
         } else if (command['command'] == "disconnect") {
+          final wasSendingFile = isSendingFile;
           localDisconnectRequested = true;
           final header = utf8.encode(
             jsonEncode({
               'type': 'disconnect',
+              'reason': wasSendingFile ? 'transfer_cancelled' : 'user_left',
             }),
           );
           final byteData = ByteData(8);
@@ -474,7 +476,7 @@ void fileReceiverIsolate(List<Object> args) {
           byteData.setUint32(4, 0);
 
           try {
-            if (!isSendingFile && clientSocket != null) {
+            if (clientSocket != null) {
               clientSocket!.add(byteData.buffer.asUint8List());
               clientSocket!.add(header);
               await clientSocket!.flush();
@@ -1223,6 +1225,9 @@ void _handleSocketConnection(
         }
         return true;
       case 'file_transfer_cancel':
+        // A sender cancellation is an intentional terminal state, not a
+        // transport failure if the sender closes the connection afterward.
+        gracefulDisconnect = true;
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
           onRemoteTransferCancelled?.call(fileId);
