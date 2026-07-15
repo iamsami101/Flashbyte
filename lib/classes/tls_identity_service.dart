@@ -23,6 +23,7 @@ class TlsIdentity {
 class TlsIdentityService {
   TlsIdentityService._();
 
+  static const certificateCommonName = 'Flashbyte Device';
   static const _certificateFileName = 'device.crt';
   static const _privateKeyFileName = 'device.key';
 
@@ -93,7 +94,7 @@ class TlsIdentityService {
     final publicKey = keyPair.publicKey as RSAPublicKey;
     final csr = X509Utils.generateRsaCsrPem(
       {
-        'CN': 'Flashbyte Device',
+        'CN': certificateCommonName,
         'O': 'Flashbyte',
         'OU': '',
         'L': '',

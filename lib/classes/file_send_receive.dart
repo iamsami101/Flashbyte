@@ -257,7 +257,7 @@ void fileReceiverIsolate(List<Object> args) {
                 );
                 finalSocket = await SecureSocket.secure(
                   rawSocket,
-                  host: 'localhost',
+                  host: TlsIdentityService.certificateCommonName,
                   context: securityContext,
                 );
                 final peerCertificate = finalSocket.peerCertificate;
@@ -623,6 +623,10 @@ String _clientConnectErrorMessage({
 
   if (error is SocketException) {
     return 'Could not reach $endpoint. Check that the IP address and port are correct, both devices are on the same network, and the receiver server is running.\n\nDetails: $details';
+  }
+
+  if (details.toLowerCase().contains('hostname mismatch')) {
+    return 'Could not verify the receiver TLS certificate name. Refresh discovery and try connecting to the receiver again.\n\nDetails: $details';
   }
 
   return useTLS
