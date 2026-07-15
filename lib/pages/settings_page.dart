@@ -341,7 +341,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: Text(
                     widget.locked
                         ? "Disconnect before changing TLS settings."
-                        : "Encrypt file transfers using TLS for secure communication between devices",
+                        : "Encrypt transfers with a unique certificate generated on this device.",
                   ),
                   trailing: Switch(
                     value: _useTLS,

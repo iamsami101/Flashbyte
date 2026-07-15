@@ -7,6 +7,7 @@ import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/classes/tls_identity_service.dart';
 import 'package:flashbyte/classes/user_facing_error.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/incoming_transfer_offer_page.dart';
@@ -303,11 +304,16 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       }
       final name = deviceName ?? await AppSettings.getDeviceName();
       final id = _deviceId ?? await AppSettings.getDeviceId();
+      final tlsIdentity = useTLS
+          ? await TlsIdentityService.getOrCreateIdentity()
+          : null;
       await DeviceDiscoveryService.instance.startAdvertising(
         deviceId: id,
         name: name,
         port: port,
         usesTls: useTLS,
+        certificateFingerprint: tlsIdentity?.fingerprint,
+        certificatePem: tlsIdentity?.certificatePem,
       );
       receiveStarted = true;
     } catch (e) {
@@ -351,11 +357,16 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final id = _deviceId ?? await AppSettings.getDeviceId();
     final port = await AppSettings.getPort();
     final useTLS = await AppSettings.getUseTls();
+    final tlsIdentity = useTLS
+        ? await TlsIdentityService.getOrCreateIdentity()
+        : null;
     await DeviceDiscoveryService.instance.startAdvertising(
       deviceId: id,
       name: name,
       port: port,
       usesTls: useTLS,
+      certificateFingerprint: tlsIdentity?.fingerprint,
+      certificatePem: tlsIdentity?.certificatePem,
     );
   }
 
@@ -409,6 +420,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     String ip, {
     int? advertisedPort,
     bool? advertisedTls,
+    String? advertisedCertificateFingerprint,
+    String? advertisedCertificatePem,
+    String? advertisedDeviceId,
     DiscoveredDevice? receiverPreview,
   }) async {
     if (selectedFiles.isEmpty) {
@@ -440,7 +454,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         return;
       }
       final port = advertisedPort ?? await AppSettings.getPort();
-      await _connectToHostWithStartupRetry(ip, port: port, useTLS: useTLS);
+      await _connectToHostWithStartupRetry(
+        ip,
+        port: port,
+        useTLS: useTLS,
+        trustedCertificatePem: advertisedCertificatePem,
+        expectedCertificateFingerprint: advertisedCertificateFingerprint,
+        trustedPeerId: advertisedDeviceId,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -458,12 +479,18 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     String ip, {
     required int port,
     required bool useTLS,
+    String? trustedCertificatePem,
+    String? expectedCertificateFingerprint,
+    String? trustedPeerId,
   }) async {
     try {
       await SocketService.instance.connectToHost(
         ip,
         port: port,
         useTLS: useTLS,
+        trustedCertificatePem: trustedCertificatePem,
+        expectedCertificateFingerprint: expectedCertificateFingerprint,
+        trustedPeerId: trustedPeerId,
       );
     } on SocketStartupCancelled {
       await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -471,6 +498,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         ip,
         port: port,
         useTLS: useTLS,
+        trustedCertificatePem: trustedCertificatePem,
+        expectedCertificateFingerprint: expectedCertificateFingerprint,
+        trustedPeerId: trustedPeerId,
       );
     }
   }
@@ -480,6 +510,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       device.address,
       advertisedPort: device.port,
       advertisedTls: device.usesTls,
+      advertisedCertificateFingerprint: device.certificateFingerprint,
+      advertisedCertificatePem: device.certificatePem,
+      advertisedDeviceId: device.id,
       receiverPreview: device,
     );
   }

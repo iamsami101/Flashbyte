@@ -7,7 +7,9 @@ environment:
   sdk: ^3.8.1
 
 dependencies:
+  basic_utils: ^5.8.2
   connectivity_plus: ^7.2.0
+  crypto: ^3.0.7
   disable_battery_optimization: ^1.1.2
   dynamic_color: ^1.8.1
   external_path: ^2.2.0
@@ -39,5 +41,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/certificates/

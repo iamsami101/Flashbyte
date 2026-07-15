@@ -12,6 +12,8 @@ class DiscoveredDevice {
     required this.port,
     required this.usesTls,
     required this.type,
+    this.certificateFingerprint,
+    this.certificatePem,
   });
 
   final String id;
@@ -20,6 +22,8 @@ class DiscoveredDevice {
   final int port;
   final bool usesTls;
   final DiscoveredDeviceType type;
+  final String? certificateFingerprint;
+  final String? certificatePem;
 }
 
 class DeviceDiscoveryService {
@@ -76,6 +80,8 @@ class DeviceDiscoveryService {
     required String name,
     required int port,
     required bool usesTls,
+    String? certificateFingerprint,
+    String? certificatePem,
   }) async {
     await startDiscovery(localDeviceId: deviceId, port: port);
     _advertisement = {
@@ -85,6 +91,8 @@ class DeviceDiscoveryService {
       'name': name,
       'port': port,
       'tls': usesTls,
+      'certFingerprint': certificateFingerprint,
+      'cert': certificatePem,
       'deviceType': Platform.isAndroid || Platform.isIOS
           ? DiscoveredDeviceType.phone.name
           : DiscoveredDeviceType.laptop.name,
@@ -161,7 +169,13 @@ class DeviceDiscoveryService {
       final name = message['name'] as String?;
       final port = message['port'] as int?;
       final usesTls = message['tls'] as bool?;
+      final certificateFingerprint = message['certFingerprint'] as String?;
+      final certificatePem = message['cert'] as String?;
       if (name == null || port == null || usesTls == null) {
+        return;
+      }
+      if (usesTls &&
+          (certificateFingerprint == null || certificatePem == null)) {
         return;
       }
       final deviceType = DiscoveredDeviceType.values.firstWhere(
@@ -177,6 +191,8 @@ class DeviceDiscoveryService {
           port: port,
           usesTls: usesTls,
           type: deviceType,
+          certificateFingerprint: certificateFingerprint,
+          certificatePem: certificatePem,
         ),
         lastSeen: DateTime.now(),
       );

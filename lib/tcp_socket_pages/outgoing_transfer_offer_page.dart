@@ -107,6 +107,9 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
         (_receiver?['tls'] as bool?) ??
         widget.receiverPreview?.usesTls ??
         false;
+    final receiverFingerprint =
+        _receiver?['certFingerprint'] as String? ??
+        widget.receiverPreview?.certificateFingerprint;
 
     return PopScope(
       canPop: false,
@@ -141,6 +144,7 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                         receiverAddress,
                         receiverType,
                         receiverUsesTls,
+                        receiverFingerprint,
                       )
                     : _buildOutcomeContent(context, colorScheme),
               ),
@@ -158,6 +162,7 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     String? receiverAddress,
     DiscoveredDeviceType receiverType,
     bool receiverUsesTls,
+    String? receiverFingerprint,
   ) {
     final receiverPort =
         (_receiver?['port'] as int?) ?? widget.receiverPreview?.port;
@@ -217,6 +222,7 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                             address: receiverAddress ?? 'Address pending',
                             port: receiverPort,
                             usesTls: receiverUsesTls,
+                            fingerprint: receiverFingerprint,
                             color: colorScheme.primaryContainer,
                             foregroundColor: colorScheme.onPrimaryContainer,
                           )
@@ -506,6 +512,7 @@ class _ApprovalDeviceRow extends StatelessWidget {
     required this.address,
     required this.port,
     required this.usesTls,
+    this.fingerprint,
     required this.color,
     required this.foregroundColor,
   });
@@ -517,6 +524,7 @@ class _ApprovalDeviceRow extends StatelessWidget {
   final String address;
   final int? port;
   final bool usesTls;
+  final String? fingerprint;
   final Color color;
   final Color foregroundColor;
 
@@ -600,6 +608,11 @@ class _ApprovalDeviceRow extends StatelessWidget {
                         : Icons.lock_open_rounded,
                     label: usesTls ? 'TLS enabled' : 'Unencrypted',
                   ),
+                  if (usesTls && fingerprint != null)
+                    _DetailPill(
+                      icon: Icons.fingerprint_rounded,
+                      label: 'TLS ${_shortFingerprint(fingerprint!)}',
+                    ),
                 ],
               ),
             ],
@@ -607,6 +620,13 @@ class _ApprovalDeviceRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _shortFingerprint(String value) {
+    if (value.length <= 12) {
+      return value;
+    }
+    return '${value.substring(0, 6)}...${value.substring(value.length - 6)}';
   }
 }
 

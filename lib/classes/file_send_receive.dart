@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:flashbyte/classes/android_saf_service.dart';
+import 'package:flashbyte/classes/tls_identity_service.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:external_path/external_path.dart';
@@ -122,6 +123,7 @@ void fileReceiverIsolate(List<Object> args) {
             'deviceType': command['deviceType'],
             'port': command['listeningPort'],
             'tls': useTLS,
+            'certFingerprint': command['certificateFingerprint'],
           };
 
           if (command['mode'] == 'host') {
@@ -142,17 +144,7 @@ void fileReceiverIsolate(List<Object> args) {
                   securityContext.useCertificateChain(certPath);
                   securityContext.usePrivateKey(keyPath);
                 } else {
-                  final certFile = File('certificates/server.crt');
-                  final keyFile = File('certificates/server.key');
-                  if (certFile.existsSync() && keyFile.existsSync()) {
-                    securityContext = SecurityContext(withTrustedRoots: false);
-                    securityContext.useCertificateChain(
-                      'certificates/server.crt',
-                    );
-                    securityContext.usePrivateKey('certificates/server.key');
-                  } else {
-                    throw Exception('Certificate files not found.');
-                  }
+                  throw Exception('Generated certificate files not found.');
                 }
                 print('[SERVER_TLS] Certificate loaded successfully');
               } catch (e) {
@@ -225,24 +217,33 @@ void fileReceiverIsolate(List<Object> args) {
             );
           } else if (command['mode'] == 'client') {
             SecurityContext? securityContext;
+            final expectedCertificateFingerprint =
+                command['expectedCertificateFingerprint'] as String?;
             if (useTLS) {
               try {
                 final certPath = command['certPath'] as String?;
-                if (certPath != null && File(certPath).existsSync()) {
-                  print('[CLIENT_TLS] cert path=$certPath, exists=true');
+                final keyPath = command['keyPath'] as String?;
+                final trustedCertPath = command['trustedCertPath'] as String?;
+                if (trustedCertPath != null &&
+                    File(trustedCertPath).existsSync()) {
+                  print(
+                    '[CLIENT_TLS] trusted cert path=$trustedCertPath, exists=true',
+                  );
                   securityContext = SecurityContext(withTrustedRoots: false);
-                  securityContext.setTrustedCertificates(certPath);
-                } else {
-                  final certFile = File('certificates/server.crt');
-                  if (certFile.existsSync()) {
-                    securityContext = SecurityContext(withTrustedRoots: false);
-                    securityContext.setTrustedCertificates(
-                      'certificates/server.crt',
-                    );
+                  securityContext.setTrustedCertificates(trustedCertPath);
+                  if (certPath != null &&
+                      keyPath != null &&
+                      File(certPath).existsSync() &&
+                      File(keyPath).existsSync()) {
+                    securityContext.useCertificateChain(certPath);
+                    securityContext.usePrivateKey(keyPath);
                   }
+                } else {
+                  throw Exception('Trusted receiver certificate not found.');
                 }
               } catch (e) {
                 print('[CLIENT_TLS] cert load error: ${e.toString()}');
+                rethrow;
               }
             }
 
@@ -259,6 +260,19 @@ void fileReceiverIsolate(List<Object> args) {
                   host: 'localhost',
                   context: securityContext,
                 );
+                final peerCertificate = finalSocket.peerCertificate;
+                if (expectedCertificateFingerprint != null &&
+                    peerCertificate != null) {
+                  final actualFingerprint =
+                      TlsIdentityService.certificateFingerprint(
+                        peerCertificate.pem,
+                      );
+                  if (actualFingerprint != expectedCertificateFingerprint) {
+                    throw Exception(
+                      'The receiver TLS certificate fingerprint did not match discovery.',
+                    );
+                  }
+                }
                 _configureSocketForTransfer(finalSocket);
                 print('[CLIENT_TLS] connected successfully');
                 clientSocket = finalSocket;
@@ -1131,6 +1145,9 @@ void _handleSocketConnection(
               : 'phone',
           'port': headerJson['port'] is int ? headerJson['port'] : null,
           'tls': headerJson['tls'] == true,
+          'certFingerprint': headerJson['certFingerprint'] is String
+              ? headerJson['certFingerprint']
+              : null,
           'address': socket.remoteAddress.address,
         });
         return true;

@@ -5,6 +5,8 @@ import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/classes/android_connection_notification_service.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/classes/app_settings.dart';
+import 'package:flashbyte/classes/tls_identity_service.dart';
 import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -17,6 +19,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (await AppSettings.getUseTls()) {
+    await TlsIdentityService.getOrCreateIdentity();
+  }
   await AppAppearanceController.instance.load();
   runApp(const MainApp());
 }

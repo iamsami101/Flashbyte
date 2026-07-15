@@ -5,8 +5,8 @@ import 'dart:isolate';
 import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/file_send_receive.dart';
+import 'package:flashbyte/classes/tls_identity_service.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
 
@@ -70,6 +70,9 @@ class SocketService {
     String host, {
     int port = 8050,
     bool useTLS = false,
+    String? trustedCertificatePem,
+    String? expectedCertificateFingerprint,
+    String? trustedPeerId,
   }) async {
     await _runLifecycleOperation(
       () => _startIsolate(
@@ -77,6 +80,9 @@ class SocketService {
         host: host,
         port: port,
         useTLS: useTLS,
+        trustedCertificatePem: trustedCertificatePem,
+        expectedCertificateFingerprint: expectedCertificateFingerprint,
+        trustedPeerId: trustedPeerId,
       ),
     );
   }
@@ -101,44 +107,14 @@ class SocketService {
     }
   }
 
-  Future<String?> _copyCertToTemp(String fileName) async {
-    final certAssetPath = 'assets/certificates/$fileName';
-    final certFsPath = 'certificates/$fileName';
-    try {
-      // Try loading from assets first (works on Android/iOS)
-      final data = await rootBundle.load(certAssetPath);
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/$fileName');
-      await tempFile.writeAsBytes(data.buffer.asUint8List());
-      return tempFile.path;
-    } catch (_) {
-      // Fallback: try direct filesystem path (works on Linux desktop)
-      try {
-        final fsFile = File(certFsPath);
-        if (await fsFile.exists()) {
-          return fsFile.path;
-        }
-        // Try with full path
-        final fullPath = File(certFsPath).absolute.path;
-        if (await File(fullPath).exists()) {
-          return fullPath;
-        }
-      } catch (_) {}
-      return null;
-    }
-  }
-
-  Future<Map<String, String?>> _prepareCertFiles() async {
-    final certPath = await _copyCertToTemp('server.crt');
-    final keyPath = await _copyCertToTemp('server.key');
-    return {'certPath': certPath, 'keyPath': keyPath};
-  }
-
   Future<void> _startIsolate({
     required String mode,
     String? host,
     required int port,
     bool useTLS = false,
+    String? trustedCertificatePem,
+    String? expectedCertificateFingerprint,
+    String? trustedPeerId,
   }) async {
     await _stopConnectionGracefully();
     final generation = _connectionGeneration;
@@ -151,12 +127,31 @@ class SocketService {
 
     String? certPath;
     String? keyPath;
+    String? certificateFingerprint;
+    String? trustedCertPath;
     final downloadDirectory = await AppSettings.getDownloadDirectory();
     final deviceName = await AppSettings.getDeviceName();
     if (useTLS) {
-      final paths = await _prepareCertFiles();
-      certPath = paths['certPath'];
-      keyPath = paths['keyPath'];
+      final identity = await TlsIdentityService.getOrCreateIdentity();
+      certPath = identity.certificatePath;
+      keyPath = identity.privateKeyPath;
+      certificateFingerprint = identity.fingerprint;
+
+      if (mode == 'client') {
+        if (trustedCertificatePem == null ||
+            trustedCertificatePem.trim().isEmpty ||
+            expectedCertificateFingerprint == null ||
+            expectedCertificateFingerprint.trim().isEmpty) {
+          throw Exception(
+            'TLS requires a discovered receiver certificate. Select the receiver from discovery and try again.',
+          );
+        }
+
+        trustedCertPath = await TlsIdentityService.writeTrustedPeerCertificate(
+          peerId: trustedPeerId ?? host ?? 'peer',
+          certificatePem: trustedCertificatePem,
+        );
+      }
     }
 
     final completer = Completer<SendPort>();
@@ -251,6 +246,9 @@ class SocketService {
       'useTLS': useTLS,
       'certPath': certPath,
       'keyPath': keyPath,
+      'certificateFingerprint': certificateFingerprint,
+      'trustedCertPath': trustedCertPath,
+      'expectedCertificateFingerprint': expectedCertificateFingerprint,
       'downloadDirectory': downloadDirectory,
       'deviceName': deviceName,
       'deviceType': Platform.isAndroid || Platform.isIOS ? 'phone' : 'laptop',
