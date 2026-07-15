@@ -11,7 +11,7 @@ import 'package:flashbyte/pages/settings_page.dart';
 import 'package:flashbyte/tcp_socket_pages/incoming_transfer_offer_page.dart';
 import 'package:flashbyte/tcp_socket_pages/outgoing_transfer_offer_page.dart';
 import 'package:flashbyte/tcp_socket_pages/tcp_chat_page.dart';
-import 'package:flashbyte/widgets/interactive_star_widget.dart';
+import 'package:flashbyte/widgets/slow_m3e_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -986,7 +986,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                 mainAxisSize: MainAxisSize.min,
                 spacing: 18,
                 children: [
-                  InteractiveStarWidget(
+                  SlowM3ELoadingIndicator(
                     size:
                         MediaQuery.sizeOf(context).width >=
                             _wideLayoutBreakpoint
