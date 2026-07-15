@@ -16,6 +16,7 @@ import 'package:flashbyte/widgets/slow_m3e_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:heroine/heroine.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 
 class FileSelectionPage extends StatefulWidget {
@@ -52,6 +53,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   String? deviceName;
   String? _deviceId;
+  DiscoveredDevice? _selectedReceiverPreview;
+  bool _selectedSenderUsesTls = false;
   List<DiscoveredDevice> discoveredDevices = const [];
   StreamSubscription? _socketSubscription;
   StreamSubscription<List<DiscoveredDevice>>? _discoverySubscription;
@@ -406,6 +409,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     String ip, {
     int? advertisedPort,
     bool? advertisedTls,
+    DiscoveredDevice? receiverPreview,
   }) async {
     if (selectedFiles.isEmpty) {
       showScaffoldSnackbar("Select at least one file first");
@@ -418,15 +422,18 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     setState(() {
       isConnectingToSender = true;
       chatOpened = false;
+      _selectedReceiverPreview = receiverPreview;
     });
 
     try {
       await DeviceDiscoveryService.instance.stopAdvertising();
       receiveStarted = false;
       final useTLS = await AppSettings.getUseTls();
+      _selectedSenderUsesTls = useTLS;
       if (advertisedTls != null && advertisedTls != useTLS) {
         setState(() {
           isConnectingToSender = false;
+          _selectedReceiverPreview = null;
         });
         await _showTlsMismatchDialog(localUsesTls: useTLS);
         await _restartServer();
@@ -438,6 +445,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       if (!mounted) return;
       setState(() {
         isConnectingToSender = false;
+        _selectedReceiverPreview = null;
       });
       await _showErrorDialog(
         title: 'Connection Error',
@@ -472,6 +480,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       device.address,
       advertisedPort: device.port,
       advertisedTls: device.usesTls,
+      receiverPreview: device,
     );
   }
 
@@ -589,6 +598,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
 
     _outgoingOfferOpen = true;
+    final receiverPreview = _selectedReceiverPreview;
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -596,6 +606,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               files: List<FastFilePickerPath>.from(selectedFiles),
               onStartSending: _sendSelectedFiles,
               onCancel: _cancelOutgoingOffer,
+              senderName: deviceName ?? _deviceNameController.text,
+              senderType: _localDeviceType,
+              senderUsesTls: _selectedSenderUsesTls,
+              receiverPreview: receiverPreview,
             ),
           ),
         )
@@ -604,6 +618,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           setState(() {
             _outgoingOfferOpen = false;
             isConnectingToSender = false;
+            _selectedReceiverPreview = null;
           });
           if (accepted == true) {
             _openChatIfNeeded(initialFiles: const []);
@@ -612,6 +627,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           }
         });
   }
+
+  DiscoveredDeviceType get _localDeviceType =>
+      Platform.isAndroid || Platform.isIOS
+      ? DiscoveredDeviceType.phone
+      : DiscoveredDeviceType.laptop;
 
   void _sendSelectedFiles() {
     for (final pickedFile in selectedFiles) {
@@ -1171,67 +1191,72 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       () => AnimationController(vsync: this, duration: 420.ms),
     );
 
-    return Material(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: canTap ? () => _handleDiscoveredDeviceTap(device) : null,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 64),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-                child: Row(
-                  spacing: 12,
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: colorScheme.primaryContainer,
-                      foregroundColor: colorScheme.onPrimaryContainer,
-                      child: Icon(
-                        device.type == DiscoveredDeviceType.laptop
-                            ? Icons.laptop_rounded
-                            : Icons.smartphone_rounded,
-                        size: 20,
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: 2,
-                        children: [
-                          Text(
-                            device.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          Text(
-                            device.usesTls
-                                ? 'Nearby receiver • Secure'
-                                : 'Nearby receiver',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      color: canTap
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    ),
-                  ],
+    final deviceCard = Material(
+      color: colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: canTap ? () => _handleDiscoveredDeviceTap(device) : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            child: Row(
+              spacing: 12,
+              children: [
+                CircleAvatar(
+                  backgroundColor: colorScheme.primaryContainer,
+                  foregroundColor: colorScheme.onPrimaryContainer,
+                  child: Icon(
+                    device.type == DiscoveredDeviceType.laptop
+                        ? Icons.laptop_rounded
+                        : Icons.smartphone_rounded,
+                    size: 20,
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: [
+                      Text(
+                        device.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      Text(
+                        device.usesTls
+                            ? 'Nearby receiver • Secure'
+                            : 'Nearby receiver',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontFeatures: const [
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: canTap
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+
+    return Heroine(
+          tag: outgoingReceiverHeroineTag(device.id),
+          motion: CupertinoMotion.bouncy(),
+          child: deviceCard,
         )
         .animate(
           controller: shakeController,

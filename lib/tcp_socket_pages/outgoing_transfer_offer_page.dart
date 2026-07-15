@@ -1,9 +1,15 @@
 import 'dart:async';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
+import 'package:flashbyte/classes/device_discovery_service.dart';
 import 'package:flashbyte/classes/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:heroine/heroine.dart';
+
+String outgoingReceiverHeroineTag(String deviceId) {
+  return 'outgoing-receiver-$deviceId';
+}
 
 class OutgoingTransferOfferPage extends StatefulWidget {
   const OutgoingTransferOfferPage({
@@ -11,11 +17,19 @@ class OutgoingTransferOfferPage extends StatefulWidget {
     required this.files,
     required this.onStartSending,
     required this.onCancel,
+    required this.senderName,
+    required this.senderType,
+    required this.senderUsesTls,
+    this.receiverPreview,
   });
 
   final List<FastFilePickerPath> files;
   final VoidCallback onStartSending;
   final Future<void> Function() onCancel;
+  final String senderName;
+  final DiscoveredDeviceType senderType;
+  final bool senderUsesTls;
+  final DiscoveredDevice? receiverPreview;
 
   @override
   State<OutgoingTransferOfferPage> createState() =>
@@ -85,11 +99,19 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final receiverName = _receiver?['name'] as String? ?? 'Receiver';
-    final receiverAddress = _receiver?['address'] as String?;
-    final receiverIcon = _receiver?['deviceType'] == 'laptop'
-        ? Icons.laptop_mac_rounded
-        : Icons.phone_android_rounded;
+    final receiverName =
+        _receiver?['name'] as String? ??
+        widget.receiverPreview?.name ??
+        'Receiver';
+    final receiverAddress =
+        _receiver?['address'] as String? ?? widget.receiverPreview?.address;
+    final receiverType = _receiver?['deviceType'] == 'laptop'
+        ? DiscoveredDeviceType.laptop
+        : widget.receiverPreview?.type ?? DiscoveredDeviceType.phone;
+    final receiverUsesTls =
+        (_receiver?['tls'] as bool?) ??
+        widget.receiverPreview?.usesTls ??
+        false;
 
     return PopScope(
       canPop: false,
@@ -119,7 +141,8 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                         colorScheme,
                         receiverName,
                         receiverAddress,
-                        receiverIcon,
+                        receiverType,
+                        receiverUsesTls,
                       )
                     : _buildOutcomeContent(context, colorScheme),
               ),
@@ -135,8 +158,13 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     ColorScheme colorScheme,
     String receiverName,
     String? receiverAddress,
-    IconData receiverIcon,
+    DiscoveredDeviceType receiverType,
+    bool receiverUsesTls,
   ) {
+    final receiverTag = widget.receiverPreview == null
+        ? null
+        : outgoingReceiverHeroineTag(widget.receiverPreview!.id);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -167,19 +195,62 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 720;
               final deviceCard = _OfferSurface(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: colorScheme.secondaryContainer,
-                    foregroundColor: colorScheme.onSecondaryContainer,
-                    child: Icon(receiverIcon),
-                  ),
-                  title: Text(receiverName),
-                  subtitle: Text(
-                    receiverAddress ?? 'Connected nearby device',
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 10,
+                    children: [
+                      _ApprovalDeviceRow(
+                            label: 'This device',
+                            name: widget.senderName,
+                            detail: _deviceDetail(
+                              widget.senderType,
+                              widget.senderUsesTls,
+                              null,
+                            ),
+                            type: widget.senderType,
+                            color: colorScheme.secondaryContainer,
+                            foregroundColor: colorScheme.onSecondaryContainer,
+                          )
+                          .animate()
+                          .fadeIn(delay: 120.ms, duration: 180.ms)
+                          .slideY(
+                            begin: 0.05,
+                            end: 0,
+                            curve: Curves.easeOutCubic,
+                          ),
+                      if (receiverTag == null)
+                        _ApprovalDeviceRow(
+                          label: 'Receiver',
+                          name: receiverName,
+                          detail: _deviceDetail(
+                            receiverType,
+                            receiverUsesTls,
+                            receiverAddress,
+                          ),
+                          type: receiverType,
+                          color: colorScheme.primaryContainer,
+                          foregroundColor: colorScheme.onPrimaryContainer,
+                        )
+                      else
+                        Heroine(
+                          tag: receiverTag,
+                          motion: CupertinoMotion.bouncy(),
+                          child: _ApprovalDeviceRow(
+                            label: 'Receiver',
+                            name: receiverName,
+                            detail: _deviceDetail(
+                              receiverType,
+                              receiverUsesTls,
+                              receiverAddress,
+                            ),
+                            type: receiverType,
+                            color: colorScheme.primaryContainer,
+                            foregroundColor: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -296,6 +367,19 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
       ],
     );
   }
+
+  String _deviceDetail(
+    DiscoveredDeviceType type,
+    bool usesTls,
+    String? address,
+  ) {
+    final parts = <String>[
+      type == DiscoveredDeviceType.laptop ? 'Laptop' : 'Phone',
+      if (usesTls) 'Secure',
+      ?address,
+    ];
+    return parts.join(' • ');
+  }
 }
 
 enum _OutgoingOfferOutcome { declined, connectionEnded }
@@ -311,6 +395,84 @@ class _OfferSurface extends StatelessWidget {
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
       child: child,
+    );
+  }
+}
+
+class _ApprovalDeviceRow extends StatelessWidget {
+  const _ApprovalDeviceRow({
+    required this.label,
+    required this.name,
+    required this.detail,
+    required this.type,
+    required this.color,
+    required this.foregroundColor,
+  });
+
+  final String label;
+  final String name;
+  final String detail;
+  final DiscoveredDeviceType type;
+  final Color color;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 72),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+          child: Row(
+            spacing: 12,
+            children: [
+              CircleAvatar(
+                backgroundColor: color,
+                foregroundColor: foregroundColor,
+                child: Icon(
+                  type == DiscoveredDeviceType.laptop
+                      ? Icons.laptop_rounded
+                      : Icons.smartphone_rounded,
+                  size: 20,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
