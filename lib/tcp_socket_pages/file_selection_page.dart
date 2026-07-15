@@ -339,20 +339,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     await _ensureReceiveReady();
   }
 
-  Future<void> _stopReceiveServer({bool intentional = true}) async {
-    final generation = ++_serverRestartGeneration;
-    await DeviceDiscoveryService.instance.stopAdvertising();
-    await SocketService.instance.stopConnectionGracefully();
-    if (!mounted || generation != _serverRestartGeneration) {
-      return;
-    }
-    setState(() {
-      _receiveServerIntentionallyStopped = intentional;
-      receiveStarted = false;
-      isReceiveStarting = false;
-    });
-  }
-
   Future<void> _refreshAdvertisement() async {
     if (!SocketService.instance.isHosting) {
       return;
@@ -664,7 +650,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         chatOpened = false;
         isConnectingToSender = false;
       });
-      await _stopReceiveServer();
+      await _restartServer();
     });
   }
 
