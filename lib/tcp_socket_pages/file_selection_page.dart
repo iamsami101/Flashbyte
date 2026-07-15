@@ -33,6 +33,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     with TickerProviderStateMixin {
   static const double _wideLayoutBreakpoint = 1000;
   static const double _wideLayoutMaxWidth = 1320;
+  static const double _receiverVisualMinHeight = 280;
 
   final TextEditingController _deviceNameController = TextEditingController();
   final Map<String, AnimationController> _deviceShakeControllers = {};
@@ -989,9 +990,23 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           ],
           SliverToBoxAdapter(child: _buildReceiverIdentityCard()),
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _buildReceiverVisualCard(fillHeight: true),
+          SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final remainingHeight =
+                  constraints.viewportMainAxisExtent -
+                  constraints.precedingScrollExtent;
+              final visualHeight = math.max(
+                _receiverVisualMinHeight,
+                remainingHeight,
+              );
+
+              return SliverToBoxAdapter(
+                child: SizedBox(
+                  height: visualHeight,
+                  child: _buildReceiverVisualCard(fillHeight: true),
+                ),
+              );
+            },
           ),
         ],
       );
