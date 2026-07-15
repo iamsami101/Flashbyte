@@ -946,7 +946,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildTabPage(Widget child) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
+      padding: EdgeInsets.symmetric(
+        horizontal: Platform.isAndroid || Platform.isIOS ? 18 : 30,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: (Platform.isAndroid || Platform.isIOS)
@@ -960,19 +962,30 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildSendTab({bool showHeader = true}) {
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        spacing: 20,
+        spacing: showHeader ? 14 : 20,
         children: [
           if (showHeader)
-            _buildBrandHeader(
+            _buildPhonePageHeader(
               icon: Icons.upload_file_rounded,
               title: "Send files",
-              subtitle: "Pick files, then choose a nearby receiver.",
+              subtitle: selectedFiles.isEmpty
+                  ? "Pick files first"
+                  : "Choose a receiver nearby",
+              trailing: _buildPhoneHeaderPill(
+                icon: selectedFiles.isEmpty
+                    ? Icons.attach_file_rounded
+                    : Icons.check_circle_rounded,
+                label: selectedFiles.isEmpty
+                    ? "No files"
+                    : "${selectedFiles.length} selected",
+              ),
             ),
-          _buildSelectedFilesCard(),
-          _buildAvailableDevicesCard(),
+          _buildSelectedFilesCard(phoneLayout: showHeader),
+          _buildAvailableDevicesCard(phoneLayout: showHeader),
           if (isConnectingToSender) const Center(child: LoadingIndicatorM3E()),
         ],
       ),
@@ -1022,164 +1035,261 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
-      spacing: 20,
+      spacing: showHeader ? 14 : 20,
       children: [
         if (showHeader)
-          _buildBrandHeader(
+          _buildPhonePageHeader(
             icon: Icons.broadcast_on_personal_rounded,
-            title: "Receive files",
-            subtitle: "Stay visible to nearby devices while you wait.",
+            title: "Receive",
+            subtitle: "Keep this open",
+            trailing: _buildPhoneHeaderPill(
+              icon: SocketService.instance.isHosting
+                  ? Icons.dns_rounded
+                  : Icons.portable_wifi_off_rounded,
+              label: SocketService.instance.isHosting ? "Ready" : "Stopped",
+            ),
           ),
-        _buildReceiverIdentityCard(),
-        _buildReceiverVisualCard(fillHeight: false),
+        _buildReceiverIdentityCard(phoneLayout: showHeader),
+        _buildReceiverVisualCard(
+          fillHeight: false,
+          phoneLayout: showHeader,
+        ),
       ],
     );
     return SingleChildScrollView(child: content);
   }
 
-  Widget _buildReceiverVisualCard({required bool fillHeight}) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final indicatorSize = fillHeight
-                ? math
-                      .min(
-                        300,
-                        math.min(
-                          constraints.maxWidth - 40,
-                          constraints.maxHeight - 76,
-                        ),
-                      )
-                      .clamp(120.0, 300.0)
-                : 220.0;
-            return Column(
-              mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
-              children: [
-                if (fillHeight) const Spacer(),
-                SlowM3ELoadingIndicator(
-                  size: indicatorSize.toDouble(),
-                  isActive:
-                      !_receiveServerIntentionallyStopped && !isReceiveStarting,
+  Widget _buildReceiverVisualCard({
+    required bool fillHeight,
+    bool phoneLayout = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final statusIcon = _receiveServerIntentionallyStopped
+        ? Icons.portable_wifi_off_rounded
+        : isReceiveStarting
+        ? Icons.hourglass_top_rounded
+        : Icons.broadcast_on_personal_rounded;
+    final statusLabel = _receiveServerIntentionallyStopped
+        ? 'Receiver stopped'
+        : isReceiveStarting
+        ? 'Starting receiver'
+        : 'Visible to nearby devices';
+    final cardChild = Padding(
+      padding: EdgeInsets.all(phoneLayout ? 18 : 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final indicatorSize = fillHeight
+              ? math
+                    .min(
+                      300,
+                      math.min(
+                        constraints.maxWidth - 40,
+                        constraints.maxHeight - 76,
+                      ),
+                    )
+                    .clamp(120.0, 300.0)
+              : phoneLayout
+              ? 190.0
+              : 220.0;
+          return Column(
+            mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              if (fillHeight) const Spacer(),
+              SlowM3ELoadingIndicator(
+                size: indicatorSize.toDouble(),
+                isActive:
+                    !_receiveServerIntentionallyStopped && !isReceiveStarting,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
                 ),
-                const SizedBox(height: 18),
-                Row(
+                decoration: BoxDecoration(
+                  color: phoneLayout
+                      ? colorScheme.surface.withValues(alpha: 0.72)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   spacing: 8,
                   children: [
                     Icon(
-                      _receiveServerIntentionallyStopped
-                          ? Icons.portable_wifi_off_rounded
-                          : isReceiveStarting
-                          ? Icons.hourglass_top_rounded
-                          : Icons.broadcast_on_personal_rounded,
+                      statusIcon,
                       size: 18,
                       color: _receiveServerIntentionallyStopped
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.primary,
+                          ? colorScheme.error
+                          : colorScheme.primary,
                     ),
                     Text(
-                      _receiveServerIntentionallyStopped
-                          ? 'Receiver stopped'
-                          : isReceiveStarting
-                          ? 'Starting receiver'
-                          : 'Visible to nearby devices',
+                      statusLabel,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ],
                 ),
-                if (fillHeight) const Spacer(),
-              ],
-            );
-          },
-        ),
+              ),
+              if (fillHeight) const Spacer(),
+            ],
+          );
+        },
       ),
+    );
+
+    if (phoneLayout) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: cardChild,
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: cardChild,
     );
   }
 
-  Widget _buildAvailableDevicesCard() {
+  Widget _buildAvailableDevicesCard({bool phoneLayout = false}) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    final content = Padding(
+      padding: EdgeInsets.all(phoneLayout ? 14 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: phoneLayout ? 10 : 12,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      phoneLayout ? "Nearby receivers" : "Available nearby",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (phoneLayout)
+                      Text(
+                        isDiscovering
+                            ? "Scanning your local network"
+                            : "${discoveredDevices.length} available",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: 180.ms,
+                child: isDiscovering
+                    ? SizedBox.square(
+                        key: const ValueKey('discovering'),
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      )
+                    : Icon(
+                        Icons.radar_rounded,
+                        key: const ValueKey('ready'),
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
+              ),
+            ],
+          ),
+          AnimatedSwitcher(
+            duration: 220.ms,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: discoveredDevices.isEmpty
+                ? Container(
+                    key: const ValueKey('no-devices'),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: phoneLayout ? 14 : 0,
+                      vertical: phoneLayout ? 16 : 8,
+                    ),
+                    decoration: phoneLayout
+                        ? BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(18),
+                          )
+                        : null,
+                    child: Row(
+                      spacing: 10,
+                      children: [
+                        if (phoneLayout)
+                          Icon(
+                            Icons.travel_explore_rounded,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        Expanded(
+                          child: Text(
+                            isDiscovering
+                                ? "Looking for receivers on this network..."
+                                : "No receivers found.",
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    key: ValueKey(
+                      discoveredDevices.map((device) => device.id).join(),
+                    ),
+                    spacing: 8,
+                    children: [
+                      for (final (index, device) in discoveredDevices.indexed)
+                        _buildDeviceTile(device)
+                            .animate()
+                            .fadeIn(
+                              duration: 180.ms,
+                              delay: (index * 70).ms,
+                            )
+                            .slideY(
+                              begin: 0.08,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+
+    if (phoneLayout) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: content,
+      );
+    }
 
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 12,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    "Available nearby",
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                AnimatedSwitcher(
-                  duration: 180.ms,
-                  child: isDiscovering
-                      ? SizedBox.square(
-                          key: const ValueKey('discovering'),
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colorScheme.primary,
-                          ),
-                        )
-                      : Icon(
-                          Icons.radar_rounded,
-                          key: const ValueKey('ready'),
-                          size: 20,
-                          color: colorScheme.primary,
-                        ),
-                ),
-              ],
-            ),
-            AnimatedSwitcher(
-              duration: 220.ms,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: discoveredDevices.isEmpty
-                  ? Padding(
-                      key: const ValueKey('no-devices'),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        isDiscovering
-                            ? "Looking for receivers on this network..."
-                            : "No ones around to send to.",
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : Column(
-                      key: ValueKey(
-                        discoveredDevices.map((device) => device.id).join(),
-                      ),
-                      spacing: 8,
-                      children: [
-                        for (final (index, device) in discoveredDevices.indexed)
-                          _buildDeviceTile(device)
-                              .animate()
-                              .fadeIn(
-                                duration: 180.ms,
-                                delay: (index * 70).ms,
-                              )
-                              .slideY(
-                                begin: 0.08,
-                                end: 0,
-                                curve: Curves.easeOutCubic,
-                              ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
+      child: content,
     );
   }
 
@@ -1270,70 +1380,239 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         );
   }
 
-  Widget _buildReceiverIdentityCard() {
+  Widget _buildReceiverIdentityCard({bool phoneLayout = false}) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      color: colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        child: Row(
-          spacing: 12,
-          children: [
-            Icon(
-              Icons.broadcast_on_personal_rounded,
-              color: colorScheme.onPrimaryContainer,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 2,
-                children: [
-                  Text(
-                    "Visible as",
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onPrimaryContainer.withValues(
-                        alpha: 0.72,
+    if (!phoneLayout) {
+      return Card(
+        margin: EdgeInsets.zero,
+        color: colorScheme.primaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Row(
+            spacing: 12,
+            children: [
+              Icon(
+                Icons.broadcast_on_personal_rounded,
+                color: colorScheme.onPrimaryContainer,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      "Visible as",
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer.withValues(
+                          alpha: 0.72,
+                        ),
                       ),
                     ),
-                  ),
-                  TextField(
-                    controller: _deviceNameController,
-                    enabled: deviceName != null && !_settingsLocked,
-                    onChanged: _scheduleDeviceNameSave,
-                    onSubmitted: (_) => _saveDeviceName(),
-                    onTapOutside: (_) =>
-                        FocusManager.instance.primaryFocus?.unfocus(),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: "Creating your name...",
-                      hintStyle: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(
-                            color: colorScheme.onPrimaryContainer.withValues(
-                              alpha: 0.6,
+                    TextField(
+                      controller: _deviceNameController,
+                      enabled: deviceName != null && !_settingsLocked,
+                      onChanged: _scheduleDeviceNameSave,
+                      onSubmitted: (_) => _saveDeviceName(),
+                      onTapOutside: (_) =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: "Creating your name...",
+                        hintStyle: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
-                          ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              IconButton(
+                tooltip: "Generate a new name",
+                onPressed: _settingsLocked ? null : _generateDeviceName,
+                icon: const Icon(Icons.refresh_rounded),
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final content = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: phoneLayout ? 16 : 18,
+        vertical: phoneLayout ? 12 : 14,
+      ),
+      child: Row(
+        spacing: 12,
+        children: [
+          Container(
+            width: phoneLayout ? 42 : 40,
+            height: phoneLayout ? 42 : 40,
+            decoration: BoxDecoration(
+              color: phoneLayout
+                  ? colorScheme.surface.withValues(alpha: 0.72)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
             ),
-            IconButton(
-              tooltip: "Generate a new name",
-              onPressed: _settingsLocked ? null : _generateDeviceName,
-              icon: const Icon(Icons.refresh_rounded),
+            child: Icon(
+              Icons.badge_rounded,
               color: colorScheme.onPrimaryContainer,
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text(
+                  "Visible as",
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onPrimaryContainer.withValues(
+                      alpha: 0.72,
+                    ),
+                  ),
+                ),
+                TextField(
+                  controller: _deviceNameController,
+                  enabled: deviceName != null && !_settingsLocked,
+                  onChanged: _scheduleDeviceNameSave,
+                  onSubmitted: (_) => _saveDeviceName(),
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: "Creating your name...",
+                    hintStyle: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(
+                          color: colorScheme.onPrimaryContainer.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: "Generate a new name",
+            onPressed: _settingsLocked ? null : _generateDeviceName,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: content,
+    );
+  }
+
+  Widget _buildPhonePageHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget trailing,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(26),
+      ),
+      child: Row(
+        spacing: 14,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: colorScheme.onPrimaryContainer),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhoneHeaderPill({
+    required IconData icon,
+    required String label,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 6,
+        children: [
+          Icon(icon, size: 17, color: colorScheme.primary),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1387,94 +1666,261 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
   }
 
-  Widget _buildSelectedFilesCard() {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          spacing: 14,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _selectionSummary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                if (selectedFiles.isNotEmpty)
-                  IconButton(
-                    tooltip: "Clear selected files",
-                    onPressed: isConnectingToSender
-                        ? null
-                        : () {
-                            setState(() {
-                              selectedFiles = [];
-                            });
-                          },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-              ],
-            ),
-            if (selectedFiles.isNotEmpty)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 160),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: selectedFiles.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+  Widget _buildSelectedFilesCard({bool phoneLayout = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (!phoneLayout) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            spacing: 14,
+            children: [
+              Row(
+                children: [
+                  Expanded(
                     child: Text(
-                      selectedFiles[index].name,
+                      _selectionSummary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (selectedFiles.isNotEmpty)
+                    IconButton(
+                      tooltip: "Clear selected files",
+                      onPressed: isConnectingToSender
+                          ? null
+                          : () {
+                              setState(() {
+                                selectedFiles = [];
+                              });
+                            },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                ],
+              ),
+              if (selectedFiles.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: selectedFiles.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        selectedFiles[index].name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              Material(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: isPickingFile || isConnectingToSender
+                      ? null
+                      : _pickFiles,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 52),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        spacing: 10,
+                        children: [
+                          Icon(
+                            selectedFiles.isEmpty
+                                ? Icons.attach_file_rounded
+                                : Icons.swap_horiz_rounded,
+                          ),
+                          Text(
+                            isPickingFile
+                                ? "Opening picker..."
+                                : selectedFiles.isEmpty
+                                ? "Pick files"
+                                : "Change files",
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: isPickingFile || isConnectingToSender
-                    ? null
-                    : _pickFiles,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 52),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 10,
-                      children: [
-                        Icon(
-                          selectedFiles.isEmpty
-                              ? Icons.attach_file_rounded
-                              : Icons.swap_horiz_rounded,
-                        ),
-                        Text(
-                          isPickingFile
-                              ? "Opening picker..."
-                              : selectedFiles.isEmpty
-                              ? "Pick files"
-                              : "Change files",
-                        ),
-                      ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    final content = Padding(
+      padding: EdgeInsets.all(phoneLayout ? 14 : 20),
+      child: Column(
+        spacing: phoneLayout ? 12 : 14,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: phoneLayout ? 42 : 0,
+                height: phoneLayout ? 42 : 0,
+                decoration: phoneLayout
+                    ? BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(14),
+                      )
+                    : null,
+                child: phoneLayout
+                    ? Icon(
+                        selectedFiles.isEmpty
+                            ? Icons.folder_open_rounded
+                            : Icons.inventory_2_rounded,
+                        color: colorScheme.onPrimaryContainer,
+                      )
+                    : null,
+              ),
+              if (phoneLayout) const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      _selectionSummary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
+                    if (phoneLayout)
+                      Text(
+                        selectedFiles.isEmpty
+                            ? "Nothing will be sent yet"
+                            : "Ready to send",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (selectedFiles.isNotEmpty)
+                IconButton(
+                  tooltip: "Clear selected files",
+                  onPressed: isConnectingToSender
+                      ? null
+                      : () {
+                          setState(() {
+                            selectedFiles = [];
+                          });
+                        },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+            ],
+          ),
+          if (selectedFiles.isNotEmpty)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: phoneLayout ? 132 : 160),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                itemCount: selectedFiles.length,
+                separatorBuilder: (context, index) => Divider(
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+                ),
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Row(
+                    spacing: 10,
+                    children: [
+                      Icon(
+                        Icons.insert_drive_file_outlined,
+                        size: 18,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      Expanded(
+                        child: Text(
+                          selectedFiles[index].name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          Material(
+            color: phoneLayout
+                ? colorScheme.primary
+                : colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(phoneLayout ? 18 : 14),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(phoneLayout ? 18 : 14),
+              onTap: isPickingFile || isConnectingToSender ? null : _pickFiles,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: phoneLayout ? 56 : 52),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: 10,
+                    children: [
+                      Icon(
+                        isPickingFile
+                            ? Icons.hourglass_top_rounded
+                            : selectedFiles.isEmpty
+                            ? Icons.add_rounded
+                            : Icons.swap_horiz_rounded,
+                        color: phoneLayout
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurface,
+                      ),
+                      Text(
+                        isPickingFile
+                            ? "Opening picker..."
+                            : selectedFiles.isEmpty
+                            ? "Pick files"
+                            : "Change files",
+                        style: phoneLayout
+                            ? Theme.of(context).textTheme.titleSmall?.copyWith(
+                                color: colorScheme.onPrimary,
+                                fontWeight: FontWeight.w700,
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+
+    if (phoneLayout) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: content,
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: content,
     );
   }
 
