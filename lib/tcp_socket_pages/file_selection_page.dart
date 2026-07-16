@@ -783,27 +783,39 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           ? null
           : SafeArea(
               top: false,
-              child: NavigationBar(
-                selectedIndex: selectedTabIndex,
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                onDestinationSelected: (index) {
-                  _tabController.animateTo(index);
-                  setState(() {
-                    selectedTabIndex = index;
-                  });
-                },
-                destinations: const [
-                  NavigationDestination(
-                    selectedIcon: Icon(Icons.upload_file_rounded),
-                    icon: Icon(Icons.upload_file_outlined),
-                    label: "Send",
+              child: Material(
+                color: colorScheme.surface,
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  tabs: const [
+                    Tab(
+                      icon: Icon(Icons.upload_file_rounded),
+                      text: "Send",
+                    ),
+                    Tab(
+                      icon: Icon(Icons.download_for_offline_rounded),
+                      text: "Receive",
+                    ),
+                  ],
+                  onTap: (index) {
+                    setState(() {
+                      selectedTabIndex = index;
+                    });
+                    if (index == 0) {
+                      DeviceDiscoveryService.instance.requestRefresh();
+                    }
+                  },
+                  labelColor: colorScheme.primary,
+                  unselectedLabelColor: colorScheme.onSurfaceVariant,
+                  indicatorColor: colorScheme.primary,
+                  dividerColor: colorScheme.outlineVariant.withValues(
+                    alpha: 0.55,
                   ),
-                  NavigationDestination(
-                    selectedIcon: Icon(Icons.download_for_offline_rounded),
-                    icon: Icon(Icons.download_for_offline_outlined),
-                    label: "Receive",
+                  overlayColor: WidgetStatePropertyAll(
+                    colorScheme.primary.withValues(alpha: 0.08),
                   ),
-                ],
+                ),
               ),
             ),
     );
