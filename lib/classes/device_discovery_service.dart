@@ -305,15 +305,71 @@ class DeviceDiscoveryService {
       return;
     }
 
+    if (address == null) {
+      unawaited(_sendBroadcastPacket(packet));
+      return;
+    }
+
     try {
       socket.send(
         utf8.encode(jsonEncode(packet)),
-        address ?? InternetAddress('255.255.255.255'),
+        address,
         port,
       );
     } on SocketException {
       // The next heartbeat retries after temporary network failures.
     }
+  }
+
+  Future<void> _sendBroadcastPacket(Map<String, dynamic> packet) async {
+    final socket = _socket;
+    final port = _discoveryPort;
+    if (socket == null || port == null) {
+      return;
+    }
+
+    final encodedPacket = utf8.encode(jsonEncode(packet));
+    final targets = <String, InternetAddress>{
+      '255.255.255.255': InternetAddress('255.255.255.255'),
+    };
+
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final interface in interfaces) {
+        for (final address in interface.addresses) {
+          final broadcastAddress = _directedBroadcastFor(address);
+          if (broadcastAddress != null) {
+            targets[broadcastAddress.address] = broadcastAddress;
+          }
+        }
+      }
+    } on SocketException {
+      // Fall back to the global broadcast address below.
+    }
+
+    for (final target in targets.values) {
+      try {
+        socket.send(encodedPacket, target, port);
+      } on SocketException {
+        // Try every discovered target; the next heartbeat retries failures.
+      }
+    }
+  }
+
+  InternetAddress? _directedBroadcastFor(InternetAddress address) {
+    if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
+      return null;
+    }
+
+    final bytes = address.rawAddress;
+    if (bytes.length != 4 || bytes[0] == 0 || bytes[0] == 127) {
+      return null;
+    }
+
+    return InternetAddress('${bytes[0]}.${bytes[1]}.${bytes[2]}.255');
   }
 
   void _removeExpiredDevices() {
