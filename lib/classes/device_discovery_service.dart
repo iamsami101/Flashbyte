@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 enum DiscoveredDeviceType { phone, laptop }
 
 class DiscoveredDevice {
@@ -42,6 +44,12 @@ class DeviceDiscoveryService {
   ];
   static const _refreshInterval = Duration(seconds: 4);
   static const _peerTimeout = Duration(seconds: 20);
+  static const _commonHotspotGateways = [
+    '192.168.43.1',
+    '192.168.49.1',
+    '192.168.137.1',
+    '172.20.10.1',
+  ];
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
@@ -58,6 +66,9 @@ class DeviceDiscoveryService {
   int? _discoveryPort;
   Map<String, dynamic>? _advertisement;
   String? _advertisingInstanceId;
+  static const _androidDiscoveryChannel = MethodChannel(
+    'flashbyte/udp_discovery',
+  );
 
   Stream<List<DiscoveredDevice>> get devicesStream => _devicesController.stream;
   List<DiscoveredDevice> get devices =>
@@ -75,11 +86,18 @@ class DeviceDiscoveryService {
     }
 
     await stopDiscovery();
-    final socket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      port,
-      reuseAddress: true,
-    );
+    await _acquirePlatformDiscoveryLock();
+    late final RawDatagramSocket socket;
+    try {
+      socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+        reuseAddress: true,
+      );
+    } catch (_) {
+      await _releasePlatformDiscoveryLock();
+      rethrow;
+    }
     socket.broadcastEnabled = true;
     _socket = socket;
     _discoveryPort = port;
@@ -162,6 +180,7 @@ class DeviceDiscoveryService {
     _socket?.close();
     _socket = null;
     _discoveryPort = null;
+    await _releasePlatformDiscoveryLock();
     _devices.clear();
     _emitDevices();
   }
@@ -344,6 +363,9 @@ class DeviceDiscoveryService {
     final targets = <String, InternetAddress>{
       '255.255.255.255': InternetAddress('255.255.255.255'),
     };
+    for (final gateway in _commonHotspotGateways) {
+      targets[gateway] = InternetAddress(gateway);
+    }
 
     try {
       final interfaces = await NetworkInterface.list(
@@ -355,6 +377,10 @@ class DeviceDiscoveryService {
           final broadcastAddress = _directedBroadcastFor(address);
           if (broadcastAddress != null) {
             targets[broadcastAddress.address] = broadcastAddress;
+          }
+          final gatewayAddress = _gatewayAddressFor(address);
+          if (gatewayAddress != null) {
+            targets[gatewayAddress.address] = gatewayAddress;
           }
         }
       }
@@ -384,6 +410,22 @@ class DeviceDiscoveryService {
     return InternetAddress('${bytes[0]}.${bytes[1]}.${bytes[2]}.255');
   }
 
+  InternetAddress? _gatewayAddressFor(InternetAddress address) {
+    if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
+      return null;
+    }
+
+    final bytes = address.rawAddress;
+    if (bytes.length != 4 ||
+        bytes[0] == 0 ||
+        bytes[0] == 127 ||
+        bytes[3] == 1) {
+      return null;
+    }
+
+    return InternetAddress('${bytes[0]}.${bytes[1]}.${bytes[2]}.1');
+  }
+
   void _removeExpiredDevices() {
     final cutoff = DateTime.now().subtract(_peerTimeout);
     final previousLength = _devices.length;
@@ -409,6 +451,38 @@ class DeviceDiscoveryService {
     final sortedDevices = _devices.values.map((entry) => entry.device).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     _devicesController.add(List.unmodifiable(sortedDevices));
+  }
+
+  Future<void> _acquirePlatformDiscoveryLock() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      await _androidDiscoveryChannel.invokeMethod<void>(
+        'acquireMulticastLock',
+      );
+    } on PlatformException {
+      // Discovery can still work on devices that do not expose the lock.
+    } on MissingPluginException {
+      // Non-Android builds and tests do not register this channel.
+    }
+  }
+
+  Future<void> _releasePlatformDiscoveryLock() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      await _androidDiscoveryChannel.invokeMethod<void>(
+        'releaseMulticastLock',
+      );
+    } on PlatformException {
+      // The OS may already have released it during activity teardown.
+    } on MissingPluginException {
+      // Non-Android builds and tests do not register this channel.
+    }
   }
 }
 
