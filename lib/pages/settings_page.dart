@@ -304,16 +304,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 ListTile(
-                  title: const Text("Material You Dynamic Colors"),
-                  subtitle: const Text(
-                    "Use the device wallpaper color scheme when supported.",
-                  ),
-                  trailing: _SettingsToggle(
-                    value: _appearanceController.useDynamicColors,
-                    onChanged: _toggleDynamicColors,
-                  ),
-                ),
-                ListTile(
                   title: const Text("Disable Animations"),
                   subtitle: const Text(
                     "Reduce motion across the app and keep transfer changes to simple fades.",
@@ -321,6 +311,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailing: _SettingsToggle(
                     value: _motionController.disableAnimations,
                     onChanged: _toggleAnimations,
+                  ),
+                ),
+                ListTile(
+                  title: const Text("Material You Dynamic Colors"),
+                  subtitle: const Text(
+                    "Use the device wallpaper color scheme when supported.",
+                  ),
+                  trailing: _SettingsToggle(
+                    value: _appearanceController.useDynamicColors,
+                    onChanged: _toggleDynamicColors,
                   ),
                 ),
                 Padding(

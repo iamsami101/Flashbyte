@@ -2395,7 +2395,6 @@ class RandomWords {
     "goal",
     "goalkeeper",
     "goat",
-    "god",
     "gold",
     "golf",
     "good",

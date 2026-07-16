@@ -786,35 +786,38 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               child: Material(
                 color: Colors.transparent,
                 child: TabBar(
-                  controller: _tabController,
                   indicatorSize: TabBarIndicatorSize.label,
+                  dividerHeight: 0,
+                  indicatorAnimation: TabIndicatorAnimation.elastic,
+                  labelColor: Theme.of(
+                    context,
+                  ).colorScheme.onPrimaryContainer,
+                  controller: _tabController,
+                  onTap: (index) {
+                    if (selectedTabIndex != index) {
+                      setState(() {
+                        selectedTabIndex = index;
+                      });
+                    }
+                  },
                   tabs: const [
                     Tab(
-                      icon: Icon(Icons.near_me_rounded),
+                      iconMargin: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 3,
+                      ),
+                      icon: Icon(Icons.upload_rounded),
                       text: "Send",
                     ),
                     Tab(
-                      icon: Icon(Icons.move_to_inbox_rounded),
+                      iconMargin: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 3,
+                      ),
+                      icon: Icon(Icons.download_rounded),
                       text: "Receive",
                     ),
                   ],
-                  onTap: (index) {
-                    setState(() {
-                      selectedTabIndex = index;
-                    });
-                    if (index == 0) {
-                      DeviceDiscoveryService.instance.requestRefresh();
-                    }
-                  },
-                  labelColor: colorScheme.primary,
-                  unselectedLabelColor: colorScheme.onSurfaceVariant,
-                  indicatorColor: colorScheme.primary,
-                  dividerColor: colorScheme.outlineVariant.withValues(
-                    alpha: 0.55,
-                  ),
-                  overlayColor: WidgetStatePropertyAll(
-                    colorScheme.primary.withValues(alpha: 0.08),
-                  ),
                 ),
               ),
             ),

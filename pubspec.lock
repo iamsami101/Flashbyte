@@ -716,10 +716,10 @@ packages:
     dependency: "direct main"
     description:
       name: process_run
-      sha256: "3af4220bdee974fd6305caab920c8af07cd846696f825e6e84fb4e123b13fde9"
+      sha256: dadbf4986ddab79086a107b2f893bacd580a523453f76238bc0c13a9faa982af
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.4"
+    version: "1.3.4+1"
   pub_semver:
     dependency: transitive
     description:
@@ -772,10 +772,10 @@ packages:
     dependency: transitive
     description:
       name: shared_preferences_android
-      sha256: "93ae5884a9df5d3bb696825bceb3a17590754548b5d740eba51500afc8d088f5"
+      sha256: "0634e64bd719f89c012f392938e173521f535d3ecaf66558fa94a056d22b5cc7"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.26"
+    version: "2.4.27"
   shared_preferences_foundation:
     dependency: transitive
     description:
