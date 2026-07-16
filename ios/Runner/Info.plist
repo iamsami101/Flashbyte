@@ -30,6 +30,12 @@
 	<string>Flashbyte uses your local network to discover nearby devices and transfer files directly.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Flashbyte may use Wi-Fi network information to detect the current local network for nearby file sharing.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
