@@ -192,11 +192,32 @@ jobs:
         run: |
           version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Remove existing release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.app-version.outputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          for asset in \
+            flashbyte-android.apk \
+            flashbyte-android.aab \
+            flashbyte-linux-x64.tar.gz \
+            flashbyte-windows-x64.zip \
+            flashbyte-macos.dmg \
+            flashbyte-ios-unsigned-runner-app.zip
+          do
+            gh release delete-asset "$RELEASE_TAG" "$asset" --yes 2>/dev/null || true
+          done
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.sha }}
+          tag_name: ${{ steps.app-version.outputs.tag }}
           name: Flashbyte ${{ steps.app-version.outputs.version }}
           body: |
             Flashbyte ${{ steps.app-version.outputs.version }}
@@ -216,7 +237,7 @@ jobs:
       - name: Commit README release links
         if: github.ref == 'refs/heads/main'
         env:
-          RELEASE_TAG: build-${{ github.sha }}
+          RELEASE_TAG: ${{ steps.app-version.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
         run: |
           git config user.name "github-actions[bot]"
