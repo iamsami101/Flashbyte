@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flashbyte/classes/app_motion_controller.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/device_discovery_service.dart';
@@ -39,6 +40,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   static const double _receiverVisualMinHeight = 280;
 
   final TextEditingController _deviceNameController = TextEditingController();
+  final AppMotionController _motionController = AppMotionController.instance;
   final Map<String, AnimationController> _deviceShakeControllers = {};
   List<FastFilePickerPath> selectedFiles = [];
   late final TabController _tabController;
@@ -1164,6 +1166,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Widget _buildReceiverVisualCard({required bool fillHeight}) {
     final colorScheme = Theme.of(context).colorScheme;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final staticReceiveShape =
+        reducedMotion || _motionController.disableReceiveShapeAnimation;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1205,7 +1209,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     isActive:
                         !_receiveServerIntentionallyStopped &&
                         !isReceiveStarting,
-                    staticShape: reducedMotion,
+                    staticShape: staticReceiveShape,
                   ),
                 if (indicatorSize >= 48) SizedBox(height: indicatorStatusGap),
                 Container(

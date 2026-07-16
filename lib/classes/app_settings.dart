@@ -16,6 +16,8 @@ class AppSettings {
   static const String primaryColorKey = 'primaryColor';
   static const String useDarkModeKey = 'useDarkMode';
   static const String disableAnimationsKey = 'disableAnimations';
+  static const String disableReceiveShapeAnimationKey =
+      'disableReceiveShapeAnimation';
   static const String deviceNameKey = 'deviceName';
   static const String deviceIdKey = 'deviceId';
   static const int defaultPort = 8050;
@@ -171,6 +173,16 @@ class AppSettings {
   static Future<void> setDisableAnimations(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(disableAnimationsKey, value);
+  }
+
+  static Future<bool> getDisableReceiveShapeAnimation() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(disableReceiveShapeAnimationKey) ?? false;
+  }
+
+  static Future<void> setDisableReceiveShapeAnimation(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(disableReceiveShapeAnimationKey, value);
   }
 
   static MaterialColor getPrimaryColorByName(String colorName) {

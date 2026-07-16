@@ -271,6 +271,12 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
   }
 
+  Future<void> _toggleReceiveShapeAnimation(bool value) async {
+    await _motionController.setDisableReceiveShapeAnimation(value);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -311,6 +317,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailing: _SettingsToggle(
                     value: _motionController.disableAnimations,
                     onChanged: _toggleAnimations,
+                  ),
+                ),
+                ListTile(
+                  title: const Text("Static Receive Shape"),
+                  subtitle: const Text(
+                    "Stop only the large spinning shape on the receive tab.",
+                  ),
+                  trailing: _SettingsToggle(
+                    value: _motionController.disableReceiveShapeAnimation,
+                    onChanged: _toggleReceiveShapeAnimation,
                   ),
                 ),
                 ListTile(
