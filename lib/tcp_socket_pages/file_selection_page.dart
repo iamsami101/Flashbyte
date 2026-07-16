@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/device_discovery_service.dart';
@@ -50,6 +51,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool chatOpened = false;
   bool _incomingOfferOpen = false;
   bool _outgoingOfferOpen = false;
+  bool _isDraggingFilesOverSendCard = false;
   bool isDiscovering = true;
   int selectedTabIndex = 0;
 
@@ -264,6 +266,33 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           isPickingFile = false;
         });
       }
+    }
+  }
+
+  void _handleDroppedFiles(DropDoneDetails details) {
+    if (isConnectingToSender) {
+      return;
+    }
+
+    final droppedFiles = <FastFilePickerPath>[];
+    for (final droppedItem in details.files) {
+      final path = droppedItem.path;
+      if (path.isEmpty || !FileSystemEntity.isFileSync(path)) {
+        continue;
+      }
+
+      droppedFiles.add(FastFilePickerPath.fromPath(droppedItem.name, path));
+    }
+
+    setState(() {
+      _isDraggingFilesOverSendCard = false;
+      if (droppedFiles.isNotEmpty) {
+        selectedFiles = droppedFiles;
+      }
+    });
+
+    if (droppedFiles.isEmpty) {
+      showScaffoldSnackbar("Drop files here. Folders are not supported yet.");
     }
   }
 
@@ -1696,118 +1725,207 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildSelectedFilesCard() {
     final colorScheme = Theme.of(context).colorScheme;
-
-    return Card(
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final card = Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colorScheme.surface,
+      color: _isDraggingFilesOverSendCard
+          ? colorScheme.primaryContainer.withValues(alpha: 0.58)
+          : colorScheme.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 16,
+      child: CustomPaint(
+        foregroundPainter: _isDraggingFilesOverSendCard
+            ? _DashedRoundedRectPainter(
+                color: colorScheme.primary,
+                radius: 28,
+                strokeWidth: 2,
+              )
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: AnimatedSwitcher(
+            duration: reducedMotion ? Duration.zero : 180.ms,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: _isDraggingFilesOverSendCard
+                ? _buildDropFilesState(colorScheme)
+                : _buildSelectedFilesCardContents(colorScheme),
+          ),
+        ),
+      ),
+    );
+
+    if (!_supportsDesktopDrop) {
+      return card;
+    }
+
+    return DropTarget(
+      enable: !isConnectingToSender,
+      onDragEntered: (_) {
+        if (!mounted || _isDraggingFilesOverSendCard) {
+          return;
+        }
+        setState(() {
+          _isDraggingFilesOverSendCard = true;
+        });
+      },
+      onDragExited: (_) {
+        if (!mounted || !_isDraggingFilesOverSendCard) {
+          return;
+        }
+        setState(() {
+          _isDraggingFilesOverSendCard = false;
+        });
+      },
+      onDragDone: _handleDroppedFiles,
+      child: card,
+    );
+  }
+
+  Widget _buildSelectedFilesCardContents(ColorScheme colorScheme) {
+    return Column(
+      key: const ValueKey('selected-files-card-contents'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 16,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 2,
-                    children: [
-                      Text(
-                        _selectionSummary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        selectedFiles.isEmpty
-                            ? "Choose what you want to send."
-                            : "Ready to send after you pick a receiver.",
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (selectedFiles.isNotEmpty)
-                  IconButton(
-                    tooltip: "Clear selected files",
-                    onPressed: isConnectingToSender
-                        ? null
-                        : () {
-                            setState(() {
-                              selectedFiles = [];
-                            });
-                          },
-                    icon: const Icon(Icons.close_rounded),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size.square(44),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  Text(
+                    _selectionSummary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-              ],
+                  Text(
+                    selectedFiles.isEmpty
+                        ? "Choose what you want to send."
+                        : "Ready to send after you pick a receiver.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             ),
             if (selectedFiles.isNotEmpty)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 176),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: selectedFiles.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 8),
-                  itemBuilder: (context, index) =>
-                      _buildSelectedFileTile(selectedFiles[index]),
+              IconButton(
+                tooltip: "Clear selected files",
+                onPressed: isConnectingToSender
+                    ? null
+                    : () {
+                        setState(() {
+                          selectedFiles = [];
+                        });
+                      },
+                icon: const Icon(Icons.close_rounded),
+                style: IconButton.styleFrom(
+                  minimumSize: const Size.square(44),
                 ),
               ),
-            Material(
-              color: selectedFiles.isEmpty
-                  ? colorScheme.primaryContainer
-                  : colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(20),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: isPickingFile || isConnectingToSender
-                    ? null
-                    : _pickFiles,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 58),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 10,
-                      children: [
-                        Icon(
-                          selectedFiles.isEmpty
-                              ? Icons.attach_file_rounded
-                              : Icons.swap_horiz_rounded,
-                          color: selectedFiles.isEmpty
-                              ? colorScheme.onPrimaryContainer
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                        Text(
-                          isPickingFile
-                              ? "Opening picker..."
-                              : selectedFiles.isEmpty
-                              ? "Pick files"
-                              : "Change files",
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: selectedFiles.isEmpty
-                                    ? colorScheme.onPrimaryContainer
-                                    : colorScheme.onSurface,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
+          ],
+        ),
+        if (selectedFiles.isNotEmpty)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 176),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: selectedFiles.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) =>
+                  _buildSelectedFileTile(selectedFiles[index]),
+            ),
+          ),
+        Material(
+          color: selectedFiles.isEmpty
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: isPickingFile || isConnectingToSender ? null : _pickFiles,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 58),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  spacing: 10,
+                  children: [
+                    Icon(
+                      selectedFiles.isEmpty
+                          ? Icons.attach_file_rounded
+                          : Icons.swap_horiz_rounded,
+                      color: selectedFiles.isEmpty
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.onSurfaceVariant,
                     ),
-                  ),
+                    Text(
+                      isPickingFile
+                          ? "Opening picker..."
+                          : selectedFiles.isEmpty
+                          ? "Pick files"
+                          : "Change files",
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: selectedFiles.isEmpty
+                            ? colorScheme.onPrimaryContainer
+                            : colorScheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropFilesState(ColorScheme colorScheme) {
+    return ConstrainedBox(
+      key: const ValueKey('drop-files-state'),
+      constraints: const BoxConstraints(minHeight: 172),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 12,
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                Icons.file_download_rounded,
+                color: colorScheme.primary,
+                size: 30,
+              ),
+            ),
+            Text(
+              "Drop files here",
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              "Release to replace the current selection.",
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -1918,6 +2036,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     return "$count files selected";
   }
 
+  bool get _supportsDesktopDrop =>
+      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
   void showScaffoldSnackbar(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2001,4 +2122,49 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   bool get _settingsLocked =>
       isConnectingToSender || isReceiveStarting || chatOpened;
+}
+
+class _DashedRoundedRectPainter extends CustomPainter {
+  const _DashedRoundedRectPainter({
+    required this.color,
+    required this.radius,
+    required this.strokeWidth,
+  });
+
+  final Color color;
+  final double radius;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(strokeWidth / 2),
+      Radius.circular(radius - strokeWidth / 2),
+    );
+    final path = Path()..addRRect(rrect);
+
+    const dashLength = 10.0;
+    const gapLength = 8.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final nextDistance = math.min(distance + dashLength, metric.length);
+        canvas.drawPath(metric.extractPath(distance, nextDistance), paint);
+        distance += dashLength + gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) {
+    return oldDelegate.color != color ||
+        oldDelegate.radius != radius ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
 }

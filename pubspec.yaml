@@ -10,6 +10,7 @@ dependencies:
   basic_utils: ^5.8.2
   connectivity_plus: ^7.2.0
   crypto: ^3.0.7
+  desktop_drop: ^0.7.1
   disable_battery_optimization: ^1.1.2
   dynamic_color: ^1.8.1
   external_path: ^2.2.0
