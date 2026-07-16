@@ -25,11 +25,11 @@ You can try out Flashbyte on the following platforms:
 <!-- BEGIN AUTO RELEASE DOWNLOADS -->
 | Platform | Download |
 |----------|----------|
-| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-android.aab) |
-| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-linux-x64.tar.gz) |
-| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-macos.dmg) |
-| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-ios-unsigned-runner-app.zip) |
-| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/build-584cacc614e2185e2d559311ce84801ae4fe675b/flashbyte-windows-x64.zip) |
+| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-android.aab) |
+| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-linux-x64.tar.gz) |
+| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-macos.dmg) |
+| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-ios-unsigned-runner-app.zip) |
+| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ## Installation instructions:
