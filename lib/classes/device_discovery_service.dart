@@ -40,7 +40,8 @@ class DeviceDiscoveryService {
     Duration(milliseconds: 220),
     Duration(milliseconds: 700),
   ];
-  static const _peerTimeout = Duration(seconds: 6);
+  static const _refreshInterval = Duration(seconds: 4);
+  static const _peerTimeout = Duration(seconds: 20);
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
@@ -52,6 +53,7 @@ class DeviceDiscoveryService {
   final List<Timer> _advertiseBurstTimers = [];
   final List<Timer> _probeBurstTimers = [];
   Timer? _cleanupTimer;
+  Timer? _refreshTimer;
   String? _localDeviceId;
   int? _discoveryPort;
   Map<String, dynamic>? _advertisement;
@@ -85,6 +87,10 @@ class DeviceDiscoveryService {
     _cleanupTimer = Timer.periodic(
       _broadcastInterval,
       (_) => _removeExpiredDevices(),
+    );
+    _refreshTimer = Timer.periodic(
+      _refreshInterval,
+      (_) => requestRefresh(),
     );
     _emitDevices();
     requestRefresh();
@@ -149,6 +155,8 @@ class DeviceDiscoveryService {
     _cancelProbeBurst();
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     await _socketSubscription?.cancel();
     _socketSubscription = null;
     _socket?.close();
@@ -231,21 +239,25 @@ class DeviceDiscoveryService {
         orElse: () => DiscoveredDeviceType.phone,
       );
 
+      final nextDevice = DiscoveredDevice(
+        id: id,
+        name: name,
+        address: datagram.address.address,
+        port: port,
+        usesTls: usesTls,
+        type: deviceType,
+        certificateFingerprint: certificateFingerprint,
+        certificatePem: certificatePem,
+      );
+      final previousDevice = _devices[id]?.device;
       _devices[id] = _SeenDevice(
-        device: DiscoveredDevice(
-          id: id,
-          name: name,
-          address: datagram.address.address,
-          port: port,
-          usesTls: usesTls,
-          type: deviceType,
-          certificateFingerprint: certificateFingerprint,
-          certificatePem: certificatePem,
-        ),
+        device: nextDevice,
         instanceId: instanceId,
         lastSeen: DateTime.now(),
       );
-      _emitDevices();
+      if (!_sameDevice(previousDevice, nextDevice)) {
+        _emitDevices();
+      }
     } on FormatException {
       // Ignore unrelated UDP traffic received on the configured port.
     } on TypeError {
@@ -379,6 +391,18 @@ class DeviceDiscoveryService {
     if (_devices.length != previousLength) {
       _emitDevices();
     }
+  }
+
+  bool _sameDevice(DiscoveredDevice? previous, DiscoveredDevice next) {
+    return previous != null &&
+        previous.id == next.id &&
+        previous.name == next.name &&
+        previous.address == next.address &&
+        previous.port == next.port &&
+        previous.usesTls == next.usesTls &&
+        previous.type == next.type &&
+        previous.certificateFingerprint == next.certificateFingerprint &&
+        previous.certificatePem == next.certificatePem;
   }
 
   void _emitDevices() {
