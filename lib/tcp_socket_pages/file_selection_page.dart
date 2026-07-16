@@ -41,6 +41,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   final Map<String, AnimationController> _deviceShakeControllers = {};
   List<FastFilePickerPath> selectedFiles = [];
   late final TabController _tabController;
+  late final AnimationController _discoveryRefreshController;
 
   bool isPickingFile = false;
   bool isConnectingToSender = false;
@@ -78,6 +79,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       initialIndex: widget.initialTabIndex,
     );
     _tabController.addListener(_handleTabChanged);
+    _discoveryRefreshController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
 
     _socketSubscription = SocketService.instance.messageStream.listen(
       _handleSocketMessage,
@@ -109,6 +114,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   void dispose() {
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
+    _discoveryRefreshController.dispose();
     for (final controller in _deviceShakeControllers.values) {
       controller.dispose();
     }
@@ -546,6 +552,13 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   void _showFileRequiredFeedback(AnimationController controller) {
     controller.forward(from: 0);
     showScaffoldSnackbar("Select at least one file first");
+  }
+
+  void _manuallyRefreshDiscovery() {
+    DeviceDiscoveryService.instance.requestRefresh();
+    if (!MediaQuery.disableAnimationsOf(context)) {
+      _discoveryRefreshController.forward(from: 0);
+    }
   }
 
   void _handleSocketMessage(Map<String, dynamic> message) {
@@ -1333,23 +1346,23 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     ],
                   ),
                 ),
-                AnimatedSwitcher(
-                  duration: reducedMotion ? Duration.zero : 180.ms,
-                  child: isDiscovering
-                      ? SizedBox.square(
-                          key: const ValueKey('discovering'),
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colorScheme.primary,
-                          ),
-                        )
-                      : Icon(
-                          Icons.radar_rounded,
-                          key: const ValueKey('ready'),
-                          size: 22,
-                          color: colorScheme.primary,
-                        ),
+                IconButton(
+                  tooltip: 'Refresh nearby receivers',
+                  onPressed: _manuallyRefreshDiscovery,
+                  icon: AnimatedBuilder(
+                    animation: _discoveryRefreshController,
+                    builder: (context, child) => Transform.rotate(
+                      angle: reducedMotion
+                          ? 0
+                          : _discoveryRefreshController.value * math.pi * 2,
+                      child: child,
+                    ),
+                    child: Icon(
+                      Icons.radar_rounded,
+                      size: 22,
+                      color: colorScheme.primary,
+                    ),
+                  ),
                 ),
               ],
             ),
