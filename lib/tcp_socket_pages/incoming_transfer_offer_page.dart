@@ -201,71 +201,86 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _maybeAnimate(
-          context,
-          _ApprovalHeader(
-            icon: Icons.file_download_rounded,
-            title: 'Approve incoming file',
-            message: 'Review the sender and file before saving it here.',
-          ),
-          (child) => child
-              .animate()
-              .fadeIn(duration: 180.ms)
-              .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
-        ),
-        const SizedBox(height: 20),
-        _maybeAnimate(
-          context,
-          LayoutBuilder(
-            builder: (context, constraints) => constraints.maxWidth >= 720
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 3, child: senderCard),
-                      const SizedBox(width: 12),
-                      Expanded(flex: 2, child: fileCard),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      senderCard,
-                      const SizedBox(height: 12),
-                      fileCard,
-                    ],
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _maybeAnimate(
+                  context,
+                  _ApprovalHeader(
+                    icon: Icons.file_download_rounded,
+                    title: 'Approve incoming file',
+                    message:
+                        'Review the sender and file before saving it here.',
                   ),
+                  (child) => child
+                      .animate()
+                      .fadeIn(duration: 180.ms)
+                      .slideY(
+                        begin: 0.05,
+                        end: 0,
+                        curve: Curves.easeOutCubic,
+                      ),
+                ),
+                const SizedBox(height: 20),
+                _maybeAnimate(
+                  context,
+                  LayoutBuilder(
+                    builder: (context, constraints) =>
+                        constraints.maxWidth >= 720
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 3, child: senderCard),
+                              const SizedBox(width: 12),
+                              Expanded(flex: 2, child: fileCard),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              senderCard,
+                              const SizedBox(height: 12),
+                              fileCard,
+                            ],
+                          ),
+                  ),
+                  (child) => child
+                      .animate()
+                      .fadeIn(delay: 160.ms, duration: 200.ms)
+                      .slideY(
+                        begin: 0.04,
+                        end: 0,
+                        curve: Curves.easeOutCubic,
+                      ),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: _accept,
+                  icon: const Icon(Icons.download_rounded),
+                  label: const Text('Accept and receive'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _decline,
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Decline'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
+                ),
+              ],
+            ),
           ),
-          (child) => child
-              .animate()
-              .fadeIn(delay: 160.ms, duration: 200.ms)
-              .slideY(
-                begin: 0.04,
-                end: 0,
-                curve: Curves.easeOutCubic,
-              ),
         ),
-        const Spacer(),
-        FilledButton.icon(
-          onPressed: _accept,
-          icon: const Icon(Icons.download_rounded),
-          label: const Text('Accept and receive'),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: _decline,
-          icon: const Icon(Icons.close_rounded),
-          label: const Text('Decline'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
