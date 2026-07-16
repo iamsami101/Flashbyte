@@ -44,20 +44,13 @@ class DeviceDiscoveryService {
   ];
   static const _refreshInterval = Duration(seconds: 4);
   static const _peerTimeout = Duration(seconds: 20);
-  static const _commonHotspotGateways = [
-    '192.168.43.1',
-    '192.168.49.1',
-    '192.168.137.1',
-    '172.20.10.1',
-  ];
-  static const _fallbackBroadcastPrefixes = [24, 20, 16, 28, 29, 30];
+  static final _multicastGroup = InternetAddress('224.0.0.167');
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
   final Map<String, _SeenDevice> _devices = {};
 
-  RawDatagramSocket? _socket;
-  StreamSubscription<RawSocketEvent>? _socketSubscription;
+  final List<_DiscoverySocket> _sockets = [];
   Timer? _broadcastTimer;
   final List<Timer> _advertiseBurstTimers = [];
   final List<Timer> _probeBurstTimers = [];
@@ -80,7 +73,7 @@ class DeviceDiscoveryService {
     required int port,
   }) async {
     _localDeviceId = localDeviceId;
-    if (_socket != null && _discoveryPort == port) {
+    if (_sockets.isNotEmpty && _discoveryPort == port) {
       _emitDevices();
       requestRefresh();
       return;
@@ -88,21 +81,13 @@ class DeviceDiscoveryService {
 
     await stopDiscovery();
     await _acquirePlatformDiscoveryLock();
-    late final RawDatagramSocket socket;
     try {
-      socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        port,
-        reuseAddress: true,
-      );
+      _sockets.addAll(await _createMulticastSockets(port));
     } catch (_) {
       await _releasePlatformDiscoveryLock();
       rethrow;
     }
-    socket.broadcastEnabled = true;
-    _socket = socket;
     _discoveryPort = port;
-    _socketSubscription = socket.listen(_handleSocketEvent);
     _cleanupTimer = Timer.periodic(
       _broadcastInterval,
       (_) => _removeExpiredDevices(),
@@ -176,10 +161,11 @@ class DeviceDiscoveryService {
     _cleanupTimer = null;
     _refreshTimer?.cancel();
     _refreshTimer = null;
-    await _socketSubscription?.cancel();
-    _socketSubscription = null;
-    _socket?.close();
-    _socket = null;
+    for (final socket in _sockets) {
+      await socket.subscription.cancel();
+      socket.socket.close();
+    }
+    _sockets.clear();
     _discoveryPort = null;
     await _releasePlatformDiscoveryLock();
     _devices.clear();
@@ -197,14 +183,70 @@ class DeviceDiscoveryService {
     _scheduleProbeBurst();
   }
 
+  Future<List<_DiscoverySocket>> _createMulticastSockets(int port) async {
+    final sockets = <_DiscoverySocket>[];
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
+
+    for (final interface in interfaces) {
+      final socket = await _bindMulticastSocket(port, interface: interface);
+      if (socket != null) {
+        sockets.add(socket);
+      }
+    }
+
+    if (sockets.isEmpty) {
+      final socket = await _bindMulticastSocket(port);
+      if (socket != null) {
+        sockets.add(socket);
+      }
+    }
+
+    if (sockets.isEmpty) {
+      throw const SocketException('Could not bind multicast discovery socket.');
+    }
+
+    return sockets;
+  }
+
+  Future<_DiscoverySocket?> _bindMulticastSocket(
+    int port, {
+    NetworkInterface? interface,
+  }) async {
+    try {
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+        reuseAddress: true,
+        reusePort: true,
+      );
+      socket.joinMulticast(_multicastGroup, interface);
+      socket.multicastHops = 1;
+      final subscription = socket.listen(_handleSocketEvent);
+      return _DiscoverySocket(
+        socket: socket,
+        subscription: subscription,
+        interface: interface,
+      );
+    } on SocketException {
+      return null;
+    } on OSError {
+      return null;
+    }
+  }
+
   void _handleSocketEvent(RawSocketEvent event) {
     if (event != RawSocketEvent.read) {
       return;
     }
 
-    Datagram? datagram;
-    while ((datagram = _socket?.receive()) != null) {
-      _handleDatagram(datagram!);
+    for (final socket in _sockets) {
+      Datagram? datagram;
+      while ((datagram = socket.socket.receive()) != null) {
+        _handleDatagram(datagram!);
+      }
     }
   }
 
@@ -331,226 +373,42 @@ class DeviceDiscoveryService {
   }
 
   void _sendPacket(Map<String, dynamic> packet, {InternetAddress? address}) {
-    final socket = _socket;
     final port = _discoveryPort;
-    if (socket == null || port == null) {
+    if (_sockets.isEmpty || port == null) {
       return;
     }
 
     if (address == null) {
-      unawaited(_sendBroadcastPacket(packet));
-      return;
-    }
-
-    try {
-      socket.send(
-        utf8.encode(jsonEncode(packet)),
-        address,
-        port,
-      );
-    } on SocketException {
-      // The next heartbeat retries after temporary network failures.
-    }
-  }
-
-  Future<void> _sendBroadcastPacket(Map<String, dynamic> packet) async {
-    final socket = _socket;
-    final port = _discoveryPort;
-    if (socket == null || port == null) {
+      _sendMulticastPacket(packet);
       return;
     }
 
     final encodedPacket = utf8.encode(jsonEncode(packet));
-    final targets = <String, InternetAddress>{
-      '255.255.255.255': InternetAddress('255.255.255.255'),
-    };
-    for (final gateway in _commonHotspotGateways) {
-      _addTarget(targets, gateway);
-    }
-
-    await _addPlatformNetworkTargets(targets);
-
-    try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-      );
-      for (final interface in interfaces) {
-        for (final address in interface.addresses) {
-          for (final broadcastAddress in _fallbackBroadcastsFor(address)) {
-            targets[broadcastAddress.address] = broadcastAddress;
-          }
-          for (final gatewayAddress in _fallbackGatewayAddressesFor(address)) {
-            targets[gatewayAddress.address] = gatewayAddress;
-          }
-        }
-      }
-    } on SocketException {
-      // Fall back to the global broadcast address below.
-    }
-
-    for (final target in targets.values) {
+    for (final socket in _sockets) {
       try {
-        socket.send(encodedPacket, target, port);
+        socket.socket.send(encodedPacket, address, port);
       } on SocketException {
-        // Try every discovered target; the next heartbeat retries failures.
+        // Try every joined interface; the next heartbeat retries failures.
       }
     }
   }
 
-  Future<void> _addPlatformNetworkTargets(
-    Map<String, InternetAddress> targets,
-  ) async {
-    if (!Platform.isAndroid) {
+  void _sendMulticastPacket(Map<String, dynamic> packet) {
+    final port = _discoveryPort;
+    if (_sockets.isEmpty || port == null) {
       return;
     }
 
-    try {
-      final networkTargets = await _androidDiscoveryChannel
-          .invokeListMethod<dynamic>('getNetworkTargets');
-      if (networkTargets == null) {
-        return;
+    final encodedPacket = utf8.encode(jsonEncode(packet));
+    for (final socket in _sockets) {
+      socket.socket.multicastInterface = socket.interface;
+      socket.socket.multicastHops = 1;
+      try {
+        socket.socket.send(encodedPacket, _multicastGroup, port);
+      } on SocketException {
+        // Try every joined interface; the next heartbeat retries failures.
       }
-
-      for (final target in networkTargets) {
-        if (target is! Map) {
-          continue;
-        }
-        _addTarget(targets, target['broadcast']);
-
-        final address = target['address'];
-        final prefixLength = target['prefixLength'];
-        if (address is String && prefixLength is int) {
-          final broadcast = _broadcastForPrefix(
-            InternetAddress(address),
-            prefixLength,
-          );
-          if (broadcast != null) {
-            targets[broadcast.address] = broadcast;
-          }
-        }
-
-        final gateways = target['gateways'];
-        if (gateways is List) {
-          for (final gateway in gateways) {
-            _addTarget(targets, gateway);
-          }
-        }
-      }
-    } on PlatformException {
-      // Fall back to global broadcast and locally derived candidates.
-    } on MissingPluginException {
-      // Non-Android builds and tests do not register this channel.
-    } on ArgumentError {
-      // Ignore malformed platform addresses and use fallback targets.
     }
-  }
-
-  void _addTarget(Map<String, InternetAddress> targets, Object? address) {
-    if (address is! String || address.isEmpty) {
-      return;
-    }
-
-    try {
-      final internetAddress = InternetAddress(address);
-      if (internetAddress.type == InternetAddressType.IPv4 &&
-          !internetAddress.isLoopback) {
-        targets[internetAddress.address] = internetAddress;
-      }
-    } on ArgumentError {
-      // Ignore malformed platform addresses.
-    }
-  }
-
-  List<InternetAddress> _fallbackBroadcastsFor(InternetAddress address) {
-    if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
-      return const [];
-    }
-
-    return [
-      for (final prefixLength in _fallbackBroadcastPrefixes)
-        ?_broadcastForPrefix(address, prefixLength),
-    ];
-  }
-
-  InternetAddress? _broadcastForPrefix(
-    InternetAddress address,
-    int prefixLength,
-  ) {
-    if (address.type != InternetAddressType.IPv4 ||
-        address.isLoopback ||
-        prefixLength < 0 ||
-        prefixLength > 32) {
-      return null;
-    }
-
-    final bytes = address.rawAddress;
-    if (bytes.length != 4 || bytes[0] == 0 || bytes[0] == 127) {
-      return null;
-    }
-
-    final addressInt =
-        (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
-    final mask = prefixLength == 0 ? 0 : 0xffffffff << (32 - prefixLength);
-    final broadcast = (addressInt | (~mask)) & 0xffffffff;
-
-    return InternetAddress(
-      '${(broadcast >> 24) & 0xff}.'
-      '${(broadcast >> 16) & 0xff}.'
-      '${(broadcast >> 8) & 0xff}.'
-      '${broadcast & 0xff}',
-    );
-  }
-
-  List<InternetAddress> _fallbackGatewayAddressesFor(InternetAddress address) {
-    if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
-      return const [];
-    }
-
-    final bytes = address.rawAddress;
-    if (bytes.length != 4 || bytes[0] == 0 || bytes[0] == 127) {
-      return const [];
-    }
-
-    final gateways = <String, InternetAddress>{};
-    for (final lastOctet in const [1, 254]) {
-      if (bytes[3] == lastOctet) {
-        continue;
-      }
-      final gateway = InternetAddress(
-        '${bytes[0]}.${bytes[1]}.${bytes[2]}.$lastOctet',
-      );
-      gateways[gateway.address] = gateway;
-    }
-
-    return gateways.values.toList(growable: false);
-  }
-
-  void _removeExpiredDevices() {
-    final cutoff = DateTime.now().subtract(_peerTimeout);
-    final previousLength = _devices.length;
-    _devices.removeWhere((_, entry) => entry.lastSeen.isBefore(cutoff));
-    if (_devices.length != previousLength) {
-      _emitDevices();
-    }
-  }
-
-  bool _sameDevice(DiscoveredDevice? previous, DiscoveredDevice next) {
-    return previous != null &&
-        previous.id == next.id &&
-        previous.name == next.name &&
-        previous.address == next.address &&
-        previous.port == next.port &&
-        previous.usesTls == next.usesTls &&
-        previous.type == next.type &&
-        previous.certificateFingerprint == next.certificateFingerprint &&
-        previous.certificatePem == next.certificatePem;
-  }
-
-  void _emitDevices() {
-    final sortedDevices = _devices.values.map((entry) => entry.device).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    _devicesController.add(List.unmodifiable(sortedDevices));
   }
 
   Future<void> _acquirePlatformDiscoveryLock() async {
@@ -584,6 +442,45 @@ class DeviceDiscoveryService {
       // Non-Android builds and tests do not register this channel.
     }
   }
+
+  void _removeExpiredDevices() {
+    final cutoff = DateTime.now().subtract(_peerTimeout);
+    final previousLength = _devices.length;
+    _devices.removeWhere((_, entry) => entry.lastSeen.isBefore(cutoff));
+    if (_devices.length != previousLength) {
+      _emitDevices();
+    }
+  }
+
+  bool _sameDevice(DiscoveredDevice? previous, DiscoveredDevice next) {
+    return previous != null &&
+        previous.id == next.id &&
+        previous.name == next.name &&
+        previous.address == next.address &&
+        previous.port == next.port &&
+        previous.usesTls == next.usesTls &&
+        previous.type == next.type &&
+        previous.certificateFingerprint == next.certificateFingerprint &&
+        previous.certificatePem == next.certificatePem;
+  }
+
+  void _emitDevices() {
+    final sortedDevices = _devices.values.map((entry) => entry.device).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    _devicesController.add(List.unmodifiable(sortedDevices));
+  }
+}
+
+class _DiscoverySocket {
+  const _DiscoverySocket({
+    required this.socket,
+    required this.subscription,
+    required this.interface,
+  });
+
+  final RawDatagramSocket socket;
+  final StreamSubscription<RawSocketEvent> subscription;
+  final NetworkInterface? interface;
 }
 
 class _SeenDevice {
