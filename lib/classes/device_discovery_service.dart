@@ -32,6 +32,14 @@ class DeviceDiscoveryService {
   static final DeviceDiscoveryService instance = DeviceDiscoveryService._();
   static const _protocol = 'flashbyte-discovery-v1';
   static const _broadcastInterval = Duration(seconds: 2);
+  static const _advertiseBurstDelays = [
+    Duration(milliseconds: 180),
+    Duration(milliseconds: 650),
+  ];
+  static const _probeBurstDelays = [
+    Duration(milliseconds: 220),
+    Duration(milliseconds: 700),
+  ];
   static const _peerTimeout = Duration(seconds: 6);
 
   final _devicesController =
@@ -41,10 +49,13 @@ class DeviceDiscoveryService {
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _socketSubscription;
   Timer? _broadcastTimer;
+  final List<Timer> _advertiseBurstTimers = [];
+  final List<Timer> _probeBurstTimers = [];
   Timer? _cleanupTimer;
   String? _localDeviceId;
   int? _discoveryPort;
   Map<String, dynamic>? _advertisement;
+  String? _advertisingInstanceId;
 
   Stream<List<DiscoveredDevice>> get devicesStream => _devicesController.stream;
   List<DiscoveredDevice> get devices =>
@@ -56,6 +67,8 @@ class DeviceDiscoveryService {
   }) async {
     _localDeviceId = localDeviceId;
     if (_socket != null && _discoveryPort == port) {
+      _emitDevices();
+      requestRefresh();
       return;
     }
 
@@ -73,6 +86,8 @@ class DeviceDiscoveryService {
       _broadcastInterval,
       (_) => _removeExpiredDevices(),
     );
+    _emitDevices();
+    requestRefresh();
   }
 
   Future<void> startAdvertising({
@@ -83,10 +98,18 @@ class DeviceDiscoveryService {
     String? certificateFingerprint,
     String? certificatePem,
   }) async {
+    if (_advertisement != null &&
+        _discoveryPort != null &&
+        _discoveryPort != port) {
+      await stopAdvertising();
+    }
+
     await startDiscovery(localDeviceId: deviceId, port: port);
+    _advertisingInstanceId = DateTime.now().microsecondsSinceEpoch.toString();
     _advertisement = {
       'protocol': _protocol,
       'action': 'hello',
+      'instanceId': _advertisingInstanceId,
       'id': deviceId,
       'name': name,
       'port': port,
@@ -98,7 +121,11 @@ class DeviceDiscoveryService {
           : DiscoveredDeviceType.laptop.name,
     };
     _broadcastTimer?.cancel();
+    _cancelAdvertiseBurst();
     _broadcastAdvertisement();
+    for (final delay in _advertiseBurstDelays) {
+      _advertiseBurstTimers.add(Timer(delay, _broadcastAdvertisement));
+    }
     _broadcastTimer = Timer.periodic(
       _broadcastInterval,
       (_) => _broadcastAdvertisement(),
@@ -108,14 +135,18 @@ class DeviceDiscoveryService {
   Future<void> stopAdvertising() async {
     _broadcastTimer?.cancel();
     _broadcastTimer = null;
+    _cancelAdvertiseBurst();
     final advertisement = _advertisement;
     if (advertisement != null) {
       _sendPacket({...advertisement, 'action': 'goodbye'});
     }
     _advertisement = null;
+    _advertisingInstanceId = null;
   }
 
   Future<void> stopDiscovery() async {
+    _cancelAdvertiseBurst();
+    _cancelProbeBurst();
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
     await _socketSubscription?.cancel();
@@ -130,6 +161,12 @@ class DeviceDiscoveryService {
   Future<void> stop() async {
     await stopAdvertising();
     await stopDiscovery();
+  }
+
+  void requestRefresh() {
+    _sendProbe();
+    _broadcastAdvertisement();
+    _scheduleProbeBurst();
   }
 
   void _handleSocketEvent(RawSocketEvent event) {
@@ -160,9 +197,19 @@ class DeviceDiscoveryService {
       if (id == null || id == _localDeviceId) {
         return;
       }
+      if (message['action'] == 'probe') {
+        _sendAdvertisement(address: datagram.address);
+        return;
+      }
       if (message['action'] == 'goodbye') {
-        _devices.remove(id);
-        _emitDevices();
+        final seenDevice = _devices[id];
+        final instanceId = message['instanceId'] as String?;
+        if (seenDevice != null &&
+            (seenDevice.instanceId == null ||
+                seenDevice.instanceId == instanceId)) {
+          _devices.remove(id);
+          _emitDevices();
+        }
         return;
       }
 
@@ -171,6 +218,7 @@ class DeviceDiscoveryService {
       final usesTls = message['tls'] as bool?;
       final certificateFingerprint = message['certFingerprint'] as String?;
       final certificatePem = message['cert'] as String?;
+      final instanceId = message['instanceId'] as String?;
       if (name == null || port == null || usesTls == null) {
         return;
       }
@@ -194,6 +242,7 @@ class DeviceDiscoveryService {
           certificateFingerprint: certificateFingerprint,
           certificatePem: certificatePem,
         ),
+        instanceId: instanceId,
         lastSeen: DateTime.now(),
       );
       _emitDevices();
@@ -205,13 +254,51 @@ class DeviceDiscoveryService {
   }
 
   void _broadcastAdvertisement() {
+    _sendAdvertisement();
+  }
+
+  void _sendAdvertisement({InternetAddress? address}) {
     final advertisement = _advertisement;
     if (advertisement != null) {
-      _sendPacket(advertisement);
+      _sendPacket(advertisement, address: address);
     }
   }
 
-  void _sendPacket(Map<String, dynamic> packet) {
+  void _sendProbe() {
+    final localDeviceId = _localDeviceId;
+    if (localDeviceId == null) {
+      return;
+    }
+
+    _sendPacket({
+      'protocol': _protocol,
+      'action': 'probe',
+      'id': localDeviceId,
+    });
+  }
+
+  void _cancelAdvertiseBurst() {
+    for (final timer in _advertiseBurstTimers) {
+      timer.cancel();
+    }
+    _advertiseBurstTimers.clear();
+  }
+
+  void _scheduleProbeBurst() {
+    _cancelProbeBurst();
+    for (final delay in _probeBurstDelays) {
+      _probeBurstTimers.add(Timer(delay, _sendProbe));
+    }
+  }
+
+  void _cancelProbeBurst() {
+    for (final timer in _probeBurstTimers) {
+      timer.cancel();
+    }
+    _probeBurstTimers.clear();
+  }
+
+  void _sendPacket(Map<String, dynamic> packet, {InternetAddress? address}) {
     final socket = _socket;
     final port = _discoveryPort;
     if (socket == null || port == null) {
@@ -221,7 +308,7 @@ class DeviceDiscoveryService {
     try {
       socket.send(
         utf8.encode(jsonEncode(packet)),
-        InternetAddress('255.255.255.255'),
+        address ?? InternetAddress('255.255.255.255'),
         port,
       );
     } on SocketException {
@@ -248,9 +335,11 @@ class DeviceDiscoveryService {
 class _SeenDevice {
   const _SeenDevice({
     required this.device,
+    required this.instanceId,
     required this.lastSeen,
   });
 
   final DiscoveredDevice device;
+  final String? instanceId;
   final DateTime lastSeen;
 }

@@ -223,6 +223,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         localDeviceId: id,
         port: port,
       );
+      DeviceDiscoveryService.instance.requestRefresh();
       if (!mounted) return;
       setState(() {
         discoveredDevices = DeviceDiscoveryService.instance.devices;
@@ -272,6 +273,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     setState(() {
       selectedTabIndex = _tabController.index;
     });
+    if (selectedTabIndex == 0) {
+      DeviceDiscoveryService.instance.requestRefresh();
+    }
   }
 
   Future<void> _ensureReceiveReady() async {
@@ -346,6 +350,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       return;
     }
     await _ensureReceiveReady();
+    DeviceDiscoveryService.instance.requestRefresh();
   }
 
   Future<void> _refreshAdvertisement() async {
