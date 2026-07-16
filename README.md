@@ -25,11 +25,11 @@ You can try out Flashbyte on the following platforms:
 <!-- BEGIN AUTO RELEASE DOWNLOADS -->
 | Platform | Download |
 |----------|----------|
-| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-android.aab) |
-| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-linux-x64.tar.gz) |
-| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-macos.dmg) |
-| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-ios-unsigned-runner-app.zip) |
-| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/build-58eb8025ab95c6ded5220f09a6a1584cec2d9c0a/flashbyte-windows-x64.zip) |
+| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-android.aab) |
+| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-linux-x64.tar.gz) |
+| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-macos.dmg) |
+| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-ios-unsigned-runner-app.zip) |
+| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/build-df54e8ae0227b5ffa1f0da94a55f2602d8833cf7/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ## Installation instructions:
