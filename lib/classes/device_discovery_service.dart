@@ -50,6 +50,7 @@ class DeviceDiscoveryService {
     '192.168.137.1',
     '172.20.10.1',
   ];
+  static const _fallbackBroadcastPrefixes = [24, 20, 16, 28, 29, 30];
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
@@ -364,8 +365,10 @@ class DeviceDiscoveryService {
       '255.255.255.255': InternetAddress('255.255.255.255'),
     };
     for (final gateway in _commonHotspotGateways) {
-      targets[gateway] = InternetAddress(gateway);
+      _addTarget(targets, gateway);
     }
+
+    await _addPlatformNetworkTargets(targets);
 
     try {
       final interfaces = await NetworkInterface.list(
@@ -374,12 +377,10 @@ class DeviceDiscoveryService {
       );
       for (final interface in interfaces) {
         for (final address in interface.addresses) {
-          final broadcastAddress = _directedBroadcastFor(address);
-          if (broadcastAddress != null) {
+          for (final broadcastAddress in _fallbackBroadcastsFor(address)) {
             targets[broadcastAddress.address] = broadcastAddress;
           }
-          final gatewayAddress = _gatewayAddressFor(address);
-          if (gatewayAddress != null) {
+          for (final gatewayAddress in _fallbackGatewayAddressesFor(address)) {
             targets[gatewayAddress.address] = gatewayAddress;
           }
         }
@@ -397,8 +398,89 @@ class DeviceDiscoveryService {
     }
   }
 
-  InternetAddress? _directedBroadcastFor(InternetAddress address) {
+  Future<void> _addPlatformNetworkTargets(
+    Map<String, InternetAddress> targets,
+  ) async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      final networkTargets = await _androidDiscoveryChannel
+          .invokeListMethod<dynamic>('getNetworkTargets');
+      if (networkTargets == null) {
+        return;
+      }
+
+      for (final target in networkTargets) {
+        if (target is! Map) {
+          continue;
+        }
+        _addTarget(targets, target['broadcast']);
+
+        final address = target['address'];
+        final prefixLength = target['prefixLength'];
+        if (address is String && prefixLength is int) {
+          final broadcast = _broadcastForPrefix(
+            InternetAddress(address),
+            prefixLength,
+          );
+          if (broadcast != null) {
+            targets[broadcast.address] = broadcast;
+          }
+        }
+
+        final gateways = target['gateways'];
+        if (gateways is List) {
+          for (final gateway in gateways) {
+            _addTarget(targets, gateway);
+          }
+        }
+      }
+    } on PlatformException {
+      // Fall back to global broadcast and locally derived candidates.
+    } on MissingPluginException {
+      // Non-Android builds and tests do not register this channel.
+    } on ArgumentError {
+      // Ignore malformed platform addresses and use fallback targets.
+    }
+  }
+
+  void _addTarget(Map<String, InternetAddress> targets, Object? address) {
+    if (address is! String || address.isEmpty) {
+      return;
+    }
+
+    try {
+      final internetAddress = InternetAddress(address);
+      if (internetAddress.type == InternetAddressType.IPv4 &&
+          !internetAddress.isLoopback) {
+        targets[internetAddress.address] = internetAddress;
+      }
+    } on ArgumentError {
+      // Ignore malformed platform addresses.
+    }
+  }
+
+  List<InternetAddress> _fallbackBroadcastsFor(InternetAddress address) {
     if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
+      return const [];
+    }
+
+    return [
+      for (final prefixLength in _fallbackBroadcastPrefixes)
+        ?_broadcastForPrefix(address, prefixLength),
+    ];
+  }
+
+  InternetAddress? _broadcastForPrefix(
+    InternetAddress address,
+    int prefixLength,
+  ) {
+    if (address.type != InternetAddressType.IPv4 ||
+        address.isLoopback ||
+        prefixLength < 0 ||
+        prefixLength > 32) {
       return null;
     }
 
@@ -407,23 +489,41 @@ class DeviceDiscoveryService {
       return null;
     }
 
-    return InternetAddress('${bytes[0]}.${bytes[1]}.${bytes[2]}.255');
+    final addressInt =
+        (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    final mask = prefixLength == 0 ? 0 : 0xffffffff << (32 - prefixLength);
+    final broadcast = (addressInt | (~mask)) & 0xffffffff;
+
+    return InternetAddress(
+      '${(broadcast >> 24) & 0xff}.'
+      '${(broadcast >> 16) & 0xff}.'
+      '${(broadcast >> 8) & 0xff}.'
+      '${broadcast & 0xff}',
+    );
   }
 
-  InternetAddress? _gatewayAddressFor(InternetAddress address) {
+  List<InternetAddress> _fallbackGatewayAddressesFor(InternetAddress address) {
     if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
-      return null;
+      return const [];
     }
 
     final bytes = address.rawAddress;
-    if (bytes.length != 4 ||
-        bytes[0] == 0 ||
-        bytes[0] == 127 ||
-        bytes[3] == 1) {
-      return null;
+    if (bytes.length != 4 || bytes[0] == 0 || bytes[0] == 127) {
+      return const [];
     }
 
-    return InternetAddress('${bytes[0]}.${bytes[1]}.${bytes[2]}.1');
+    final gateways = <String, InternetAddress>{};
+    for (final lastOctet in const [1, 254]) {
+      if (bytes[3] == lastOctet) {
+        continue;
+      }
+      final gateway = InternetAddress(
+        '${bytes[0]}.${bytes[1]}.${bytes[2]}.$lastOctet',
+      );
+      gateways[gateway.address] = gateway;
+    }
+
+    return gateways.values.toList(growable: false);
   }
 
   void _removeExpiredDevices() {
