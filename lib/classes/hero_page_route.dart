@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:heroine/heroine.dart';
 
 class HeroDialogRoute extends HeroinePageRoute {
@@ -37,6 +38,7 @@ class HeroDialogRoute extends HeroinePageRoute {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
     return GestureDetector(
       onTap: () {
         if (FocusManager.instance.primaryFocus != null) {
@@ -58,17 +60,22 @@ class HeroDialogRoute extends HeroinePageRoute {
                 : MediaQuery.of(context).viewInsets.bottom +
                       padding.horizontal / 2,
           ),
-          child: DragDismissable(
-            motion: CupertinoMotion.bouncy(),
-            child: Heroine(
-              motion: CupertinoMotion.bouncy(),
-              tag: heroTag,
-              flightShuttleBuilder: fadeColor == null
-                  ? null
-                  : FadeThroughShuttleBuilder(fadeColor: fadeColor!),
-              child: heroChild,
-            ),
-          ),
+          child: disableAnimations
+              ? heroChild.animate().fadeIn(
+                  duration: 160.ms,
+                  curve: Curves.easeOut,
+                )
+              : DragDismissable(
+                  motion: CupertinoMotion.bouncy(),
+                  child: Heroine(
+                    motion: CupertinoMotion.bouncy(),
+                    tag: heroTag,
+                    flightShuttleBuilder: fadeColor == null
+                        ? null
+                        : FadeThroughShuttleBuilder(fadeColor: fadeColor!),
+                    child: heroChild,
+                  ),
+                ),
         ),
       ),
     );

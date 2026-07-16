@@ -294,7 +294,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: const Text(
                     "Use the app's dark theme instead of the light theme.",
                   ),
-                  trailing: Switch(
+                  trailing: _SettingsToggle(
                     value: _appearanceController.useDarkMode,
                     onChanged: (value) async {
                       await _appearanceController.setUseDarkMode(value);
@@ -308,7 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: const Text(
                     "Use the device wallpaper color scheme when supported.",
                   ),
-                  trailing: Switch(
+                  trailing: _SettingsToggle(
                     value: _appearanceController.useDynamicColors,
                     onChanged: _toggleDynamicColors,
                   ),
@@ -318,7 +318,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: const Text(
                     "Reduce motion across the app and keep transfer changes to simple fades.",
                   ),
-                  trailing: Switch(
+                  trailing: _SettingsToggle(
                     value: _motionController.disableAnimations,
                     onChanged: _toggleAnimations,
                   ),
@@ -361,7 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ? "Disconnect before changing TLS settings."
                         : "Encrypt transfers with a unique certificate generated on this device.",
                   ),
-                  trailing: Switch(
+                  trailing: _SettingsToggle(
                     value: _useTLS,
                     onChanged: widget.locked ? null : _toggleTLS,
                   ),
@@ -439,5 +439,67 @@ class _SettingsPageState extends State<SettingsPage> {
       return value;
     }
     return "${value[0].toUpperCase()}${value.substring(1)}";
+  }
+}
+
+class _SettingsToggle extends StatelessWidget {
+  const _SettingsToggle({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MediaQuery.disableAnimationsOf(context)) {
+      return Switch(
+        value: value,
+        onChanged: onChanged,
+      );
+    }
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final enabled = onChanged != null;
+    final background = value
+        ? colorScheme.primary
+        : colorScheme.surfaceContainerHighest;
+    final foreground = value
+        ? colorScheme.onPrimary
+        : colorScheme.onSurfaceVariant;
+
+    return Semantics(
+      button: true,
+      toggled: value,
+      enabled: enabled,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: enabled ? () => onChanged!(!value) : null,
+        child: Container(
+          width: 52,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: enabled
+                ? background
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: value
+                  ? Colors.transparent
+                  : colorScheme.outlineVariant.withValues(alpha: 0.8),
+            ),
+          ),
+          child: Icon(
+            value ? Icons.check_rounded : Icons.close_rounded,
+            size: 18,
+            color: enabled
+                ? foreground
+                : colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+          ),
+        ),
+      ),
+    );
   }
 }
