@@ -171,15 +171,19 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ApprovalHeader(
-              icon: Icons.schedule_send_rounded,
-              title: 'Waiting for approval',
-              message:
-                  'The receiver needs to accept this request before sending begins.',
-            )
-            .animate()
-            .fadeIn(duration: 180.ms)
-            .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+        _maybeAnimate(
+          context,
+          _ApprovalHeader(
+            icon: Icons.schedule_send_rounded,
+            title: 'Waiting for approval',
+            message:
+                'The receiver needs to accept this request before sending begins.',
+          ),
+          (child) => child
+              .animate()
+              .fadeIn(duration: 180.ms)
+              .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+        ),
         const SizedBox(height: 20),
         Expanded(
           child: LayoutBuilder(
@@ -193,46 +197,54 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                     mainAxisSize: MainAxisSize.min,
                     spacing: 12,
                     children: [
-                      _ApprovalDeviceRow(
-                            label: 'This device',
-                            name: widget.senderName,
-                            detail: _deviceTypeLabel(widget.senderType),
-                            type: widget.senderType,
-                            address: 'Local sender',
-                            port: null,
-                            usesTls: widget.senderUsesTls,
-                            color: colorScheme.secondaryContainer,
-                            foregroundColor: colorScheme.onSecondaryContainer,
-                          )
-                          .animate()
-                          .fadeIn(delay: 120.ms, duration: 180.ms)
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            curve: Curves.easeOutCubic,
-                          ),
+                      _maybeAnimate(
+                        context,
+                        _ApprovalDeviceRow(
+                          label: 'This device',
+                          name: widget.senderName,
+                          detail: _deviceTypeLabel(widget.senderType),
+                          type: widget.senderType,
+                          address: 'Local sender',
+                          port: null,
+                          usesTls: widget.senderUsesTls,
+                          color: colorScheme.secondaryContainer,
+                          foregroundColor: colorScheme.onSecondaryContainer,
+                        ),
+                        (child) => child
+                            .animate()
+                            .fadeIn(delay: 120.ms, duration: 180.ms)
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ),
                       _TransferDirectionDivider(
                         secure: receiverUsesTls && widget.senderUsesTls,
                       ),
-                      _ApprovalDeviceRow(
-                            label: 'Receiver',
-                            name: receiverName,
-                            detail: _deviceTypeLabel(receiverType),
-                            type: receiverType,
-                            address: receiverAddress ?? 'Address pending',
-                            port: receiverPort,
-                            usesTls: receiverUsesTls,
-                            fingerprint: receiverFingerprint,
-                            color: colorScheme.primaryContainer,
-                            foregroundColor: colorScheme.onPrimaryContainer,
-                          )
-                          .animate()
-                          .fadeIn(delay: 220.ms, duration: 180.ms)
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            curve: Curves.easeOutCubic,
-                          ),
+                      _maybeAnimate(
+                        context,
+                        _ApprovalDeviceRow(
+                          label: 'Receiver',
+                          name: receiverName,
+                          detail: _deviceTypeLabel(receiverType),
+                          type: receiverType,
+                          address: receiverAddress ?? 'Address pending',
+                          port: receiverPort,
+                          usesTls: receiverUsesTls,
+                          fingerprint: receiverFingerprint,
+                          color: colorScheme.primaryContainer,
+                          foregroundColor: colorScheme.onPrimaryContainer,
+                        ),
+                        (child) => child
+                            .animate()
+                            .fadeIn(delay: 220.ms, duration: 180.ms)
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ),
                     ],
                   ),
                 ),
@@ -251,17 +263,21 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final file = widget.files[index];
-                          return _ApprovalFileRow(fileName: file.name)
-                              .animate()
-                              .fadeIn(
-                                delay: (180 + index * 45).ms,
-                                duration: 160.ms,
-                              )
-                              .slideY(
-                                begin: 0.05,
-                                end: 0,
-                                curve: Curves.easeOutCubic,
-                              );
+                          return _maybeAnimate(
+                            context,
+                            _ApprovalFileRow(fileName: file.name),
+                            (child) => child
+                                .animate()
+                                .fadeIn(
+                                  delay: (180 + index * 45).ms,
+                                  duration: 160.ms,
+                                )
+                                .slideY(
+                                  begin: 0.05,
+                                  end: 0,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                          );
                         },
                       ),
                     ),
@@ -287,24 +303,17 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
                 ],
               );
             },
-          ).animate().fadeIn(delay: 140.ms, duration: 180.ms),
+          ),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
-              onPressed: _cancel,
-              icon: const Icon(Icons.close_rounded),
-              label: const Text('Cancel transfer'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-              ),
-            )
-            .animate()
-            .fadeIn(delay: 300.ms, duration: 180.ms)
-            .slideY(
-              begin: 0.05,
-              end: 0,
-              curve: Curves.easeOutCubic,
-            ),
+          onPressed: _cancel,
+          icon: const Icon(Icons.close_rounded),
+          label: const Text('Cancel transfer'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+          ),
+        ),
       ],
     );
   }
@@ -322,14 +331,18 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(
-              icon,
-              size: 52,
-              color: declined ? colorScheme.error : colorScheme.primary,
-            )
-            .animate()
-            .fadeIn(duration: 180.ms)
-            .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1)),
+        _maybeAnimate(
+          context,
+          Icon(
+            icon,
+            size: 52,
+            color: declined ? colorScheme.error : colorScheme.primary,
+          ),
+          (child) => child
+              .animate()
+              .fadeIn(duration: 180.ms)
+              .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1)),
+        ),
         const SizedBox(height: 18),
         Text(
           title,
@@ -359,6 +372,14 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
 }
 
 enum _OutgoingOfferOutcome { declined, connectionEnded }
+
+Widget _maybeAnimate(
+  BuildContext context,
+  Widget child,
+  Widget Function(Widget child) animated,
+) {
+  return MediaQuery.disableAnimationsOf(context) ? child : animated(child);
+}
 
 class _OfferSurface extends StatelessWidget {
   const _OfferSurface({

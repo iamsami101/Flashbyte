@@ -145,6 +145,8 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
     return Card(
       margin: EdgeInsets.symmetric(horizontal: 20),
       child: SingleChildScrollView(
@@ -288,7 +290,9 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
+                  duration: reducedMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
                   switchInCurve: Curves.easeOutCubic,
                   switchOutCurve: Curves.easeInCubic,
                   child: _transferComplete
@@ -480,7 +484,9 @@ class _OpenFileButton extends StatelessWidget {
         ),
         child: Center(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
             child: isOpeningFile
                 ? const SizedBox(
                     key: ValueKey('opening-file'),

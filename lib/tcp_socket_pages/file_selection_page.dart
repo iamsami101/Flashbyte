@@ -665,11 +665,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   PageRouteBuilder<T> _buildApprovalRoute<T>(Widget page) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
     return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionDuration: 260.ms,
-      reverseTransitionDuration: 200.ms,
+      transitionDuration: reducedMotion ? Duration.zero : 260.ms,
+      reverseTransitionDuration: reducedMotion ? Duration.zero : 200.ms,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        if (reducedMotion) {
+          return child;
+        }
         final curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -1097,6 +1101,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildReceiverVisualCard({required bool fillHeight}) {
     final colorScheme = Theme.of(context).colorScheme;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1138,6 +1143,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                     isActive:
                         !_receiveServerIntentionallyStopped &&
                         !isReceiveStarting,
+                    staticShape: reducedMotion,
                   ),
                 if (indicatorSize >= 48) SizedBox(height: indicatorStatusGap),
                 Container(
@@ -1272,6 +1278,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   Widget _buildAvailableDevicesCard() {
     final colorScheme = Theme.of(context).colorScheme;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1307,7 +1314,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   ),
                 ),
                 AnimatedSwitcher(
-                  duration: 180.ms,
+                  duration: reducedMotion ? Duration.zero : 180.ms,
                   child: isDiscovering
                       ? SizedBox.square(
                           key: const ValueKey('discovering'),
@@ -1327,7 +1334,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
               ],
             ),
             AnimatedSwitcher(
-              duration: 220.ms,
+              duration: reducedMotion ? Duration.zero : 220.ms,
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               child: discoveredDevices.isEmpty
@@ -1339,17 +1346,19 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       spacing: 10,
                       children: [
                         for (final (index, device) in discoveredDevices.indexed)
-                          _buildDeviceTile(device)
-                              .animate()
-                              .fadeIn(
-                                duration: 180.ms,
-                                delay: (index * 70).ms,
-                              )
-                              .slideY(
-                                begin: 0.08,
-                                end: 0,
-                                curve: Curves.easeOutCubic,
-                              ),
+                          reducedMotion
+                              ? _buildDeviceTile(device)
+                              : _buildDeviceTile(device)
+                                    .animate()
+                                    .fadeIn(
+                                      duration: 180.ms,
+                                      delay: (index * 70).ms,
+                                    )
+                                    .slideY(
+                                      begin: 0.08,
+                                      end: 0,
+                                      curve: Curves.easeOutCubic,
+                                    ),
                       ],
                     ),
             ),
@@ -1406,6 +1415,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Widget _buildDeviceTile(DiscoveredDevice device) {
     final colorScheme = Theme.of(context).colorScheme;
     final canTap = !isPickingFile && !isConnectingToSender;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
     final shakeController = _deviceShakeControllers.putIfAbsent(
       device.id,
       () => AnimationController(vsync: this, duration: 420.ms),
@@ -1492,6 +1502,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         ),
       ),
     );
+
+    if (reducedMotion) {
+      return deviceCard;
+    }
 
     return deviceCard
         .animate(

@@ -10,10 +10,12 @@ class SlowM3ELoadingIndicator extends StatefulWidget {
     super.key,
     required this.size,
     required this.isActive,
+    this.staticShape = false,
   });
 
   final double size;
   final bool isActive;
+  final bool staticShape;
 
   @override
   State<SlowM3ELoadingIndicator> createState() =>
@@ -59,12 +61,15 @@ class _SlowM3ELoadingIndicatorState extends State<SlowM3ELoadingIndicator>
   @override
   void didUpdateWidget(covariant SlowM3ELoadingIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) _updatePlayback();
+    if (oldWidget.isActive != widget.isActive ||
+        oldWidget.staticShape != widget.staticShape) {
+      _updatePlayback();
+    }
   }
 
   void _updatePlayback() {
     _morphTimer?.cancel();
-    if (!widget.isActive) {
+    if (!widget.isActive || widget.staticShape) {
       _rotationController.stop();
       _morphController.stop();
       return;
@@ -93,6 +98,16 @@ class _SlowM3ELoadingIndicatorState extends State<SlowM3ELoadingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.staticShape) {
+      return CustomPaint(
+        painter: _StaticM3EShapePainter(
+          color: Theme.of(context).colorScheme.primary,
+          shape: MaterialShapes.clover4Leaf,
+        ),
+        child: SizedBox.square(dimension: widget.size),
+      );
+    }
+
     return AnimatedBuilder(
       animation: Listenable.merge([_rotationController, _morphController]),
       builder: (context, child) => Transform.rotate(
@@ -107,6 +122,37 @@ class _SlowM3ELoadingIndicatorState extends State<SlowM3ELoadingIndicator>
         ),
       ),
     );
+  }
+}
+
+class _StaticM3EShapePainter extends CustomPainter {
+  const _StaticM3EShapePainter({
+    required this.color,
+    required this.shape,
+  });
+
+  final Color color;
+  final RoundedPolygon shape;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = shape.toPath().transform(
+      Matrix4.diagonal3Values(size.width * 0.74, size.height * 0.74, 1).storage,
+    );
+    final centeredPath = path.shift(
+      size.center(Offset.zero) - path.getBounds().center,
+    );
+    canvas.drawPath(
+      centeredPath,
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticM3EShapePainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.shape != shape;
   }
 }
 

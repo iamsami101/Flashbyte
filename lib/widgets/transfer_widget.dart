@@ -45,6 +45,7 @@ class TransferWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
     final isFinished = status == TransferStatus.completed;
     final isCancelled = status == TransferStatus.cancelled;
     final isPaused = status == TransferStatus.paused;
@@ -70,102 +71,98 @@ class TransferWidget extends StatelessWidget {
         );
     final progressValue = isFinished ? 1.0 : null;
 
-    return Heroine(
-      motion: Motion.bouncySpring(),
-      tag: uuid,
-      child: Container(
-        margin: EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 5,
-        ),
-        child: Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            physics: NeverScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadiusGeometry.circular(13),
-                  ),
-                  onTap: () {
-                    if (isCancelled || isPending) return;
-                    openFilePreview(context);
-                  },
-                  contentPadding: EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 20,
-                  ),
-                  leading: SizedBox(
-                    height: double.infinity,
-                    child: FittedBox(child: Icon(Icons.file_copy)),
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          physics: BouncingScrollPhysics(),
-                          scrollDirection: Axis.horizontal,
-                          child: Text(
-                            fileName,
-                            softWrap: false,
-                            overflow: TextOverflow.fade,
-                          ),
+    final card = Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 5,
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          physics: NeverScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadiusGeometry.circular(13),
+                ),
+                onTap: () {
+                  if (isCancelled || isPending) return;
+                  openFilePreview(context);
+                },
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 20,
+                ),
+                leading: SizedBox(
+                  height: double.infinity,
+                  child: FittedBox(child: Icon(Icons.file_copy)),
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: BouncingScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          fileName,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
                         ),
                       ),
-                      SizedBox(width: 10),
-                      Row(
-                        spacing: 5,
-                        children: [
-                          Icon(
-                            isCancelled
-                                ? Icons.block_rounded
-                                : isReceived
-                                ? Icons.arrow_downward_rounded
-                                : Icons.arrow_upward_rounded,
-                            fontWeight: FontWeight.w900,
-                            size: 15,
-                            color: isCancelled
-                                ? colorScheme.error
-                                : isFinished
-                                ? colorScheme.primary
-                                : Colors.white.withAlpha(100),
-                          ),
-                          Text(
-                            transferStateText,
-                            style: primaryTextStyle,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  subtitle:
-                      // value == null
-                      //     ? Column(
-                      //         crossAxisAlignment: CrossAxisAlignment.start,
-                      //         spacing: 10,
-                      //         children: [
-                      //           Text(
-                      //             "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
-                      //           ),
-                      //           LinearProgressIndicator(
-                      //             value: 1,
-                      //             year2023: false,
-                      //             stopIndicatorRadius: 1,
-                      //             stopIndicatorColor: colorScheme.secondary,
-                      //           ),
-                      //         ],
-                      //       )
-                      //     :
-                      ValueListenableBuilder(
-                        valueListenable: progressValue != null
-                            ? ValueNotifier<double>(progressValue)
-                            : value!,
-                        builder: (context, pvalue, child) => SingleMotionBuilder(
-                          value: pvalue,
-                          motion: Motion.smoothSpring(),
-                          builder: (context, value, child) => Column(
+                    ),
+                    SizedBox(width: 10),
+                    Row(
+                      spacing: 5,
+                      children: [
+                        Icon(
+                          isCancelled
+                              ? Icons.block_rounded
+                              : isReceived
+                              ? Icons.arrow_downward_rounded
+                              : Icons.arrow_upward_rounded,
+                          fontWeight: FontWeight.w900,
+                          size: 15,
+                          color: isCancelled
+                              ? colorScheme.error
+                              : isFinished
+                              ? colorScheme.primary
+                              : Colors.white.withAlpha(100),
+                        ),
+                        Text(
+                          transferStateText,
+                          style: primaryTextStyle,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                subtitle:
+                    // value == null
+                    //     ? Column(
+                    //         crossAxisAlignment: CrossAxisAlignment.start,
+                    //         spacing: 10,
+                    //         children: [
+                    //           Text(
+                    //             "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
+                    //           ),
+                    //           LinearProgressIndicator(
+                    //             value: 1,
+                    //             year2023: false,
+                    //             stopIndicatorRadius: 1,
+                    //             stopIndicatorColor: colorScheme.secondary,
+                    //           ),
+                    //         ],
+                    //       )
+                    //     :
+                    ValueListenableBuilder(
+                      valueListenable: progressValue != null
+                          ? ValueNotifier<double>(progressValue)
+                          : value!,
+                      builder: (context, pvalue, child) {
+                        Widget buildProgress(double value) {
+                          return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             spacing: 10,
                             children: [
@@ -194,6 +191,7 @@ class TransferWidget extends StatelessWidget {
                                   onPause: onPause,
                                   onResume: onResume,
                                   onCancel: onCancel,
+                                  reducedMotion: reducedMotion,
                                 ),
                               if (isPending)
                                 _TransferAcceptanceControls(
@@ -202,16 +200,37 @@ class TransferWidget extends StatelessWidget {
                                   onDecline: onDecline,
                                 ),
                             ],
-                          ),
-                        ),
-                      ),
-                  dense: true,
-                ),
-              ],
-            ),
+                          );
+                        }
+
+                        if (reducedMotion) {
+                          return buildProgress(pvalue);
+                        }
+
+                        return SingleMotionBuilder(
+                          value: pvalue,
+                          motion: Motion.smoothSpring(),
+                          builder: (context, value, child) =>
+                              buildProgress(value),
+                        );
+                      },
+                    ),
+                dense: true,
+              ),
+            ],
           ),
         ),
       ),
+    );
+
+    if (reducedMotion) {
+      return card;
+    }
+
+    return Heroine(
+      motion: Motion.bouncySpring(),
+      tag: uuid,
+      child: card,
     );
   }
 
@@ -243,6 +262,7 @@ class _TransferControls extends StatelessWidget {
     required this.onPause,
     required this.onResume,
     required this.onCancel,
+    required this.reducedMotion,
   });
 
   final bool isPaused;
@@ -250,6 +270,7 @@ class _TransferControls extends StatelessWidget {
   final VoidCallback? onPause;
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
+  final bool reducedMotion;
 
   @override
   Widget build(BuildContext context) {
@@ -284,24 +305,52 @@ class _TransferControls extends StatelessWidget {
             disabledForegroundColor: Colors.transparent,
           ),
           onPressed: isPaused ? onCancel : null,
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.centerLeft,
-            child: isPaused
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 8,
-                      children: [
-                        Icon(Icons.close_rounded),
-                        Text("Cancel"),
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: 0, height: 24),
-          ),
+          child: reducedMotion
+              ? AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                  child: isPaused
+                      ? const Padding(
+                          key: ValueKey('cancel-visible'),
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            spacing: 8,
+                            children: [
+                              Icon(Icons.close_rounded),
+                              Text("Cancel"),
+                            ],
+                          ),
+                        )
+                      : const SizedBox(
+                          key: ValueKey('cancel-hidden'),
+                          width: 0,
+                          height: 24,
+                        ),
+                )
+              : AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: isPaused
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            spacing: 8,
+                            children: [
+                              Icon(Icons.close_rounded),
+                              Text("Cancel"),
+                            ],
+                          ),
+                        )
+                      : const SizedBox(width: 0, height: 24),
+                ),
         ),
       ],
     );

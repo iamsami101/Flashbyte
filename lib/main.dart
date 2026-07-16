@@ -5,6 +5,7 @@ import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/classes/android_connection_notification_service.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/classes/app_motion_controller.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flashbyte/classes/tls_identity_service.dart';
 import 'package:flashbyte/pages/settings_page.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
     await TlsIdentityService.getOrCreateIdentity();
   }
   await AppAppearanceController.instance.load();
+  await AppMotionController.instance.load();
   runApp(const MainApp());
 }
 
@@ -36,15 +38,25 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   final AppAppearanceController appearanceController =
       AppAppearanceController.instance;
+  final AppMotionController motionController = AppMotionController.instance;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: appearanceController,
+      animation: Listenable.merge([appearanceController, motionController]),
       builder: (context, child) {
         return DynamicColorBuilder(
           builder: (lightDynamic, darkDynamic) {
             return MaterialApp(
+              builder: (context, child) {
+                final data = MediaQuery.of(context);
+                return MediaQuery(
+                  data: data.copyWith(
+                    disableAnimations: motionController.disableAnimations,
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
               theme: appearanceController.buildTheme(
                 brightness: Brightness.light,
                 dynamicScheme: lightDynamic,
@@ -193,15 +205,18 @@ class _StartPageState extends State<StartPage> {
           child: Transform.translate(
             offset: Offset(50, 0),
             child: RepaintBoundary(
-              child:
-                  StarWidget(
-                    key: ValueKey(
-                      '${primaryColor.value}-${brightness.name}',
-                    ),
-                  ).animate().fadeIn(
-                    duration: 450.ms,
-                    curve: Curves.easeOutCubic,
+              child: _maybeAnimate(
+                context,
+                StarWidget(
+                  key: ValueKey(
+                    '${primaryColor.value}-${brightness.name}',
                   ),
+                ),
+                (child) => child.animate().fadeIn(
+                  duration: 450.ms,
+                  curve: Curves.easeOutCubic,
+                ),
+              ),
             ),
           ),
         ),
@@ -217,48 +232,52 @@ class _StartPageState extends State<StartPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Flash\nByte",
+                    _maybeAnimate(
+                      context,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Flash\nByte",
+                            style: TextStyle(
+                              fontSize: 50,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryFixed,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 10,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 5),
+                            child: Text(
+                              "Local file sharing",
                               style: TextStyle(
-                                fontSize: 50,
+                                fontSize: 18,
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.primaryFixed,
+                                ).colorScheme.secondary,
                               ),
                             ),
-                            SizedBox(
-                              height: 10,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 5),
-                              child: Text(
-                                "Local file sharing",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.secondary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                        .animate()
-                        .fadeIn(
-                          delay: 80.ms,
-                          duration: 420.ms,
-                          curve: Curves.easeOutCubic,
-                        )
-                        .slideY(
-                          begin: 0.06,
-                          end: 0,
-                          delay: 80.ms,
-                          duration: 420.ms,
-                          curve: Curves.easeOutCubic,
-                        ),
+                          ),
+                        ],
+                      ),
+                      (child) => child
+                          .animate()
+                          .fadeIn(
+                            delay: 80.ms,
+                            duration: 420.ms,
+                            curve: Curves.easeOutCubic,
+                          )
+                          .slideY(
+                            begin: 0.06,
+                            end: 0,
+                            delay: 80.ms,
+                            duration: 420.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
+                    ),
                     SizedBox(
                       height: 200,
                     ),
@@ -268,82 +287,94 @@ class _StartPageState extends State<StartPage> {
                 Column(
                   spacing: 12,
                   children: [
-                    SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.tonal(
-                            style: ButtonStyle(
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.symmetric(vertical: 22),
-                              ),
+                    _maybeAnimate(
+                      context,
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonal(
+                          style: ButtonStyle(
+                            padding: WidgetStatePropertyAll(
+                              EdgeInsets.symmetric(vertical: 22),
                             ),
-                            onPressed: () => _openSharing(0),
-                            child: const Text("Send"),
                           ),
-                        )
-                        .animate()
-                        .fadeIn(
-                          delay: 170.ms,
-                          duration: 360.ms,
-                          curve: Curves.easeOutCubic,
-                        )
-                        .slideY(
-                          begin: 0.05,
-                          end: 0,
-                          delay: 170.ms,
-                          duration: 360.ms,
-                          curve: Curves.easeOutCubic,
+                          onPressed: () => _openSharing(0),
+                          child: const Text("Send"),
                         ),
-                    SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: ButtonStyle(
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.symmetric(vertical: 22),
-                              ),
+                      ),
+                      (child) => child
+                          .animate()
+                          .fadeIn(
+                            delay: 170.ms,
+                            duration: 360.ms,
+                            curve: Curves.easeOutCubic,
+                          )
+                          .slideY(
+                            begin: 0.05,
+                            end: 0,
+                            delay: 170.ms,
+                            duration: 360.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
+                    ),
+                    _maybeAnimate(
+                      context,
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          style: ButtonStyle(
+                            padding: WidgetStatePropertyAll(
+                              EdgeInsets.symmetric(vertical: 22),
                             ),
-                            onPressed: () => _openSharing(1),
-                            child: const Text("Receive"),
                           ),
-                        )
-                        .animate()
-                        .fadeIn(
-                          delay: 240.ms,
-                          duration: 360.ms,
-                          curve: Curves.easeOutCubic,
-                        )
-                        .slideY(
-                          begin: 0.05,
-                          end: 0,
-                          delay: 240.ms,
-                          duration: 360.ms,
-                          curve: Curves.easeOutCubic,
+                          onPressed: () => _openSharing(1),
+                          child: const Text("Receive"),
                         ),
-                    SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.tonalIcon(
-                            style: const ButtonStyle(
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.symmetric(vertical: 20),
-                              ),
+                      ),
+                      (child) => child
+                          .animate()
+                          .fadeIn(
+                            delay: 240.ms,
+                            duration: 360.ms,
+                            curve: Curves.easeOutCubic,
+                          )
+                          .slideY(
+                            begin: 0.05,
+                            end: 0,
+                            delay: 240.ms,
+                            duration: 360.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
+                    ),
+                    _maybeAnimate(
+                      context,
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          style: const ButtonStyle(
+                            padding: WidgetStatePropertyAll(
+                              EdgeInsets.symmetric(vertical: 20),
                             ),
-                            onPressed: _openSettings,
-                            icon: const Icon(Icons.settings_rounded),
-                            label: const Text("Settings"),
                           ),
-                        )
-                        .animate()
-                        .fadeIn(
-                          delay: 300.ms,
-                          duration: 340.ms,
-                          curve: Curves.easeOutCubic,
-                        )
-                        .slideY(
-                          begin: 0.05,
-                          end: 0,
-                          delay: 300.ms,
-                          duration: 340.ms,
-                          curve: Curves.easeOutCubic,
+                          onPressed: _openSettings,
+                          icon: const Icon(Icons.settings_rounded),
+                          label: const Text("Settings"),
                         ),
+                      ),
+                      (child) => child
+                          .animate()
+                          .fadeIn(
+                            delay: 300.ms,
+                            duration: 340.ms,
+                            curve: Curves.easeOutCubic,
+                          )
+                          .slideY(
+                            begin: 0.05,
+                            end: 0,
+                            delay: 300.ms,
+                            duration: 340.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
+                    ),
                   ],
                 ),
               ],
@@ -376,28 +407,39 @@ class _StartPageState extends State<StartPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                              "Flashbyte",
-                              style: Theme.of(context).textTheme.displayMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            )
-                            .animate()
-                            .fadeIn(duration: 360.ms)
-                            .slideY(
-                              begin: 0.05,
-                              end: 0,
-                              duration: 360.ms,
-                              curve: Curves.easeOutCubic,
-                            ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "Share files with devices on your local network.",
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                height: 1.4,
+                        _maybeAnimate(
+                          context,
+                          Text(
+                            "Flashbyte",
+                            style: Theme.of(context).textTheme.displayMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          (child) => child
+                              .animate()
+                              .fadeIn(duration: 360.ms)
+                              .slideY(
+                                begin: 0.05,
+                                end: 0,
+                                duration: 360.ms,
+                                curve: Curves.easeOutCubic,
                               ),
-                        ).animate().fadeIn(delay: 70.ms, duration: 340.ms),
+                        ),
+                        const SizedBox(height: 10),
+                        _maybeAnimate(
+                          context,
+                          Text(
+                            "Share files with devices on your local network.",
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                          ),
+                          (child) => child.animate().fadeIn(
+                            delay: 70.ms,
+                            duration: 340.ms,
+                          ),
+                        ),
                         const Spacer(),
                         Text(
                           "Start a transfer",
@@ -407,141 +449,151 @@ class _StartPageState extends State<StartPage> {
                               ),
                         ),
                         const SizedBox(height: 14),
-                        Row(
-                              children: [
-                                Expanded(
-                                  child: _HomeActionCard(
-                                    icon: Icons.north_east_rounded,
-                                    title: "Send files",
-                                    subtitle: "Choose files",
-                                    backgroundColor:
-                                        colorScheme.surfaceContainerHighest,
-                                    foregroundColor: colorScheme.onSurface,
-                                    onTap: () => _openSharing(0),
-                                  ),
+                        _maybeAnimate(
+                          context,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _HomeActionCard(
+                                  icon: Icons.north_east_rounded,
+                                  title: "Send files",
+                                  subtitle: "Choose files",
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
+                                  foregroundColor: colorScheme.onSurface,
+                                  onTap: () => _openSharing(0),
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _HomeActionCard(
-                                    icon: Icons.south_west_rounded,
-                                    title: "Receive files",
-                                    subtitle: "Wait for a sender",
-                                    backgroundColor: colorScheme.primary,
-                                    foregroundColor: colorScheme.onPrimary,
-                                    onTap: () => _openSharing(1),
-                                  ),
-                                ),
-                              ],
-                            )
-                            .animate()
-                            .fadeIn(delay: 140.ms, duration: 360.ms)
-                            .slideY(
-                              begin: 0.04,
-                              end: 0,
-                              delay: 140.ms,
-                              duration: 360.ms,
-                              curve: Curves.easeOutCubic,
-                            ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: FilledButton.tonalIcon(
-                                onPressed: _openSettings,
-                                icon: const Icon(Icons.settings_rounded),
-                                label: const Text("Settings"),
                               ),
-                            )
-                            .animate()
-                            .fadeIn(delay: 200.ms, duration: 340.ms)
-                            .slideY(
-                              begin: 0.04,
-                              end: 0,
-                              delay: 200.ms,
-                              duration: 340.ms,
-                              curve: Curves.easeOutCubic,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _HomeActionCard(
+                                  icon: Icons.south_west_rounded,
+                                  title: "Receive files",
+                                  subtitle: "Wait for a sender",
+                                  backgroundColor: colorScheme.primary,
+                                  foregroundColor: colorScheme.onPrimary,
+                                  onTap: () => _openSharing(1),
+                                ),
+                              ),
+                            ],
+                          ),
+                          (child) => child
+                              .animate()
+                              .fadeIn(delay: 140.ms, duration: 360.ms)
+                              .slideY(
+                                begin: 0.04,
+                                end: 0,
+                                delay: 140.ms,
+                                duration: 360.ms,
+                                curve: Curves.easeOutCubic,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        _maybeAnimate(
+                          context,
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: FilledButton.tonalIcon(
+                              onPressed: _openSettings,
+                              icon: const Icon(Icons.settings_rounded),
+                              label: const Text("Settings"),
                             ),
+                          ),
+                          (child) => child
+                              .animate()
+                              .fadeIn(delay: 200.ms, duration: 340.ms)
+                              .slideY(
+                                begin: 0.04,
+                                end: 0,
+                                delay: 200.ms,
+                                duration: 340.ms,
+                                curve: Curves.easeOutCubic,
+                              ),
+                        ),
                       ],
                     ),
                   ),
                 ),
                 Expanded(
                   flex: 4,
-                  child:
-                      Container(
-                            height: 440,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainer,
-                              borderRadius: BorderRadius.circular(28),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 1,
-                                  spreadRadius: 1,
-                                ),
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  top: 24,
-                                  left: 26,
-                                  child: Text(
-                                    "Local network",
-                                    style:
-                                        Theme.of(
-                                          context,
-                                        ).textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 76,
-                                  left: 28,
-                                  child: _NetworkNode(
-                                    icon: Icons.laptop_rounded,
-                                    color: colorScheme.tertiaryContainer,
-                                    foreground: colorScheme.onTertiaryContainer,
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 28,
-                                  bottom: 44,
-                                  child: _NetworkNode(
-                                    icon: Icons.smartphone_rounded,
-                                    color: colorScheme.secondaryContainer,
-                                    foreground:
-                                        colorScheme.onSecondaryContainer,
-                                  ),
-                                ),
-                                Center(
-                                  child: RepaintBoundary(
-                                    child: StarWidget(
-                                      key: ValueKey(
-                                        'desktop-${primaryColor.value}-${brightness.name}',
-                                      ),
-                                      size: 220,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                          .animate()
-                          .fadeIn(delay: 120.ms, duration: 480.ms)
-                          .scale(
-                            begin: const Offset(0.98, 0.98),
-                            end: const Offset(1, 1),
-                            delay: 120.ms,
-                            duration: 480.ms,
-                            curve: Curves.easeOutCubic,
+                  child: _maybeAnimate(
+                    context,
+                    Container(
+                      height: 440,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainer,
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 1,
+                            spreadRadius: 1,
                           ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 24,
+                            left: 26,
+                            child: Text(
+                              "Local network",
+                              style:
+                                  Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 76,
+                            left: 28,
+                            child: _NetworkNode(
+                              icon: Icons.laptop_rounded,
+                              color: colorScheme.tertiaryContainer,
+                              foreground: colorScheme.onTertiaryContainer,
+                            ),
+                          ),
+                          Positioned(
+                            right: 28,
+                            bottom: 44,
+                            child: _NetworkNode(
+                              icon: Icons.smartphone_rounded,
+                              color: colorScheme.secondaryContainer,
+                              foreground: colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                          Center(
+                            child: RepaintBoundary(
+                              child: StarWidget(
+                                key: ValueKey(
+                                  'desktop-${primaryColor.value}-${brightness.name}',
+                                ),
+                                size: 220,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    (child) => child
+                        .animate()
+                        .fadeIn(delay: 120.ms, duration: 480.ms)
+                        .scale(
+                          begin: const Offset(0.98, 0.98),
+                          end: const Offset(1, 1),
+                          delay: 120.ms,
+                          duration: 480.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
+                  ),
                 ),
               ],
             ),
@@ -595,9 +647,13 @@ class _HomeActionCardState extends State<_HomeActionCard> {
 
   @override
   Widget build(BuildContext context) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
     return AnimatedScale(
       scale: _pressed ? 0.96 : 1,
-      duration: const Duration(milliseconds: 120),
+      duration: reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 120),
       curve: Curves.easeOutCubic,
       child: Material(
         color: widget.backgroundColor,
@@ -751,6 +807,28 @@ class _StarWidgetState extends State<StarWidget>
 
   @override
   Widget build(BuildContext context) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final paintedShape = AnimatedBuilder(
+      animation: controller,
+      builder: (_, _) {
+        return CustomPaint(
+          painter: MorphPainter(
+            color: Theme.of(context).colorScheme.primary,
+            morph: morph,
+            progress: reducedMotion ? 1 : controller.value,
+          ),
+          child: SizedBox(
+            width: widget.size,
+            height: widget.size,
+          ),
+        );
+      },
+    );
+
+    if (reducedMotion) {
+      return paintedShape;
+    }
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onPanUpdate: (details) {
@@ -786,25 +864,18 @@ class _StarWidgetState extends State<StarWidget>
             child: child,
           );
         },
-        child: AnimatedBuilder(
-          animation: controller,
-          builder: (_, _) {
-            return CustomPaint(
-              painter: MorphPainter(
-                color: Theme.of(context).colorScheme.primary,
-                morph: morph,
-                progress: controller.value,
-              ),
-              child: SizedBox(
-                width: widget.size,
-                height: widget.size,
-              ),
-            );
-          },
-        ),
+        child: paintedShape,
       ),
     );
   }
+}
+
+Widget _maybeAnimate(
+  BuildContext context,
+  Widget child,
+  Widget Function(Widget child) animated,
+) {
+  return MediaQuery.disableAnimationsOf(context) ? child : animated(child);
 }
 
 class MorphPainter extends CustomPainter {

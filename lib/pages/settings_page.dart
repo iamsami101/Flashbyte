@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/classes/app_appearance_controller.dart';
+import 'package:flashbyte/classes/app_motion_controller.dart';
 import 'package:flashbyte/classes/android_saf_service.dart';
 import 'package:flashbyte/classes/app_settings.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final AppAppearanceController _appearanceController =
       AppAppearanceController.instance;
+  final AppMotionController _motionController = AppMotionController.instance;
 
   bool _useTLS = true;
   bool _isLoading = true;
@@ -263,6 +265,12 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
   }
 
+  Future<void> _toggleAnimations(bool value) async {
+    await _motionController.setDisableAnimations(value);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -303,6 +311,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailing: Switch(
                     value: _appearanceController.useDynamicColors,
                     onChanged: _toggleDynamicColors,
+                  ),
+                ),
+                ListTile(
+                  title: const Text("Disable Animations"),
+                  subtitle: const Text(
+                    "Reduce motion across the app and keep transfer changes to simple fades.",
+                  ),
+                  trailing: Switch(
+                    value: _motionController.disableAnimations,
+                    onChanged: _toggleAnimations,
                   ),
                 ),
                 Padding(
