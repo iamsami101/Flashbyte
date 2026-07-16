@@ -218,9 +218,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.app-version.outputs.tag }}
-          name: Flashbyte ${{ steps.app-version.outputs.version }}
+          name: ${{ steps.app-version.outputs.tag }}
           body: |
-            Flashbyte ${{ steps.app-version.outputs.version }}
+            ${{ steps.app-version.outputs.tag }}
 
             Commit: `${{ github.sha }}`.
 
