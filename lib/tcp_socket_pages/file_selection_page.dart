@@ -784,17 +784,17 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           : SafeArea(
               top: false,
               child: Material(
-                color: colorScheme.surface,
+                color: Colors.transparent,
                 child: TabBar(
                   controller: _tabController,
-                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorSize: TabBarIndicatorSize.label,
                   tabs: const [
                     Tab(
-                      icon: Icon(Icons.upload_file_rounded),
+                      icon: Icon(Icons.near_me_rounded),
                       text: "Send",
                     ),
                     Tab(
-                      icon: Icon(Icons.download_for_offline_rounded),
+                      icon: Icon(Icons.move_to_inbox_rounded),
                       text: "Receive",
                     ),
                   ],
