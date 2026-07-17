@@ -42,7 +42,14 @@ class DeviceDiscoveryService {
   ];
   static const _refreshInterval = Duration(seconds: 4);
   static const _peerTimeout = Duration(seconds: 20);
-  static final _multicastGroup = InternetAddress('224.0.0.167');
+  static const _fallbackBroadcastPrefixes = [24, 20, 16, 28, 29, 30];
+
+  static final _limitedBroadcast = InternetAddress('255.255.255.255');
+
+  static void _log(String message) {
+    // ignore: avoid_print
+    print('[Discovery] $message');
+  }
 
   final _devicesController =
       StreamController<List<DiscoveredDevice>>.broadcast();
@@ -67,16 +74,25 @@ class DeviceDiscoveryService {
     required String localDeviceId,
     required int port,
   }) async {
+    _log('startDiscovery(localDeviceId: $localDeviceId, port: $port)');
     _localDeviceId = localDeviceId;
     if (_sockets.isNotEmpty && _discoveryPort == port) {
+      _log('Already have ${_sockets.length} socket(s) on port $port, reusing.');
       _emitDevices();
       requestRefresh();
       return;
     }
 
     await stopDiscovery();
-    _sockets.addAll(await _createMulticastSockets(port));
+    final sockets = await _createDiscoverySockets(port);
+    _sockets.addAll(sockets);
     _discoveryPort = port;
+    _log('Bound ${sockets.length} discovery socket(s) on port $port.');
+    if (sockets.isEmpty) {
+      _log(
+        'WARNING: zero sockets bound — discovery cannot send or receive anything.',
+      );
+    }
     _cleanupTimer = Timer.periodic(
       _broadcastInterval,
       (_) => _removeExpiredDevices(),
@@ -97,6 +113,9 @@ class DeviceDiscoveryService {
     String? certificateFingerprint,
     String? certificatePem,
   }) async {
+    _log(
+      'startAdvertising(deviceId: $deviceId, name: $name, port: $port, usesTls: $usesTls)',
+    );
     if (_advertisement != null &&
         _discoveryPort != null &&
         _discoveryPort != port) {
@@ -119,6 +138,7 @@ class DeviceDiscoveryService {
           ? DiscoveredDeviceType.phone.name
           : DiscoveredDeviceType.laptop.name,
     };
+    _log('Advertisement payload set (id: $deviceId, name: $name)');
     _broadcastTimer?.cancel();
     _cancelAdvertiseBurst();
     _broadcastAdvertisement();
@@ -132,6 +152,7 @@ class DeviceDiscoveryService {
   }
 
   Future<void> stopAdvertising() async {
+    _log('stopAdvertising()');
     _broadcastTimer?.cancel();
     _broadcastTimer = null;
     _cancelAdvertiseBurst();
@@ -144,6 +165,7 @@ class DeviceDiscoveryService {
   }
 
   Future<void> stopDiscovery() async {
+    _log('stopDiscovery()');
     _cancelAdvertiseBurst();
     _cancelProbeBurst();
     _cleanupTimer?.cancel();
@@ -166,6 +188,7 @@ class DeviceDiscoveryService {
   }
 
   void requestRefresh() {
+    _log('requestRefresh()');
     _sendProbe();
     _broadcastAdvertisement();
     _scheduleProbeBurst();
@@ -183,6 +206,10 @@ class DeviceDiscoveryService {
     if (id == null || id == _localDeviceId) {
       return;
     }
+
+    _log(
+      'Inbound "${message['action']}" from ${sourceAddress.address} (id: $id)',
+    );
 
     if (message['action'] == 'probe') {
       _sendAdvertisement(address: sourceAddress);
@@ -235,62 +262,156 @@ class DeviceDiscoveryService {
       lastSeen: DateTime.now(),
     );
     if (!_sameDevice(previousDevice, nextDevice)) {
+      _log('ACCEPTED device "$name" ($id) at ${sourceAddress.address}:$port');
       _emitDevices();
     }
   }
 
-  Future<List<_DiscoverySocket>> _createMulticastSockets(int port) async {
+  Future<List<_DiscoverySocket>> _createDiscoverySockets(int port) async {
     final sockets = <_DiscoverySocket>[];
     final interfaces = await NetworkInterface.list(
       type: InternetAddressType.IPv4,
       includeLoopback: false,
-    );
+    ).then((interfaces) => interfaces.where(_isUsableInterface).toList());
+
+    _log('Found ${interfaces.length} IPv4 interface(s):');
+    for (final interface in interfaces) {
+      _log(
+        '  - ${interface.name}: ${interface.addresses.map((a) => a.address).join(", ")}',
+      );
+    }
 
     for (final interface in interfaces) {
-      final socket = await _bindMulticastSocket(port, interface: interface);
+      for (final address in interface.addresses.where(_isUsableAddress)) {
+        final socket = await _bindDiscoverySocket(
+          port,
+          interface: interface,
+          address: address,
+        );
+        if (socket != null) {
+          sockets.add(socket);
+        }
+      }
+    }
+
+    if (sockets.isEmpty) {
+      _log(
+        'No per-interface sockets bound, trying fallback bind on all IPv4 interfaces.',
+      );
+      final socket = await _bindDiscoverySocket(port);
       if (socket != null) {
         sockets.add(socket);
       }
     }
 
     if (sockets.isEmpty) {
-      final socket = await _bindMulticastSocket(port);
-      if (socket != null) {
-        sockets.add(socket);
-      }
-    }
-
-    if (sockets.isEmpty) {
-      throw const SocketException('Could not bind multicast discovery socket.');
+      _log('FATAL: could not bind any broadcast discovery socket.');
+      throw const SocketException('Could not bind broadcast discovery socket.');
     }
 
     return sockets;
   }
 
-  Future<_DiscoverySocket?> _bindMulticastSocket(
+  bool _isUsableInterface(NetworkInterface interface) {
+    final name = interface.name.toLowerCase();
+    if (name.startsWith('docker') ||
+        name.startsWith('veth') ||
+        name.startsWith('br-') ||
+        name.startsWith('virbr') ||
+        name.startsWith('lo') ||
+        name.startsWith('rmnet') ||
+        name.startsWith('ccmni') ||
+        name.startsWith('wwan')) {
+      return false;
+    }
+
+    return interface.addresses.any(_isUsableAddress);
+  }
+
+  bool _isUsableAddress(InternetAddress address) {
+    if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
+      return false;
+    }
+    final bytes = address.rawAddress;
+    if (bytes.length != 4 || bytes[0] == 0 || bytes[0] == 127) {
+      return false;
+    }
+
+    // Link-local addresses are not useful for this app's TCP follow-up.
+    if (bytes[0] == 169 && bytes[1] == 254) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<_DiscoverySocket?> _bindDiscoverySocket(
     int port, {
     NetworkInterface? interface,
+    InternetAddress? address,
   }) async {
+    final label = interface == null
+        ? '(any)'
+        : '${interface.name}/${address?.address ?? "any"}';
     try {
       final socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
+        address ?? InternetAddress.anyIPv4,
         port,
         reuseAddress: true,
-        reusePort: true,
       );
-      socket.joinMulticast(_multicastGroup, interface);
-      socket.multicastHops = 1;
+      socket.broadcastEnabled = true;
+      _log('  [$label] bound UDP socket on port $port, broadcastEnabled=true');
       final subscription = socket.listen(_handleSocketEvent);
       return _DiscoverySocket(
         socket: socket,
         subscription: subscription,
         interface: interface,
+        address: address,
+        broadcastTargets: address == null
+            ? [_limitedBroadcast]
+            : _broadcastTargetsFor(address),
       );
-    } on SocketException {
+    } on SocketException catch (e) {
+      _log('  [$label] FAILED to bind socket: $e');
       return null;
-    } on OSError {
+    } on OSError catch (e) {
+      _log('  [$label] FAILED to bind socket (OSError): $e');
       return null;
     }
+  }
+
+  List<InternetAddress> _broadcastTargetsFor(InternetAddress address) {
+    final targets = <String, InternetAddress>{};
+    for (final prefixLength in _fallbackBroadcastPrefixes) {
+      final broadcast = _broadcastForPrefix(address, prefixLength);
+      if (broadcast != null) {
+        targets[broadcast.address] = broadcast;
+      }
+    }
+    targets[_limitedBroadcast.address] = _limitedBroadcast;
+    return targets.values.toList(growable: false);
+  }
+
+  InternetAddress? _broadcastForPrefix(
+    InternetAddress address,
+    int prefixLength,
+  ) {
+    if (!_isUsableAddress(address) || prefixLength < 0 || prefixLength > 32) {
+      return null;
+    }
+
+    final bytes = address.rawAddress;
+    final addressInt =
+        (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    final mask = prefixLength == 0 ? 0 : 0xffffffff << (32 - prefixLength);
+    final broadcast = (addressInt | (~mask)) & 0xffffffff;
+
+    return InternetAddress(
+      '${(broadcast >> 24) & 0xff}.'
+      '${(broadcast >> 16) & 0xff}.'
+      '${(broadcast >> 8) & 0xff}.'
+      '${broadcast & 0xff}',
+    );
   }
 
   void _handleSocketEvent(RawSocketEvent event) {
@@ -375,7 +496,7 @@ class DeviceDiscoveryService {
     }
 
     if (address == null) {
-      _sendMulticastPacket(packet);
+      _sendBroadcastPacket(packet);
       return;
     }
 
@@ -383,28 +504,41 @@ class DeviceDiscoveryService {
     for (final socket in _sockets) {
       try {
         socket.socket.send(encodedPacket, address, port);
-      } on SocketException {
-        // Try every joined interface; the next heartbeat retries failures.
+      } on SocketException catch (e) {
+        _log(
+          'Unicast send to ${address.address}:$port FAILED on ${socket.interface?.name ?? "(any)"}: $e',
+        );
       }
     }
   }
 
-  void _sendMulticastPacket(Map<String, dynamic> packet) {
+  void _sendBroadcastPacket(Map<String, dynamic> packet) {
     final port = _discoveryPort;
     if (_sockets.isEmpty || port == null) {
       return;
     }
 
     final encodedPacket = utf8.encode(jsonEncode(packet));
+    var successCount = 0;
     for (final socket in _sockets) {
-      try {
-        socket.socket.multicastHops = 1;
-        socket.socket.send(encodedPacket, _multicastGroup, port);
-      } on SocketException {
-        // Try every joined interface; the next heartbeat retries failures.
-      } on UnimplementedError {
-        // Some Dart socket backends do not expose multicast socket options.
+      for (final target in socket.broadcastTargets) {
+        try {
+          final bytesSent = socket.socket.send(encodedPacket, target, port);
+          if (bytesSent > 0) {
+            successCount++;
+            break;
+          }
+        } on SocketException catch (e) {
+          _log(
+            'Broadcast send to ${target.address}:$port FAILED on ${socket.label}: $e',
+          );
+        }
       }
+    }
+    if (successCount == 0) {
+      _log(
+        'Broadcast send "${packet['action']}" reached 0/${_sockets.length} socket(s)',
+      );
     }
   }
 
@@ -441,11 +575,19 @@ class _DiscoverySocket {
     required this.socket,
     required this.subscription,
     required this.interface,
+    required this.address,
+    required this.broadcastTargets,
   });
 
   final RawDatagramSocket socket;
   final StreamSubscription<RawSocketEvent> subscription;
   final NetworkInterface? interface;
+  final InternetAddress? address;
+  final List<InternetAddress> broadcastTargets;
+
+  String get label => interface == null
+      ? '(any)'
+      : '${interface!.name}/${address?.address ?? "any"}';
 }
 
 class _SeenDevice {
