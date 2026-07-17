@@ -202,10 +202,12 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
     );
 
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
+      builder: (context, constraints) {
+        final hasComfortableHeight = constraints.maxHeight >= 560;
+
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -229,25 +231,9 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
                 const SizedBox(height: 20),
                 _maybeAnimate(
                   context,
-                  LayoutBuilder(
-                    builder: (context, constraints) =>
-                        constraints.maxWidth >= 720
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(flex: 3, child: senderCard),
-                              const SizedBox(width: 12),
-                              Expanded(flex: 2, child: fileCard),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              senderCard,
-                              const SizedBox(height: 12),
-                              fileCard,
-                            ],
-                          ),
+                  _ResponsiveOfferCards(
+                    senderCard: senderCard,
+                    fileCard: fileCard,
                   ),
                   (child) => child
                       .animate()
@@ -258,29 +244,14 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
                         curve: Curves.easeOutCubic,
                       ),
                 ),
-                const Spacer(),
-                FilledButton.icon(
-                  onPressed: _accept,
-                  icon: const Icon(Icons.download_rounded),
-                  label: const Text('Accept and receive'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _decline,
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text('Decline'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                ),
+                SizedBox(height: hasComfortableHeight ? 28 : 18),
+                if (hasComfortableHeight) const Spacer(),
+                _OfferActions(onAccept: _accept, onDecline: _decline),
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -363,6 +334,72 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
 }
 
 enum _IncomingOfferOutcome { senderCancelled, declined, connectionEnded }
+
+class _ResponsiveOfferCards extends StatelessWidget {
+  const _ResponsiveOfferCards({
+    required this.senderCard,
+    required this.fileCard,
+  });
+
+  final Widget senderCard;
+  final Widget fileCard;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth >= 720
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: senderCard),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: fileCard),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                senderCard,
+                const SizedBox(height: 12),
+                fileCard,
+              ],
+            ),
+    );
+  }
+}
+
+class _OfferActions extends StatelessWidget {
+  const _OfferActions({required this.onAccept, required this.onDecline});
+
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          onPressed: onAccept,
+          icon: const Icon(Icons.download_rounded),
+          label: const Text('Accept and receive'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: onDecline,
+          icon: const Icon(Icons.close_rounded),
+          label: const Text('Decline'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 Widget _maybeAnimate(
   BuildContext context,
