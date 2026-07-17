@@ -55,7 +55,9 @@ class DeviceDiscoveryService {
       StreamController<List<DiscoveredDevice>>.broadcast();
   final Map<String, _SeenDevice> _devices = {};
 
-  final List<_DiscoverySocket> _sockets = [];
+  RawDatagramSocket? _receiveSocket;
+  StreamSubscription<RawSocketEvent>? _receiveSubscription;
+  final List<_DiscoverySocket> _sendSockets = [];
   Timer? _broadcastTimer;
   final List<Timer> _advertiseBurstTimers = [];
   final List<Timer> _probeBurstTimers = [];
@@ -76,21 +78,24 @@ class DeviceDiscoveryService {
   }) async {
     _log('startDiscovery(localDeviceId: $localDeviceId, port: $port)');
     _localDeviceId = localDeviceId;
-    if (_sockets.isNotEmpty && _discoveryPort == port) {
-      _log('Already have ${_sockets.length} socket(s) on port $port, reusing.');
+    if (_receiveSocket != null && _discoveryPort == port) {
+      _log(
+        'Already listening with ${_sendSockets.length} sender socket(s) on port $port, reusing.',
+      );
       _emitDevices();
       requestRefresh();
       return;
     }
 
     await stopDiscovery();
-    final sockets = await _createDiscoverySockets(port);
-    _sockets.addAll(sockets);
+    await _bindReceiveSocket(port);
+    final sockets = await _createSendSockets(port);
+    _sendSockets.addAll(sockets);
     _discoveryPort = port;
-    _log('Bound ${sockets.length} discovery socket(s) on port $port.');
+    _log('Bound ${sockets.length} discovery sender socket(s) on port $port.');
     if (sockets.isEmpty) {
       _log(
-        'WARNING: zero sockets bound — discovery cannot send or receive anything.',
+        'WARNING: zero sender sockets bound — discovery can receive but cannot broadcast.',
       );
     }
     _cleanupTimer = Timer.periodic(
@@ -172,11 +177,14 @@ class DeviceDiscoveryService {
     _cleanupTimer = null;
     _refreshTimer?.cancel();
     _refreshTimer = null;
-    for (final socket in _sockets) {
-      await socket.subscription.cancel();
+    await _receiveSubscription?.cancel();
+    _receiveSubscription = null;
+    _receiveSocket?.close();
+    _receiveSocket = null;
+    for (final socket in _sendSockets) {
       socket.socket.close();
     }
-    _sockets.clear();
+    _sendSockets.clear();
     _discoveryPort = null;
     _devices.clear();
     _emitDevices();
@@ -267,7 +275,19 @@ class DeviceDiscoveryService {
     }
   }
 
-  Future<List<_DiscoverySocket>> _createDiscoverySockets(int port) async {
+  Future<void> _bindReceiveSocket(int port) async {
+    final socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      port,
+      reuseAddress: true,
+    );
+    socket.broadcastEnabled = true;
+    _receiveSocket = socket;
+    _receiveSubscription = socket.listen(_handleSocketEvent);
+    _log('  [(receive:any)] bound UDP socket on port $port');
+  }
+
+  Future<List<_DiscoverySocket>> _createSendSockets(int port) async {
     final sockets = <_DiscoverySocket>[];
     final interfaces = await NetworkInterface.list(
       type: InternetAddressType.IPv4,
@@ -296,17 +316,24 @@ class DeviceDiscoveryService {
 
     if (sockets.isEmpty) {
       _log(
-        'No per-interface sockets bound, trying fallback bind on all IPv4 interfaces.',
+        'No per-interface sender sockets bound, using receive socket for sends.',
       );
-      final socket = await _bindDiscoverySocket(port);
-      if (socket != null) {
-        sockets.add(socket);
+      final receiveSocket = _receiveSocket;
+      if (receiveSocket != null) {
+        sockets.add(
+          _DiscoverySocket(
+            socket: receiveSocket,
+            interface: null,
+            address: null,
+            broadcastTargets: [_limitedBroadcast],
+          ),
+        );
       }
     }
 
     if (sockets.isEmpty) {
-      _log('FATAL: could not bind any broadcast discovery socket.');
-      throw const SocketException('Could not bind broadcast discovery socket.');
+      _log('FATAL: could not bind any broadcast sender socket.');
+      throw const SocketException('Could not bind broadcast sender socket.');
     }
 
     return sockets;
@@ -356,15 +383,15 @@ class DeviceDiscoveryService {
     try {
       final socket = await RawDatagramSocket.bind(
         address ?? InternetAddress.anyIPv4,
-        port,
+        0,
         reuseAddress: true,
       );
       socket.broadcastEnabled = true;
-      _log('  [$label] bound UDP socket on port $port, broadcastEnabled=true');
-      final subscription = socket.listen(_handleSocketEvent);
+      _log(
+        '  [$label] bound UDP sender socket on ${socket.port}, broadcastEnabled=true',
+      );
       return _DiscoverySocket(
         socket: socket,
-        subscription: subscription,
         interface: interface,
         address: address,
         broadcastTargets: address == null
@@ -419,11 +446,9 @@ class DeviceDiscoveryService {
       return;
     }
 
-    for (final socket in _sockets) {
-      Datagram? datagram;
-      while ((datagram = socket.socket.receive()) != null) {
-        _handleDatagram(datagram!);
-      }
+    Datagram? datagram;
+    while ((datagram = _receiveSocket?.receive()) != null) {
+      _handleDatagram(datagram!);
     }
   }
 
@@ -491,7 +516,7 @@ class DeviceDiscoveryService {
 
   void _sendPacket(Map<String, dynamic> packet, {InternetAddress? address}) {
     final port = _discoveryPort;
-    if (_sockets.isEmpty || port == null) {
+    if (_receiveSocket == null || port == null) {
       return;
     }
 
@@ -501,7 +526,7 @@ class DeviceDiscoveryService {
     }
 
     final encodedPacket = utf8.encode(jsonEncode(packet));
-    for (final socket in _sockets) {
+    for (final socket in _sendSockets) {
       try {
         socket.socket.send(encodedPacket, address, port);
       } on SocketException catch (e) {
@@ -514,13 +539,13 @@ class DeviceDiscoveryService {
 
   void _sendBroadcastPacket(Map<String, dynamic> packet) {
     final port = _discoveryPort;
-    if (_sockets.isEmpty || port == null) {
+    if (_sendSockets.isEmpty || port == null) {
       return;
     }
 
     final encodedPacket = utf8.encode(jsonEncode(packet));
     var successCount = 0;
-    for (final socket in _sockets) {
+    for (final socket in _sendSockets) {
       for (final target in socket.broadcastTargets) {
         try {
           final bytesSent = socket.socket.send(encodedPacket, target, port);
@@ -537,7 +562,7 @@ class DeviceDiscoveryService {
     }
     if (successCount == 0) {
       _log(
-        'Broadcast send "${packet['action']}" reached 0/${_sockets.length} socket(s)',
+        'Broadcast send "${packet['action']}" reached 0/${_sendSockets.length} socket(s)',
       );
     }
   }
@@ -573,14 +598,12 @@ class DeviceDiscoveryService {
 class _DiscoverySocket {
   const _DiscoverySocket({
     required this.socket,
-    required this.subscription,
     required this.interface,
     required this.address,
     required this.broadcastTargets,
   });
 
   final RawDatagramSocket socket;
-  final StreamSubscription<RawSocketEvent> subscription;
   final NetworkInterface? interface;
   final InternetAddress? address;
   final List<InternetAddress> broadcastTargets;
