@@ -219,10 +219,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         _networkIcon = Icons.signal_wifi_off_rounded;
       }
     });
-    if (previousNetworkMode != null &&
-        previousNetworkMode != nextNetworkMode &&
-        _shouldReconnectServerFor(nextNetworkMode)) {
-      unawaited(_restartServer());
+    if (previousNetworkMode != null && previousNetworkMode != nextNetworkMode) {
+      if (nextNetworkMode == _ServerNetworkMode.offline) {
+        unawaited(_stopReceiveServerForNetworkLoss());
+      } else if (_shouldReconnectServerFor(nextNetworkMode)) {
+        unawaited(_restartServer());
+      }
     }
   }
 
@@ -253,7 +255,24 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   bool _shouldReconnectServerFor(_ServerNetworkMode mode) {
     return mode == _ServerNetworkMode.hotspot ||
-        mode == _ServerNetworkMode.mobile;
+        mode == _ServerNetworkMode.wifi ||
+        mode == _ServerNetworkMode.mobile ||
+        mode == _ServerNetworkMode.ethernet ||
+        mode == _ServerNetworkMode.other;
+  }
+
+  Future<void> _stopReceiveServerForNetworkLoss() async {
+    _serverRestartGeneration++;
+    _receiveServerIntentionallyStopped = true;
+    await DeviceDiscoveryService.instance.stop();
+    await SocketService.instance.stopConnectionGracefully();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      receiveStarted = false;
+      isReceiveStarting = false;
+    });
   }
 
   Future<void> _initializeNetworking() async {
@@ -414,7 +433,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   Future<void> _restartServer() async {
     final generation = ++_serverRestartGeneration;
     _receiveServerIntentionallyStopped = false;
-    await DeviceDiscoveryService.instance.stopAdvertising();
+    await DeviceDiscoveryService.instance.stop();
     await SocketService.instance.stopConnectionGracefully();
     if (mounted) {
       setState(() {
