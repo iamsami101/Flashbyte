@@ -310,9 +310,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 ListTile(
-                  title: const Text("Disable Animations"),
+                  title: const Text("Reduce Animations"),
                   subtitle: const Text(
-                    "Reduce motion across the app and keep transfer changes to simple fades.",
+                    "Reduce motion across the app.",
                   ),
                   trailing: _SettingsToggle(
                     value: _motionController.disableAnimations,
