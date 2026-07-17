@@ -54,6 +54,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   bool _incomingOfferOpen = false;
   bool _outgoingOfferOpen = false;
   bool _isDraggingFilesOverSendCard = false;
+  bool _allowFileSelectionPop = false;
+  bool _isHandlingFileSelectionPop = false;
+  bool _exitNotificationSent = false;
   bool isDiscovering = true;
   int selectedTabIndex = 0;
 
@@ -128,9 +131,45 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _nameSaveDebounce?.cancel();
     _networkRefreshTimer?.cancel();
     _deviceNameController.dispose();
-    unawaited(SocketService.instance.stopConnectionGracefully());
-    unawaited(DeviceDiscoveryService.instance.stop());
+    if (!_exitNotificationSent) {
+      unawaited(_notifyFileSelectionExit());
+    }
     super.dispose();
+  }
+
+  Future<void> _notifyFileSelectionExit() async {
+    if (_exitNotificationSent) {
+      return;
+    }
+
+    _exitNotificationSent = true;
+    try {
+      await SocketService.instance.stopConnectionGracefully();
+      await DeviceDiscoveryService.instance.stop();
+    } catch (_) {
+      // Leaving the page should not be blocked by cleanup failures.
+    }
+  }
+
+  Future<void> _handleFileSelectionPop() async {
+    if (_isHandlingFileSelectionPop) {
+      return;
+    }
+
+    _isHandlingFileSelectionPop = true;
+    await _notifyFileSelectionExit();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _allowFileSelectionPop = true;
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _refreshNetworkStatus() async {
@@ -791,80 +830,89 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      backgroundColor: useWideLayout
-          ? colorScheme.surface
-          : colorScheme.surfaceContainerLowest,
-      appBar: AppBar(
-        title: const Text("Flashbyte"),
-        centerTitle: !useWideLayout,
+    return PopScope(
+      canPop: _allowFileSelectionPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleFileSelectionPop());
+      },
+      child: Scaffold(
         backgroundColor: useWideLayout
             ? colorScheme.surface
             : colorScheme.surfaceContainerLowest,
-        actions: [
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings),
-            onPressed: _settingsLocked ? null : _openSettings,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: useWideLayout
-            ? _buildWideLayout()
-            : ColoredBox(
-                color: colorScheme.surfaceContainerLowest,
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildTabPage(_buildSendTab()),
-                    _buildTabPage(_buildReceiveTab()),
-                  ],
-                ),
-              ),
-      ),
-      bottomNavigationBar: useWideLayout
-          ? null
-          : SafeArea(
-              top: false,
-              child: Material(
-                color: Colors.transparent,
-                child: TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  dividerHeight: 0,
-                  indicatorAnimation: TabIndicatorAnimation.elastic,
-                  labelColor: Theme.of(
-                    context,
-                  ).colorScheme.onPrimaryContainer,
-                  controller: _tabController,
-                  onTap: (index) {
-                    if (selectedTabIndex != index) {
-                      setState(() {
-                        selectedTabIndex = index;
-                      });
-                    }
-                  },
-                  tabs: const [
-                    Tab(
-                      iconMargin: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 3,
-                      ),
-                      icon: Icon(Icons.upload_rounded),
-                      text: "Send",
-                    ),
-                    Tab(
-                      iconMargin: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 3,
-                      ),
-                      icon: Icon(Icons.download_rounded),
-                      text: "Receive",
-                    ),
-                  ],
-                ),
-              ),
+        appBar: AppBar(
+          title: const Text("Flashbyte"),
+          centerTitle: !useWideLayout,
+          backgroundColor: useWideLayout
+              ? colorScheme.surface
+              : colorScheme.surfaceContainerLowest,
+          actions: [
+            IconButton(
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings),
+              onPressed: _settingsLocked ? null : _openSettings,
             ),
+          ],
+        ),
+        body: SafeArea(
+          child: useWideLayout
+              ? _buildWideLayout()
+              : ColoredBox(
+                  color: colorScheme.surfaceContainerLowest,
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTabPage(_buildSendTab()),
+                      _buildTabPage(_buildReceiveTab()),
+                    ],
+                  ),
+                ),
+        ),
+        bottomNavigationBar: useWideLayout
+            ? null
+            : SafeArea(
+                top: false,
+                child: Material(
+                  color: Colors.transparent,
+                  child: TabBar(
+                    indicatorSize: TabBarIndicatorSize.label,
+                    dividerHeight: 0,
+                    indicatorAnimation: TabIndicatorAnimation.elastic,
+                    labelColor: Theme.of(
+                      context,
+                    ).colorScheme.onPrimaryContainer,
+                    controller: _tabController,
+                    onTap: (index) {
+                      if (selectedTabIndex != index) {
+                        setState(() {
+                          selectedTabIndex = index;
+                        });
+                      }
+                    },
+                    tabs: const [
+                      Tab(
+                        iconMargin: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 3,
+                        ),
+                        icon: Icon(Icons.upload_rounded),
+                        text: "Send",
+                      ),
+                      Tab(
+                        iconMargin: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 3,
+                        ),
+                        icon: Icon(Icons.download_rounded),
+                        text: "Receive",
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+      ),
     );
   }
 

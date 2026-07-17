@@ -40,6 +40,10 @@ class DeviceDiscoveryService {
     Duration(milliseconds: 220),
     Duration(milliseconds: 700),
   ];
+  static const _goodbyeBurstDelays = [
+    Duration(milliseconds: 80),
+    Duration(milliseconds: 180),
+  ];
   static const _refreshInterval = Duration(seconds: 4);
   static const _peerTimeout = Duration(seconds: 20);
   static const _fallbackBroadcastPrefixes = [24, 20, 16, 28, 29, 30];
@@ -143,7 +147,12 @@ class DeviceDiscoveryService {
     _cancelAdvertiseBurst();
     final advertisement = _advertisement;
     if (advertisement != null) {
-      _sendPacket({...advertisement, 'action': 'goodbye'});
+      final goodbye = {...advertisement, 'action': 'goodbye'};
+      _sendPacket(goodbye);
+      for (final delay in _goodbyeBurstDelays) {
+        await Future<void>.delayed(delay);
+        _sendPacket(goodbye);
+      }
     }
     _advertisement = null;
     _advertisingInstanceId = null;
