@@ -11,7 +11,6 @@ import java.net.NetworkInterface
 
 class MainActivity : FlutterActivity() {
     private val transferBufferSize = 1024 * 1024
-    private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -74,54 +73,6 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "flashbyte/udp_discovery"
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "acquireMulticastLock" -> {
-                    acquireMulticastLock()
-                    result.success(null)
-                }
-
-                "releaseMulticastLock" -> {
-                    releaseMulticastLock()
-                    result.success(null)
-                }
-
-                else -> result.notImplemented()
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        releaseMulticastLock()
-        super.onDestroy()
-    }
-
-    private fun acquireMulticastLock() {
-        val existingLock = multicastLock
-        if (existingLock?.isHeld == true) {
-            return
-        }
-
-        val wifiManager = applicationContext.getSystemService(
-            Context.WIFI_SERVICE
-        ) as WifiManager
-        multicastLock = wifiManager.createMulticastLock("flashbyte_udp_discovery").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-    }
-
-    private fun releaseMulticastLock() {
-        multicastLock?.let { lock ->
-            if (lock.isHeld) {
-                lock.release()
-            }
-        }
-        multicastLock = null
     }
 
     private fun isHotspotEnabled(): Boolean {

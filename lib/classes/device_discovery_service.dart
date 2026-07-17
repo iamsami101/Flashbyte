@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
 enum DiscoveredDeviceType { phone, laptop }
 
 class DiscoveredDevice {
@@ -60,9 +58,6 @@ class DeviceDiscoveryService {
   int? _discoveryPort;
   Map<String, dynamic>? _advertisement;
   String? _advertisingInstanceId;
-  static const _androidDiscoveryChannel = MethodChannel(
-    'flashbyte/udp_discovery',
-  );
 
   Stream<List<DiscoveredDevice>> get devicesStream => _devicesController.stream;
   List<DiscoveredDevice> get devices =>
@@ -80,13 +75,7 @@ class DeviceDiscoveryService {
     }
 
     await stopDiscovery();
-    await _acquirePlatformDiscoveryLock();
-    try {
-      _sockets.addAll(await _createMulticastSockets(port));
-    } catch (_) {
-      await _releasePlatformDiscoveryLock();
-      rethrow;
-    }
+    _sockets.addAll(await _createMulticastSockets(port));
     _discoveryPort = port;
     _cleanupTimer = Timer.periodic(
       _broadcastInterval,
@@ -167,7 +156,6 @@ class DeviceDiscoveryService {
     }
     _sockets.clear();
     _discoveryPort = null;
-    await _releasePlatformDiscoveryLock();
     _devices.clear();
     _emitDevices();
   }
@@ -408,38 +396,6 @@ class DeviceDiscoveryService {
       } on SocketException {
         // Try every joined interface; the next heartbeat retries failures.
       }
-    }
-  }
-
-  Future<void> _acquirePlatformDiscoveryLock() async {
-    if (!Platform.isAndroid) {
-      return;
-    }
-
-    try {
-      await _androidDiscoveryChannel.invokeMethod<void>(
-        'acquireMulticastLock',
-      );
-    } on PlatformException {
-      // Discovery can still work on devices that do not expose the lock.
-    } on MissingPluginException {
-      // Non-Android builds and tests do not register this channel.
-    }
-  }
-
-  Future<void> _releasePlatformDiscoveryLock() async {
-    if (!Platform.isAndroid) {
-      return;
-    }
-
-    try {
-      await _androidDiscoveryChannel.invokeMethod<void>(
-        'releaseMulticastLock',
-      );
-    } on PlatformException {
-      // The OS may already have released it during activity teardown.
-    } on MissingPluginException {
-      // Non-Android builds and tests do not register this channel.
     }
   }
 
