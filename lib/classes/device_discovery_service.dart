@@ -171,6 +171,74 @@ class DeviceDiscoveryService {
     _scheduleProbeBurst();
   }
 
+  void _processInboundMessage(
+    Map<String, dynamic> message, {
+    required InternetAddress sourceAddress,
+  }) {
+    if (message['protocol'] != _protocol) {
+      return;
+    }
+
+    final id = message['id'] as String?;
+    if (id == null || id == _localDeviceId) {
+      return;
+    }
+
+    if (message['action'] == 'probe') {
+      _sendAdvertisement(address: sourceAddress);
+      return;
+    }
+
+    if (message['action'] == 'goodbye') {
+      final seenDevice = _devices[id];
+      final instanceId = message['instanceId'] as String?;
+      if (seenDevice != null &&
+          (seenDevice.instanceId == null ||
+              seenDevice.instanceId == instanceId)) {
+        _devices.remove(id);
+        _emitDevices();
+      }
+      return;
+    }
+
+    final name = message['name'] as String?;
+    final port = message['port'] as int?;
+    final usesTls = message['tls'] as bool?;
+    final certificateFingerprint = message['certFingerprint'] as String?;
+    final certificatePem = message['cert'] as String?;
+    final instanceId = message['instanceId'] as String?;
+    if (name == null || port == null || usesTls == null) {
+      return;
+    }
+    if (usesTls && (certificateFingerprint == null || certificatePem == null)) {
+      return;
+    }
+    final deviceType = DiscoveredDeviceType.values.firstWhere(
+      (type) => type.name == message['deviceType'],
+      orElse: () => DiscoveredDeviceType.phone,
+    );
+
+    final nextDevice = DiscoveredDevice(
+      id: id,
+      name: name,
+      address: sourceAddress.address,
+      port: port,
+      usesTls: usesTls,
+      type: deviceType,
+      certificateFingerprint: certificateFingerprint,
+      certificatePem: certificatePem,
+    );
+    final previousDevice = _devices[id]?.device;
+    _devices[id] = _SeenDevice(
+      device: nextDevice,
+      instanceId: instanceId,
+      lastSeen: DateTime.now(),
+    );
+    if (!_sameDevice(previousDevice, nextDevice)) {
+      _emitDevices();
+    }
+  }
+
   Future<List<_DiscoverySocket>> _createMulticastSockets(int port) async {
     final sockets = <_DiscoverySocket>[];
     final interfaces = await NetworkInterface.list(
@@ -247,67 +315,7 @@ class DeviceDiscoveryService {
     try {
       final message =
           jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
-      if (message['protocol'] != _protocol) {
-        return;
-      }
-
-      final id = message['id'] as String?;
-      if (id == null || id == _localDeviceId) {
-        return;
-      }
-      if (message['action'] == 'probe') {
-        _sendAdvertisement(address: datagram.address);
-        return;
-      }
-      if (message['action'] == 'goodbye') {
-        final seenDevice = _devices[id];
-        final instanceId = message['instanceId'] as String?;
-        if (seenDevice != null &&
-            (seenDevice.instanceId == null ||
-                seenDevice.instanceId == instanceId)) {
-          _devices.remove(id);
-          _emitDevices();
-        }
-        return;
-      }
-
-      final name = message['name'] as String?;
-      final port = message['port'] as int?;
-      final usesTls = message['tls'] as bool?;
-      final certificateFingerprint = message['certFingerprint'] as String?;
-      final certificatePem = message['cert'] as String?;
-      final instanceId = message['instanceId'] as String?;
-      if (name == null || port == null || usesTls == null) {
-        return;
-      }
-      if (usesTls &&
-          (certificateFingerprint == null || certificatePem == null)) {
-        return;
-      }
-      final deviceType = DiscoveredDeviceType.values.firstWhere(
-        (type) => type.name == message['deviceType'],
-        orElse: () => DiscoveredDeviceType.phone,
-      );
-
-      final nextDevice = DiscoveredDevice(
-        id: id,
-        name: name,
-        address: datagram.address.address,
-        port: port,
-        usesTls: usesTls,
-        type: deviceType,
-        certificateFingerprint: certificateFingerprint,
-        certificatePem: certificatePem,
-      );
-      final previousDevice = _devices[id]?.device;
-      _devices[id] = _SeenDevice(
-        device: nextDevice,
-        instanceId: instanceId,
-        lastSeen: DateTime.now(),
-      );
-      if (!_sameDevice(previousDevice, nextDevice)) {
-        _emitDevices();
-      }
+      _processInboundMessage(message, sourceAddress: datagram.address);
     } on FormatException {
       // Ignore unrelated UDP traffic received on the configured port.
     } on TypeError {
