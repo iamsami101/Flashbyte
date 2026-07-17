@@ -389,12 +389,13 @@ class DeviceDiscoveryService {
 
     final encodedPacket = utf8.encode(jsonEncode(packet));
     for (final socket in _sockets) {
-      socket.socket.multicastInterface = socket.interface;
-      socket.socket.multicastHops = 1;
       try {
+        socket.socket.multicastHops = 1;
         socket.socket.send(encodedPacket, _multicastGroup, port);
       } on SocketException {
         // Try every joined interface; the next heartbeat retries failures.
+      } on UnimplementedError {
+        // Some Dart socket backends do not expose multicast socket options.
       }
     }
   }
