@@ -7,7 +7,7 @@
 
 ### Features
 - **TLS Encryption**: You can send files over an encrypted connection.
-- **Cross-platform support:** Flashbyte is supported on Android and Linux with more to come.
+- **Cross-platform support:** Flashbyte is supported on all the major platforms!.
 - **File sharing over local network:** You can send files over local network, without wifi access.
 - **Lossless file sharing:** Send files in their original quality.
 - **All file types supported:** Send file of any type.
@@ -15,7 +15,6 @@
 - **Doesn't use an external server:** Flashbytes sends to devices using your local network.
 - **Cross-platform:** Transfer files to any device on your local network that has Flashbyte installed.
 - **Open source & no data is collected:** All of the code is readily available on github.
-- **Automatic Discovery:** Connect to users without having to manually type their IP.
 
 ### How does this work?
 Flashbyte uses pure TCP sockets to establish a connection between two devices on a local network inside an isolate (isolated memory channel) which is then utilized to read and send over the file bytes whilst keeping the frontend (main UI isolate) smooth.
@@ -26,11 +25,16 @@ You can try out Flashbyte on the following platforms:
 | Platform | Download |
 |----------|----------|
 | Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-android.aab) |
-| Linux | [Linux tarball](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-linux-x64.tar.gz) |
-| macOS | [DMG installer](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-macos.dmg) |
-| iOS | [Unsigned Runner.app zip](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-ios-unsigned-runner-app.zip) |
-| Windows | [Windows zip](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
+| Linux | [TAR](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-linux-x64.tar.gz) |
+| macOS | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-macos.dmg) |
+| iOS | [APP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-ios-unsigned-runner-app.zip) |
+| Windows | [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
+
+### Section glossary
+- [Installation instructions](#installation-instructions): Download and install Flashbyte on Android, Linux, Windows, macOS, and iOS.
+- [Signing release builds](#signing-release-builds): Configure platform signing certificates, keystores, and CI secrets for release builds.
+- [Building from Source](#building-from-source): Clone the project and build Flashbyte locally with Flutter.
 
 ## Installation instructions:
 - ### Android:
