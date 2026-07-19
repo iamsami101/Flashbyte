@@ -1,6 +1,6 @@
 <div align="center">
     <img src="./media/app_icon.png" alt="Flashbyte Logo" width="200" height="200"/>
-    <h1>⚡ Flashbyte</h1>
+    <h1>Flashbyte</h1>
     <h3>A Simple and fast local file sharing app.</h3>
 </div>
 
@@ -44,6 +44,9 @@ You can try out Flashbyte on the following platforms:
   - [Clone the repository](#clone-the-repository)
   - [Building for Linux](#building-for-linux)
   - [Building for Android](#building-for-android)
+  - [Building for iOS](#building-for-ios)
+  - [Building for macOS](#building-for-macos)
+  - [Building for Windows](#building-for-windows)
   - [Debug builds](#debug-builds)
 
 ## Installation instructions:
@@ -303,6 +306,106 @@ flutter build apk --split-per-abi --release
 ```
 
 This produces separate APKs in the same output folder, one per ABI (`armeabi-v7a`, `arm64-v8a`, `x86_64`).
+
+---
+
+### Building for iOS
+
+**Additional prerequisites:**
+
+- macOS
+- Xcode
+- CocoaPods
+- An Apple Developer account if you want to install on a physical device or create a distributable IPA
+
+Enable iOS support and check your setup:
+
+```bash
+flutter doctor
+```
+
+Build an unsigned release app for CI/artifact inspection:
+
+```bash
+flutter build ios --release --no-codesign
+```
+
+Build a signed IPA when your Apple signing certificates and provisioning profile are configured:
+
+```bash
+flutter build ipa --release
+```
+
+The unsigned app output is usually under:
+
+```bash
+build/ios/iphoneos/Runner.app
+```
+
+The signed IPA output is usually under:
+
+```bash
+build/ios/ipa/
+```
+
+---
+
+### Building for macOS
+
+**Additional prerequisites:**
+
+- macOS
+- Xcode
+- CocoaPods
+
+Enable macOS desktop support if you haven't already:
+
+```bash
+flutter config --enable-macos-desktop
+```
+
+Build a release app:
+
+```bash
+flutter build macos --release
+```
+
+The output app will be at:
+
+```bash
+build/macos/Build/Products/Release/Flashbyte.app
+```
+
+For distribution outside your own machine, sign and notarize the app, then package it as a DMG.
+
+---
+
+### Building for Windows
+
+**Additional prerequisites:**
+
+- Windows
+- Visual Studio with the "Desktop development with C++" workload
+
+Enable Windows desktop support if you haven't already:
+
+```powershell
+flutter config --enable-windows-desktop
+```
+
+Build a release app:
+
+```powershell
+flutter build windows --release
+```
+
+The output bundle will be at:
+
+```powershell
+build\windows\x64\runner\Release\
+```
+
+Zip the contents of that folder to distribute a portable Windows build. For wider distribution, sign the executable or installer with a Windows code-signing certificate.
 
 ---
 
