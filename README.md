@@ -31,10 +31,20 @@ You can try out Flashbyte on the following platforms:
 | Windows | [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
-### Section glossary
-- [Installation instructions](#installation-instructions): Download and install Flashbyte on Android, Linux, Windows, macOS, and iOS.
-- [Signing release builds](#signing-release-builds): Configure platform signing certificates, keystores, and CI secrets for release builds.
-- [Building from Source](#building-from-source): Clone the project and build Flashbyte locally with Flutter.
+### Contents
+- [Installation instructions](#installation-instructions)
+  - [Android](#android)
+  - [Linux](#linux)
+  - [Windows](#windows)
+  - [macOS](#macos)
+  - [iOS](#ios)
+- [Signing release builds](#signing-release-builds)
+- [Building from Source](#building-from-source)
+  - [Prerequisites](#prerequisites)
+  - [Clone the repository](#clone-the-repository)
+  - [Building for Linux](#building-for-linux)
+  - [Building for Android](#building-for-android)
+  - [Debug builds](#debug-builds)
 
 ## Installation instructions:
 - ### Android:
