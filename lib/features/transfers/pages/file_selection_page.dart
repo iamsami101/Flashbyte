@@ -1285,9 +1285,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: _receiveServerIntentionallyStopped
-                        ? colorScheme.errorContainer
+                        ? colorScheme.surfaceContainerHighest
                         : colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(22),
+                    border: _receiveServerIntentionallyStopped
+                        ? Border.all(color: colorScheme.outlineVariant)
+                        : null,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1302,7 +1305,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                             : Icons.broadcast_on_personal_rounded,
                         size: 18,
                         color: _receiveServerIntentionallyStopped
-                            ? colorScheme.onErrorContainer
+                            ? colorScheme.onSurfaceVariant
                             : colorScheme.onPrimaryContainer,
                       ),
                       Text(
@@ -1313,7 +1316,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                             : 'Visible to nearby devices',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: _receiveServerIntentionallyStopped
-                              ? colorScheme.onErrorContainer
+                              ? colorScheme.onSurfaceVariant
                               : colorScheme.onPrimaryContainer,
                         ),
                       ),

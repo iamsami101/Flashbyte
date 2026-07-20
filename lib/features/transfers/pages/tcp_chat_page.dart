@@ -354,6 +354,8 @@ class _TcpChatPageState extends State<TcpChatPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final peer = _peerInfo;
     final disconnected = isDisconnected.value;
+    final disconnectedColor = colorScheme.onSurfaceVariant;
+    final disconnectedContainer = colorScheme.surfaceContainerHighest;
 
     return ColoredBox(
       color: colorScheme.surfaceContainerLow,
@@ -411,7 +413,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                           Icons.circle,
                           size: 9,
                           color: disconnected
-                              ? colorScheme.error
+                              ? disconnectedColor
                               : colorScheme.primary,
                         ),
                         Text(
@@ -419,7 +421,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                           style: Theme.of(context).textTheme.labelLarge
                               ?.copyWith(
                                 color: disconnected
-                                    ? colorScheme.error
+                                    ? disconnectedColor
                                     : colorScheme.primary,
                               ),
                         ),
@@ -429,7 +431,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
                       const SizedBox(height: 16),
                       Card(
                         margin: EdgeInsets.zero,
-                        color: colorScheme.errorContainer,
+                        color: disconnectedContainer,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: colorScheme.outlineVariant),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Row(
@@ -438,14 +444,14 @@ class _TcpChatPageState extends State<TcpChatPage> {
                             children: [
                               Icon(
                                 Icons.link_off_rounded,
-                                color: colorScheme.onErrorContainer,
+                                color: disconnectedColor,
                               ),
                               Expanded(
                                 child: Text(
                                   "This session ended. Go back to reconnect before sending more files.",
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(
-                                        color: colorScheme.onErrorContainer,
+                                        color: disconnectedColor,
                                       ),
                                 ),
                               ),
@@ -530,6 +536,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
   Widget _buildPickFileButton({required bool isConnectionLost}) {
     final colorScheme = Theme.of(context).colorScheme;
+    final disabledColor = colorScheme.onSurfaceVariant;
     final disabled = isConnectionLost || isSharingInProgress;
     final title = isConnectionLost
         ? "Connection lost"
@@ -550,9 +557,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
     return Card(
       margin: EdgeInsets.zero,
       color: isConnectionLost
-          ? colorScheme.errorContainer
+          ? colorScheme.surfaceContainerHighest
           : colorScheme.surfaceContainerHighest,
-      elevation: isConnectionLost ? 2 : 0,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isConnectionLost
+              ? colorScheme.outlineVariant
+              : Colors.transparent,
+        ),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: disabled
@@ -576,9 +591,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                 child: Icon(
                   icon,
                   key: ValueKey(icon),
-                  color: isConnectionLost
-                      ? colorScheme.onErrorContainer
-                      : colorScheme.primary,
+                  color: isConnectionLost ? disabledColor : colorScheme.primary,
                 ),
               ),
               Expanded(
@@ -590,7 +603,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: isConnectionLost
-                            ? colorScheme.onErrorContainer
+                            ? disabledColor
                             : colorScheme.onSurface,
                       ),
                     ),
@@ -598,9 +611,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
                       subtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: isConnectionLost
-                            ? colorScheme.onErrorContainer.withValues(
-                                alpha: 0.78,
-                              )
+                            ? disabledColor
                             : colorScheme.onSurfaceVariant,
                       ),
                     ),
