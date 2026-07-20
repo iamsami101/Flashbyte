@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
-import 'package:flashbyte/classes/socket_service.dart';
-import 'package:flashbyte/classes/user_facing_error.dart';
-import 'package:flashbyte/widgets/transfer_widget.dart';
+import 'package:flashbyte/services/transfer/socket_service.dart';
+import 'package:flashbyte/models/user_facing_error.dart';
+import 'package:flashbyte/features/transfers/widgets/transfer_widget.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -70,8 +70,6 @@ class _TcpChatPageState extends State<TcpChatPage> {
                 !_hasTransferWidget(message['fileId'] as String?)) {
               break;
             }
-
-            print("FILE UID = ${message['fileId']}");
 
             setState(() {
               isSharingInProgress = true;

@@ -12,7 +12,7 @@ class HeroDialogRoute extends HeroinePageRoute {
   final EdgeInsetsGeometry padding;
 
   HeroDialogRoute({
-    this.duration = .3,
+    this.duration = 0.3,
     this.padding = EdgeInsetsGeometry.zero,
     this.alignment,
     this.fadeColor,

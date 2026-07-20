@@ -23,12 +23,10 @@ dependencies:
   loading_indicator_m3e: ^0.1.1
   material_new_shapes: ^1.0.0
   mime: ^2.0.0
-  mobile_scanner: 7.2.0
   motor: ^1.0.1
   open_file: ^4.0.0
   path_provider: ^2.1.5
   process_run: ^1.2.4
-  qr_flutter: ^4.1.0
   saf_util: ^0.10.0
   shared_preferences: ^2.3.0
   uuid: ^4.5.1

@@ -1,5 +1,5 @@
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flashbyte/classes/app_settings.dart';
+import 'package:flashbyte/app/app_settings.dart';
 import 'package:flutter/material.dart';
 
 class AppAppearanceController extends ChangeNotifier {
@@ -55,16 +55,9 @@ class AppAppearanceController extends ChangeNotifier {
   }) {
     final seedColor = AppSettings.getPrimaryColorByName(_primaryColorName);
 
-    final scheme = _useDynamicColors
-        ? (dynamicScheme ??
-              ColorScheme.fromSeed(
-                seedColor: seedColor,
-                brightness: brightness,
-              ))
-        : ColorScheme.fromSeed(
-            seedColor: seedColor,
-            brightness: brightness,
-          );
+    final scheme = _useDynamicColors && dynamicScheme != null
+        ? dynamicScheme
+        : ColorScheme.fromSeed(seedColor: seedColor, brightness: brightness);
 
     final harmonizedScheme = scheme.harmonized();
 

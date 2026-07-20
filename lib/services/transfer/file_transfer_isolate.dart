@@ -1,15 +1,16 @@
+import 'dart:async';
 import 'dart:collection';
-import 'dart:math';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
-import 'dart:async';
-import 'package:flashbyte/classes/android_saf_service.dart';
-import 'package:flashbyte/classes/tls_identity_service.dart';
+
+import 'package:flashbyte/services/platform/android_saf_service.dart';
+import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:external_path/external_path.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:external_path/external_path.dart';
 import 'package:saf_util/saf_util.dart';
 import 'package:uuid/uuid.dart';
 import 'package:windowed_file_reader/windowed_file_reader.dart';

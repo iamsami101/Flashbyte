@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
 
-/// A larger, slower presentation of the Material 3 Expressive indicator.
+/// A larger, slower Material 3 Expressive indicator.
 class SlowM3ELoadingIndicator extends StatefulWidget {
   const SlowM3ELoadingIndicator({
     super.key,

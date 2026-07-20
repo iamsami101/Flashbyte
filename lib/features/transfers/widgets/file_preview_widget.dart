@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flashbyte/classes/android_saf_service.dart';
-import 'package:flashbyte/classes/app_settings.dart';
-import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/services/platform/android_saf_service.dart';
+import 'package:flashbyte/app/app_settings.dart';
+import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:mime/mime.dart';
@@ -325,7 +325,6 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
     if (!Platform.isAndroid &&
         !Platform.isIOS &&
         !Directory(folderPath).existsSync()) {
-      print('Folder does not exist: $folderPath');
       return;
     }
 

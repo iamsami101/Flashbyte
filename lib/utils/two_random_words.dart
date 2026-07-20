@@ -1,7 +1,7 @@
 import 'dart:math';
 
 class RandomWords {
-  final Random random = Random();
+  final random = Random();
 
   final adj = [
     "able",
@@ -4346,15 +4346,7 @@ class RandomWords {
     "youth",
   ];
 
-  String get firstWord => () {
-    final randomNum = (random.nextDouble() * adj.length).floor();
-    final word = adj[randomNum];
-    return word;
-  }();
+  String get firstWord => adj[random.nextInt(adj.length)];
 
-  String get secondWord => () {
-    final randomNum = (random.nextDouble() * noun.length).floor();
-    final word = noun[randomNum];
-    return word;
-  }();
+  String get secondWord => noun[random.nextInt(noun.length)];
 }

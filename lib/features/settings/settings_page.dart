@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
-import 'package:flashbyte/classes/app_appearance_controller.dart';
-import 'package:flashbyte/classes/app_motion_controller.dart';
-import 'package:flashbyte/classes/android_saf_service.dart';
-import 'package:flashbyte/classes/app_settings.dart';
+import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
+import 'package:flashbyte/app/controllers/app_motion_controller.dart';
+import 'package:flashbyte/services/platform/android_saf_service.dart';
+import 'package:flashbyte/app/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:saf_util/saf_util.dart';
@@ -79,7 +79,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
 
-    // Show info dialog only when disabling TLS
     if (_useTLS && !value) {
       final dontShowAgain = prefs.getBool('dontShowTLSDialog') ?? false;
       if (!dontShowAgain) {

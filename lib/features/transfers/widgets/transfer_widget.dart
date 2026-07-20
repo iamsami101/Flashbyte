@@ -1,5 +1,5 @@
-import 'package:flashbyte/classes/hero_page_route.dart';
-import 'package:flashbyte/widgets/file_preview_widget.dart';
+import 'package:flashbyte/navigation/hero_dialog_route.dart';
+import 'package:flashbyte/features/transfers/widgets/file_preview_widget.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:heroine/heroine.dart';
@@ -138,83 +138,64 @@ class TransferWidget extends StatelessWidget {
                     ),
                   ],
                 ),
-                subtitle:
-                    // value == null
-                    //     ? Column(
-                    //         crossAxisAlignment: CrossAxisAlignment.start,
-                    //         spacing: 10,
-                    //         children: [
-                    //           Text(
-                    //             "$fileSize • ${fileName.split(".").last.toUpperCase()} • 100%",
-                    //           ),
-                    //           LinearProgressIndicator(
-                    //             value: 1,
-                    //             year2023: false,
-                    //             stopIndicatorRadius: 1,
-                    //             stopIndicatorColor: colorScheme.secondary,
-                    //           ),
-                    //         ],
-                    //       )
-                    //     :
-                    ValueListenableBuilder(
-                      valueListenable: progressValue != null
-                          ? ValueNotifier<double>(progressValue)
-                          : value!,
-                      builder: (context, pvalue, child) {
-                        Widget buildProgress(double value) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            spacing: 10,
-                            children: [
-                              Text(
-                                isCancelled
-                                    ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
-                                    : isPending
-                                    ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
-                                    : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
-                              ),
-                              LinearProgressIndicator(
-                                value: value,
-                                year2023: false,
-                                stopIndicatorRadius: 1,
-                                color: isCancelled
-                                    ? colorScheme.error
-                                    : colorScheme.primary,
-                                stopIndicatorColor: isCancelled
-                                    ? colorScheme.error
-                                    : colorScheme.secondary,
-                              ),
-                              if (isActive)
-                                _TransferControls(
-                                  isPaused: isPaused,
-                                  canResume: canResume,
-                                  onPause: onPause,
-                                  onResume: onResume,
-                                  onCancel: onCancel,
-                                  reducedMotion: reducedMotion,
-                                ),
-                              if (isPending)
-                                _TransferAcceptanceControls(
-                                  isReceived: isReceived,
-                                  onAccept: onAccept,
-                                  onDecline: onDecline,
-                                ),
-                            ],
-                          );
-                        }
+                subtitle: ValueListenableBuilder(
+                  valueListenable: progressValue != null
+                      ? ValueNotifier<double>(progressValue)
+                      : value!,
+                  builder: (context, pvalue, child) {
+                    Widget buildProgress(double value) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 10,
+                        children: [
+                          Text(
+                            isCancelled
+                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
+                                : isPending
+                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
+                                : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
+                          ),
+                          LinearProgressIndicator(
+                            value: value,
+                            year2023: false,
+                            stopIndicatorRadius: 1,
+                            color: isCancelled
+                                ? colorScheme.error
+                                : colorScheme.primary,
+                            stopIndicatorColor: isCancelled
+                                ? colorScheme.error
+                                : colorScheme.secondary,
+                          ),
+                          if (isActive)
+                            _TransferControls(
+                              isPaused: isPaused,
+                              canResume: canResume,
+                              onPause: onPause,
+                              onResume: onResume,
+                              onCancel: onCancel,
+                              reducedMotion: reducedMotion,
+                            ),
+                          if (isPending)
+                            _TransferAcceptanceControls(
+                              isReceived: isReceived,
+                              onAccept: onAccept,
+                              onDecline: onDecline,
+                            ),
+                        ],
+                      );
+                    }
 
-                        if (reducedMotion) {
-                          return buildProgress(pvalue);
-                        }
+                    if (reducedMotion) {
+                      return buildProgress(pvalue);
+                    }
 
-                        return SingleMotionBuilder(
-                          value: pvalue,
-                          motion: Motion.smoothSpring(),
-                          builder: (context, value, child) =>
-                              buildProgress(value),
-                        );
-                      },
-                    ),
+                    return SingleMotionBuilder(
+                      value: pvalue,
+                      motion: Motion.smoothSpring(),
+                      builder: (context, value, child) => buildProgress(value),
+                    );
+                  },
+                ),
                 dense: true,
               ),
             ],

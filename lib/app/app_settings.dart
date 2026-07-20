@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flashbyte/classes/android_saf_service.dart';
-import 'package:flashbyte/classes/two_random_words.dart';
+import 'package:flashbyte/services/platform/android_saf_service.dart';
+import 'package:flashbyte/utils/two_random_words.dart';
 import 'package:flutter/material.dart';
 import 'package:external_path/external_path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 class AppSettings {
-  static const String useTlsKey = 'useTLS';
+  static const useTlsKey = 'useTLS';
   static const String portKey = 'connectionPort';
   static const String downloadDirectoryKey = 'downloadDirectory';
   static const String dynamicColorsEnabledKey = 'dynamicColorsEnabled';

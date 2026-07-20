@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:flashbyte/classes/android_saf_service.dart';
-import 'package:flashbyte/classes/app_settings.dart';
-import 'package:flashbyte/classes/file_send_receive.dart';
-import 'package:flashbyte/classes/tls_identity_service.dart';
+import 'package:flashbyte/app/app_settings.dart';
+import 'package:flashbyte/services/platform/android_saf_service.dart';
+import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte/services/transfer/file_transfer_isolate.dart';
 import 'package:flutter/services.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
@@ -262,7 +262,6 @@ class SocketService {
 
   void sendFile(String filePath) {
     if (_toIsolateSendPort == null) {
-      print("Cannot send file, no active connection");
       return;
     }
 

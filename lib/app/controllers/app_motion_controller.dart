@@ -1,4 +1,4 @@
-import 'package:flashbyte/classes/app_settings.dart';
+import 'package:flashbyte/app/app_settings.dart';
 import 'package:flutter/foundation.dart';
 
 class AppMotionController extends ChangeNotifier {

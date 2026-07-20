@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
-import 'package:flashbyte/classes/device_discovery_service.dart';
-import 'package:flashbyte/classes/socket_service.dart';
+import 'package:flashbyte/models/discovered_device.dart';
+import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
