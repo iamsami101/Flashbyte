@@ -1,19 +1,7 @@
-import 'package:flutter/services.dart';
-
-class AndroidSafOutputFile {
-  const AndroidSafOutputFile({
-    required this.uri,
-    required this.name,
-  });
-
-  final String uri;
-  final String name;
-}
+import 'package:saf/saf.dart';
 
 class AndroidSafService {
   AndroidSafService._();
-
-  static const MethodChannel _channel = MethodChannel('flashbyte/android_saf');
 
   static bool isTreeUri(String value) => value.startsWith('content://');
 
@@ -50,36 +38,12 @@ class AndroidSafService {
     return path;
   }
 
-  static Future<AndroidSafOutputFile> importFileToTree({
-    required String treeUri,
-    required String sourceFilePath,
-    required String fileName,
-    String mimeType = 'application/octet-stream',
-  }) async {
-    final response = await _channel.invokeMapMethod<String, dynamic>(
-      'importFileToTree',
-      {
-        'treeUri': treeUri,
-        'sourceFilePath': sourceFilePath,
-        'fileName': fileName,
-        'mimeType': mimeType,
-      },
-    );
-
-    if (response == null) {
-      throw Exception('Could not save the destination file.');
-    }
-
-    final uri = response['uri'];
-    final name = response['name'];
-
-    if (uri is! String || name is! String) {
-      throw Exception('Invalid Android SAF response.');
-    }
-
-    return AndroidSafOutputFile(
-      uri: uri,
-      name: name,
+  static Future<SafDocumentFile?> pickDirectory({String? initialUri}) {
+    final saf = Saf();
+    return saf.pickDirectory(
+      initialUri: initialUri,
+      writePermission: true,
+      persistablePermission: true,
     );
   }
 }

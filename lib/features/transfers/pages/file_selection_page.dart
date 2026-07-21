@@ -1484,8 +1484,8 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       children: [
                         for (final (index, device) in discoveredDevices.indexed)
                           reducedMotion
-                              ? _buildDeviceTile(device)
-                              : _buildDeviceTile(device)
+                              ? _buildDeviceTile(device, key: ValueKey(device.id))
+                              : _buildDeviceTile(device, key: ValueKey(device.id))
                                     .animate()
                                     .fadeIn(
                                       duration: 180.ms,
@@ -1549,7 +1549,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
   }
 
-  Widget _buildDeviceTile(DiscoveredDevice device) {
+  Widget _buildDeviceTile(DiscoveredDevice device, {Key? key}) {
     final colorScheme = Theme.of(context).colorScheme;
     final canTap = !isPickingFile && !isConnectingToSender;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
@@ -1559,6 +1559,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     );
 
     final deviceCard = Material(
+      key: key,
       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,

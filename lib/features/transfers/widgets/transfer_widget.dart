@@ -141,7 +141,7 @@ class TransferWidget extends StatelessWidget {
                 subtitle: ValueListenableBuilder(
                   valueListenable: progressValue != null
                       ? ValueNotifier<double>(progressValue)
-                      : value!,
+                      : (value ?? ValueNotifier<double>(0)),
                   builder: (context, pvalue, child) {
                     Widget buildProgress(double value) {
                       return Column(

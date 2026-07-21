@@ -27,7 +27,7 @@ dependencies:
   open_file: ^4.0.0
   path_provider: ^2.1.5
   process_run: ^1.2.4
-  saf_util: ^0.10.0
+  saf: ^2.1.0
   shared_preferences: ^2.3.0
   uuid: ^4.5.1
   widget_zoom: ^0.0.4

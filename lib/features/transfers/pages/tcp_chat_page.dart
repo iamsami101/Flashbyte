@@ -749,6 +749,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
       for (final widget in _fileTransferWidgets.value)
         widget.uuid == uuid
             ? TransferWidget(
+                key: ValueKey(widget.uuid),
                 filePath: filePath ?? widget.filePath,
                 fileName: fileName ?? widget.fileName,
                 fileSize: widget.fileSize,
@@ -841,6 +842,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
     _fileTransferWidgets.value = [
       ..._fileTransferWidgets.value,
       TransferWidget(
+        key: ValueKey(uuid),
         filePath: filePath,
         fileName: fileName,
         fileSize: fileSize,
@@ -891,6 +893,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
     ValueListenable<double>? value,
   }) {
     return TransferWidget(
+      key: ValueKey(widget.uuid),
       filePath: filePath ?? widget.filePath,
       fileName: fileName ?? widget.fileName,
       fileSize: widget.fileSize,

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flashbyte/app/app_settings.dart';
-import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
 import 'package:flashbyte/services/transfer/file_transfer_isolate.dart';
 import 'package:flutter/services.dart';
@@ -208,11 +207,6 @@ class SocketService {
         if (status == 'error' && _disconnectRequested) {
           return;
         }
-        if (typedMessage['status'] == 'android_saf_finalize') {
-          await _finalizeAndroidSafTransfer(typedMessage);
-          return;
-        }
-
         _publishMessage(typedMessage);
         if (status == 'disconnect') {
           Future.microtask(() => _stopConnectionIfCurrent(generation));
@@ -450,42 +444,4 @@ class SocketService {
     _messageStreamController.add(message);
   }
 
-  Future<void> _finalizeAndroidSafTransfer(IsolateMessage message) async {
-    final treeUri = message['treeUri'] as String?;
-    final sourceFilePath = message['sourceFilePath'] as String?;
-    final fileName = message['fileName'] as String?;
-
-    if (treeUri == null || sourceFilePath == null || fileName == null) {
-      _publishMessage({
-        'status': 'error',
-        'fatal': false,
-        'message': 'Could not finalize the received file on Android.',
-      });
-      return;
-    }
-
-    try {
-      final savedFile = await AndroidSafService.importFileToTree(
-        treeUri: treeUri,
-        sourceFilePath: sourceFilePath,
-        fileName: fileName,
-      );
-      await File(sourceFilePath).delete();
-
-      _publishMessage({
-        'status': 'completed',
-        'fileId': message['fileId'],
-        'timeTaken': message['timeTaken'],
-        'fileName': savedFile.name,
-        'filePath': savedFile.uri,
-      });
-    } catch (e) {
-      _publishMessage({
-        'status': 'error',
-        'fatal': false,
-        'message':
-            'Could not save the received file to the selected folder.\n${e.toString()}',
-      });
-    }
-  }
 }

@@ -7,7 +7,6 @@ import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/app/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:saf_util/saf_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -195,12 +194,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (Theme.of(context).platform == TargetPlatform.android) {
       final currentDirectory = await AppSettings.getDownloadDirectory();
-      final pickedDirectory = await SafUtil().pickDirectory(
+      final pickedDirectory = await AndroidSafService.pickDirectory(
         initialUri: AndroidSafService.isTreeUri(currentDirectory)
             ? currentDirectory
             : null,
-        writePermission: true,
-        persistablePermission: true,
       );
       if (!mounted || pickedDirectory == null) {
         return;

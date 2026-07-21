@@ -8,10 +8,9 @@ import 'dart:typed_data';
 
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
-import 'package:external_path/external_path.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:saf_util/saf_util.dart';
+import 'package:saf/saf.dart';
 import 'package:uuid/uuid.dart';
 import 'package:windowed_file_reader/windowed_file_reader.dart';
 
@@ -668,13 +667,15 @@ Future<String?> _sendFileCommand(
 
   try {
     if (Platform.isAndroid) {
-      final fileStats = await SafUtil().stat(filePath, false);
+      final saf = Saf();
+      final fileStats = await saf.stat(filePath);
       if (fileStats == null) {
         throw Exception('Could not read selected file metadata.');
       }
 
-      androidFileDescriptor = await SafUtil().getFileDescriptor(filePath);
-      fileToSend = File('/proc/self/fd/$androidFileDescriptor');
+      final fdResult = await saf.openFileDescriptor(filePath, 'r');
+      androidFileDescriptor = fdResult.fd;
+      fileToSend = File(fdResult.path);
 
       fileHeader = {
         'uuid': Uuid().v4(),
@@ -749,7 +750,7 @@ Future<String?> _sendFileCommand(
 
     try {
       if (androidFileDescriptor != null) {
-        await SafUtil().closeFileDescriptor(androidFileDescriptor);
+        await Saf().closeFileDescriptor(androidFileDescriptor);
       }
     } on Exception catch (_) {}
     return fileHeader['uuid'] as String;
@@ -757,7 +758,7 @@ Future<String?> _sendFileCommand(
     stopwatch.stop();
     try {
       if (androidFileDescriptor != null) {
-        await SafUtil().closeFileDescriptor(androidFileDescriptor);
+        await Saf().closeFileDescriptor(androidFileDescriptor);
       }
     } on Exception catch (_) {}
     if (e is _TransferCancelled ||
@@ -951,7 +952,6 @@ void _handleSocketConnection(
   bool isDiscardingCancelledFile = false;
   DateTime lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
-  IOSink? fileSink;
   _OutputTarget? activeOutputTarget;
   Map<String, dynamic>? activeFileHeader;
 
@@ -964,10 +964,7 @@ void _handleSocketConnection(
   final localUsesTls = localPeerInfo['tls'] == true;
 
   Future<void> cleanupOpenFile() async {
-    if (fileSink != null) {
-      await fileSink!.close();
-      fileSink = null;
-    }
+    await activeOutputTarget?.closeWriter();
   }
 
   void resetFrameState() {
@@ -986,14 +983,8 @@ void _handleSocketConnection(
       return;
     }
 
-    await cleanupOpenFile();
-
-    try {
-      final file = File(target.filePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
+    await target.closeWriter();
+    await target.deleteFile();
 
     activeOutputTarget = null;
     resetFrameState();
@@ -1001,15 +992,9 @@ void _handleSocketConnection(
 
   Future<void> discardActiveOutputForCancel() async {
     final target = activeOutputTarget;
-    await cleanupOpenFile();
-
     if (target != null) {
-      try {
-        final file = File(target.filePath);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      } catch (_) {}
+      await target.closeWriter();
+      await target.deleteFile();
     }
 
     activeOutputTarget = null;
@@ -1285,7 +1270,6 @@ void _handleSocketConnection(
     activeOutputTarget = fileTarget;
     activeFileHeader = headerJson;
     fileBytesLength = fileSize;
-    fileSink = fileTarget.sink;
     isChunkedFileFrame = chunked;
     bytesWritten = 0;
     lastProgressPercent = -1;
@@ -1315,18 +1299,16 @@ void _handleSocketConnection(
       'timeTaken': timeTaken,
     });
 
+    await target.closeWriter();
+
     toUiSendPort.send({
-      'status': target.finalizeToTreeUri == null
-          ? 'completed'
-          : 'android_saf_finalize',
+      'status': 'completed',
       'fileId': header['uuid'],
       'timeTaken': timeTaken,
-      'treeUri': target.finalizeToTreeUri,
-      'sourceFilePath': target.filePath,
       'fileName': target.fileName,
+      'filePath': target.filePath,
     });
 
-    await cleanupOpenFile();
     stopwatch.stop();
     activeOutputTarget = null;
     resetFrameState();
@@ -1336,7 +1318,7 @@ void _handleSocketConnection(
     while (!socketClosed) {
       final drainingCancelledFile =
           isDiscardingCancelledFile && activeFileHeader != null;
-      if (fileSink == null && !drainingCancelledFile) {
+      if (activeOutputTarget == null && !drainingCancelledFile) {
         final frameHeader = readBuffer.tryPeekFrameHeader();
         if (frameHeader == null ||
             readBuffer.availableBytes < 8 + frameHeader.headerLength) {
@@ -1382,9 +1364,10 @@ void _handleSocketConnection(
         );
       }
 
-      final sink = fileSink;
+      final target = activeOutputTarget;
       final totalBytes = fileBytesLength;
-      if ((!isDiscardingCancelledFile && sink == null) || totalBytes == null) {
+      if ((!isDiscardingCancelledFile && target == null) ||
+          totalBytes == null) {
         continue;
       }
 
@@ -1493,14 +1476,12 @@ void _handleSocketConnection(
           return;
         }
 
-        if (isDiscardingCancelledFile || fileSink == null) {
+        if (isDiscardingCancelledFile) {
           readBuffer.skipBytes(availableToDrain);
         } else {
-          final writtenNow = readBuffer.drainToSink(
-            sink!,
-            maxBytes: availableToDrain,
-          );
-          bytesWritten += writtenNow;
+          final chunk = readBuffer.tryReadBytes(availableToDrain)!;
+          target!.writeChunk(chunk);
+          bytesWritten += chunk.length;
           sendProgress();
         }
         chunkBytesRemaining = remainingChunkBytes - availableToDrain;
@@ -1516,21 +1497,22 @@ void _handleSocketConnection(
         continue;
       }
 
-      final writtenNow = isDiscardingCancelledFile || fileSink == null
-          ? min(remainingBytes, readBuffer.availableBytes)
-          : readBuffer.drainToSink(
-              sink!,
-              maxBytes: remainingBytes,
-            );
-      if (writtenNow == 0) {
-        return;
-      }
-      if (isDiscardingCancelledFile || fileSink == null) {
-        readBuffer.skipBytes(writtenNow);
-      }
-
-      bytesWritten += writtenNow;
-      if (!isDiscardingCancelledFile) {
+      if (isDiscardingCancelledFile) {
+        final skipBytes = min(remainingBytes, readBuffer.availableBytes);
+        if (skipBytes == 0) {
+          return;
+        }
+        readBuffer.skipBytes(skipBytes);
+        bytesWritten += skipBytes;
+      } else {
+        final chunk = readBuffer.tryReadBytes(
+          min(remainingBytes, readBuffer.availableBytes),
+        );
+        if (chunk == null || chunk.isEmpty) {
+          return;
+        }
+        target!.writeChunk(chunk);
+        bytesWritten += chunk.length;
         sendProgress();
       }
 
@@ -1630,9 +1612,10 @@ Future<String> _resolveDownloadDirectory({String? commandDirectory}) async {
   }
 
   if (Platform.isAndroid) {
-    return ExternalPath.getExternalStoragePublicDirectory(
-      ExternalPath.DIRECTORY_DOWNLOAD,
-    );
+    final dirObject = await getExternalStorageDirectory();
+    if (dirObject != null) {
+      return dirObject.path;
+    }
   }
 
   final dirObject = await getDownloadsDirectory();
@@ -1737,25 +1720,6 @@ class _SocketReadBuffer {
     return out;
   }
 
-  int drainToSink(IOSink sink, {required int maxBytes}) {
-    var remaining = maxBytes < _availableBytes ? maxBytes : _availableBytes;
-    final total = remaining;
-
-    while (remaining > 0) {
-      final head = _chunks.first;
-      final readable = head.length - _headOffset;
-      final take = readable < remaining ? readable : remaining;
-      final start = _headOffset;
-      final end = start + take;
-
-      sink.add(Uint8List.sublistView(head, start, end));
-      _consume(take);
-      remaining -= take;
-    }
-
-    return total;
-  }
-
   void _consume(int byteCount) {
     _availableBytes -= byteCount;
     _headOffset += byteCount;
@@ -1771,17 +1735,72 @@ class _SocketReadBuffer {
 }
 
 class _OutputTarget {
-  const _OutputTarget({
+  _OutputTarget._({
     required this.fileName,
     required this.filePath,
-    required this.sink,
-    this.finalizeToTreeUri,
+    required this.writeChunk,
+    required this.closeWriter,
+    required this.deleteFile,
   });
+
+  factory _OutputTarget.regular({
+    required String fileName,
+    required String filePath,
+  }) {
+    final file = File(filePath);
+    final sink = file.openWrite();
+    return _OutputTarget._(
+      fileName: fileName,
+      filePath: filePath,
+      writeChunk: (data) => sink.add(data),
+      closeWriter: () => sink.close(),
+      deleteFile: () async {
+        await sink.close();
+        try {
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {}
+      },
+    );
+  }
+
+  factory _OutputTarget.saf({
+    required String directoryUri,
+    required String fileName,
+    required String mimeType,
+  }) {
+    final controller = StreamController<List<int>>();
+    final saf = Saf();
+    final writeFuture = saf.writeFileStream(
+      directoryUri,
+      fileName,
+      mimeType,
+      controller.stream,
+    );
+    return _OutputTarget._(
+      fileName: fileName,
+      filePath: '$directoryUri/$fileName',
+      writeChunk: (data) => controller.add(data),
+      closeWriter: () async {
+        await controller.close();
+        await writeFuture;
+      },
+      deleteFile: () async {
+        await controller.close();
+        try {
+          final entity = await writeFuture;
+          await saf.delete(entity.uri);
+        } catch (_) {}
+      },
+    );
+  }
 
   final String fileName;
   final String filePath;
-  final IOSink sink;
-  final String? finalizeToTreeUri;
+  final void Function(Uint8List) writeChunk;
+  final Future<void> Function() closeWriter;
+  final Future<void> Function() deleteFile;
 }
 
 Future<_OutputTarget> _createOutputTarget({
@@ -1793,18 +1812,16 @@ Future<_OutputTarget> _createOutputTarget({
   );
 
   if (Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory)) {
-    final stagingDirectory = await getTemporaryDirectory();
-    final fileName = _generateUniqueFileName(
-      stagingDirectory.path,
-      originalFileName,
+    final saf = Saf();
+    final fileName = await _generateSafUniqueFileName(
+      saf: saf,
+      directoryUri: resolvedDirectory,
+      originalFileName: originalFileName,
     );
-    final filePath = '${stagingDirectory.path}/$fileName';
-    final file = File(filePath);
-    return _OutputTarget(
+    return _OutputTarget.saf(
+      directoryUri: resolvedDirectory,
       fileName: fileName,
-      filePath: filePath,
-      sink: file.openWrite(),
-      finalizeToTreeUri: resolvedDirectory,
+      mimeType: 'application/octet-stream',
     );
   }
 
@@ -1813,11 +1830,9 @@ Future<_OutputTarget> _createOutputTarget({
     originalFileName,
   );
   final filePath = "$resolvedDirectory/$fileName";
-  final file = File(filePath);
-  return _OutputTarget(
+  return _OutputTarget.regular(
     fileName: fileName,
     filePath: filePath,
-    sink: file.openWrite(),
   );
 }
 
@@ -1840,6 +1855,35 @@ String _generateUniqueFileName(String directory, String originalFileName) {
     final newFileName = '$name ($counter)$extension';
     final newFile = File("$directory/$newFileName");
     if (!newFile.existsSync()) {
+      return newFileName;
+    }
+    counter++;
+  }
+}
+
+Future<String> _generateSafUniqueFileName({
+  required Saf saf,
+  required String directoryUri,
+  required String originalFileName,
+}) async {
+  final child = await saf.child(directoryUri, [originalFileName]);
+  if (child == null) {
+    return originalFileName;
+  }
+
+  final lastDotIndex = originalFileName.lastIndexOf('.');
+  final name = lastDotIndex > 0
+      ? originalFileName.substring(0, lastDotIndex)
+      : originalFileName;
+  final extension = lastDotIndex > 0
+      ? originalFileName.substring(lastDotIndex)
+      : '';
+
+  int counter = 1;
+  while (true) {
+    final newFileName = '$name ($counter)$extension';
+    final existing = await saf.child(directoryUri, [newFileName]);
+    if (existing == null) {
       return newFileName;
     }
     counter++;
