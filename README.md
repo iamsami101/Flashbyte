@@ -32,6 +32,7 @@ You can try out Flashbyte on the following platforms:
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ### Contents
+- [Screenshots](#screenshots)
 - [Installation instructions](#installation-instructions)
   - [Android](#android)
   - [Linux](#linux)
@@ -47,7 +48,13 @@ You can try out Flashbyte on the following platforms:
   - [Building for iOS](#building-for-ios)
   - [Building for macOS](#building-for-macos)
   - [Building for Windows](#building-for-windows)
-  - [Debug builds](#debug-builds)
+  - [Debug builds](#debug-builds) 
+
+---
+
+## Screenshots:
+<img src="media/previews/mobile-android.png" alt="Flashbyte Android preview" height="300" style="vertical-align: middle; box-shadow: 0 4px 12px rgba(0,0,0,0.25); border-radius: 12px;"/>
+<img src="media/previews/desktop-linux.png" alt="Flashbyte Android preview" height="315" style="vertical-align: middle"/>
 
 ## Installation instructions:
 - ### Android:

@@ -277,10 +277,10 @@ jobs:
           | Platform | Download |
           |----------|----------|
           | Android | [APK]({base}/flashbyte-android.apk) \\| [AAB]({base}/flashbyte-android.aab) |
-          | Linux | [Linux tarball]({base}/flashbyte-linux-x64.tar.gz) |
-          | macOS | [DMG installer]({base}/flashbyte-macos.dmg) |
-          | iOS | [Unsigned Runner.app zip]({base}/flashbyte-ios-unsigned-runner-app.zip) |
-          | Windows | [Windows zip]({base}/flashbyte-windows-x64.zip) |
+          | Linux | [TAR]({base}/flashbyte-linux-x64.tar.gz) |
+          | macOS | [DMG]({base}/flashbyte-macos.dmg) |
+          | iOS | [APP]({base}/flashbyte-ios-unsigned-runner-app.zip) |
+          | Windows | [ZIP]({base}/flashbyte-windows-x64.zip) |
           {end}""")
           before, marker, rest = text.partition(start)
           if not marker:
