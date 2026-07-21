@@ -53,8 +53,7 @@ You can try out Flashbyte on the following platforms:
 ---
 
 ## Screenshots:
-<img src="media/previews/mobile-android.png" alt="Flashbyte Android preview" height="300" style="vertical-align: middle; box-shadow: 0 4px 12px rgba(0,0,0,0.25); border-radius: 12px;"/>
-<img src="media/previews/desktop-linux.png" alt="Flashbyte Android preview" height="315" style="vertical-align: middle"/>
+<img src="media/previews/mobile-android.png" alt="Flashbyte Android preview" height="300"/> <img src="media/previews/desktop-linux.png" alt="Flashbyte Linux preview" height="300"/>
 
 ## Installation instructions:
 - ### Android:
