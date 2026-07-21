@@ -420,7 +420,7 @@ void fileReceiverIsolate(List<Object> args) {
         } else if (command['command'] == 'pause_transfer') {
           final fileId = command['fileId'] as String?;
           final role = command['role'] as String? ?? 'receiver';
-          if (fileId != null) {
+          if (fileId != null && !isTransferPaused(fileId)) {
             locallyPausedTransfers[fileId] = role;
             await _sendTransferControlFrame(clientSocket, {
               'type': transferControlType(role, 'paused'),
@@ -540,7 +540,7 @@ void fileReceiverIsolate(List<Object> args) {
     } else if (command['command'] == 'pause_transfer') {
       final fileId = command['fileId'] as String?;
       final role = command['role'] as String? ?? 'receiver';
-      if (fileId != null) {
+      if (fileId != null && !isTransferPaused(fileId)) {
         locallyPausedTransfers[fileId] = role;
         await _sendTransferControlFrame(clientSocket, {
           'type': transferControlType(role, 'paused'),
