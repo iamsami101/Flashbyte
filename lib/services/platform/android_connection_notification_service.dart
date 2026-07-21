@@ -13,6 +13,8 @@ class AndroidConnectionNotificationService {
 
   static const int _foregroundServiceId = 8050;
   static const int _progressNotificationId = 8051;
+  static const String _connectionChannelId = 'tcp_connection_service';
+  static const String _connectionChannelName = 'TCP connection service';
   static const String _progressChannelId = 'file_transfer_progress';
   static const String _progressChannelName = 'File transfer progress';
   static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
@@ -91,14 +93,14 @@ class AndroidConnectionNotificationService {
         body: _foregroundNotificationText,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
-            'tcp_connection_service',
-            'TCP connection service',
+            _connectionChannelId,
+            _connectionChannelName,
             channelDescription:
                 'Shows when Flashbyte has an active TCP connection.',
             category: AndroidNotificationCategory.service,
             icon: _notificationIcon,
-            importance: Importance.low,
-            priority: Priority.low,
+            importance: Importance.min,
+            priority: Priority.min,
             ongoing: true,
             autoCancel: false,
             onlyAlertOnce: true,
@@ -140,6 +142,9 @@ class AndroidConnectionNotificationService {
       case 'error':
       case 'disconnect':
         _completeTransfer(message);
+        if (status == 'disconnect' || status == 'error') {
+          unawaited(_localNotifications.cancel(id: _foregroundServiceId));
+        }
         break;
     }
   }
@@ -267,8 +272,8 @@ class AndroidConnectionNotificationService {
             channelDescription:
                 'Shows active Flashbyte file transfer progress.',
             icon: _notificationIcon,
-            importance: Importance.low,
-            priority: Priority.low,
+            importance: Importance.high,
+            priority: Priority.high,
             onlyAlertOnce: true,
             showProgress: true,
             maxProgress: 100,
