@@ -79,128 +79,126 @@ class TransferWidget extends StatelessWidget {
       child: Card(
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          physics: NeverScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadiusGeometry.circular(13),
-                ),
-                onTap: () {
-                  if (isCancelled || isPending) return;
-                  openFilePreview(context);
-                },
-                contentPadding: EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 20,
-                ),
-                leading: SizedBox(
-                  height: double.infinity,
-                  child: FittedBox(child: Icon(Icons.file_copy)),
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: BouncingScrollPhysics(),
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          fileName,
-                          softWrap: false,
-                          overflow: TextOverflow.fade,
-                        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadiusGeometry.circular(13),
+              ),
+              onTap: () {
+                if (isCancelled || isPending) return;
+                openFilePreview(context);
+              },
+              contentPadding: EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 20,
+              ),
+              leading: SizedBox(
+                height: double.infinity,
+                child: FittedBox(child: Icon(Icons.file_copy)),
+              ),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: BouncingScrollPhysics(),
+                      scrollDirection: Axis.horizontal,
+                      child: Text(
+                        fileName,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
                       ),
                     ),
-                    SizedBox(width: 10),
-                    Row(
-                      spacing: 5,
+                  ),
+                  SizedBox(width: 10),
+                  Row(
+                    spacing: 5,
+                    children: [
+                      Icon(
+                        isCancelled
+                            ? Icons.block_rounded
+                            : isReceived
+                            ? Icons.arrow_downward_rounded
+                            : Icons.arrow_upward_rounded,
+                        fontWeight: FontWeight.w900,
+                        size: 15,
+                        color: isCancelled
+                            ? colorScheme.error
+                            : isFinished
+                            ? colorScheme.primary
+                            : Colors.white.withAlpha(100),
+                      ),
+                      Text(
+                        transferStateText,
+                        style: primaryTextStyle,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              subtitle: ValueListenableBuilder(
+                valueListenable: progressValue != null
+                    ? ValueNotifier<double>(progressValue)
+                    : (value ?? ValueNotifier<double>(0)),
+                builder: (context, pvalue, child) {
+                  Widget buildProgress(double value) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 10,
                       children: [
-                        Icon(
+                        Text(
                           isCancelled
-                              ? Icons.block_rounded
-                              : isReceived
-                              ? Icons.arrow_downward_rounded
-                              : Icons.arrow_upward_rounded,
-                          fontWeight: FontWeight.w900,
-                          size: 15,
+                              ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
+                              : isPending
+                              ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
+                              : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
+                        ),
+                        LinearProgressIndicator(
+                          value: value,
+                          year2023: false,
+                          stopIndicatorRadius: 1,
                           color: isCancelled
                               ? colorScheme.error
-                              : isFinished
-                              ? colorScheme.primary
-                              : Colors.white.withAlpha(100),
+                              : colorScheme.primary,
+                          stopIndicatorColor: isCancelled
+                              ? colorScheme.error
+                              : colorScheme.secondary,
                         ),
-                        Text(
-                          transferStateText,
-                          style: primaryTextStyle,
-                        ),
+                        if (isActive)
+                          _TransferControls(
+                            isPaused: isPaused,
+                            canResume: canResume,
+                            onPause: onPause,
+                            onResume: onResume,
+                            onCancel: onCancel,
+                            reducedMotion: reducedMotion,
+                          ),
+                        if (isPending)
+                          _TransferAcceptanceControls(
+                            isReceived: isReceived,
+                            onAccept: onAccept,
+                            onDecline: onDecline,
+                          ),
                       ],
-                    ),
-                  ],
-                ),
-                subtitle: ValueListenableBuilder(
-                  valueListenable: progressValue != null
-                      ? ValueNotifier<double>(progressValue)
-                      : (value ?? ValueNotifier<double>(0)),
-                  builder: (context, pvalue, child) {
-                    Widget buildProgress(double value) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: 10,
-                        children: [
-                          Text(
-                            isCancelled
-                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
-                                : isPending
-                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
-                                : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
-                          ),
-                          LinearProgressIndicator(
-                            value: value,
-                            year2023: false,
-                            stopIndicatorRadius: 1,
-                            color: isCancelled
-                                ? colorScheme.error
-                                : colorScheme.primary,
-                            stopIndicatorColor: isCancelled
-                                ? colorScheme.error
-                                : colorScheme.secondary,
-                          ),
-                          if (isActive)
-                            _TransferControls(
-                              isPaused: isPaused,
-                              canResume: canResume,
-                              onPause: onPause,
-                              onResume: onResume,
-                              onCancel: onCancel,
-                              reducedMotion: reducedMotion,
-                            ),
-                          if (isPending)
-                            _TransferAcceptanceControls(
-                              isReceived: isReceived,
-                              onAccept: onAccept,
-                              onDecline: onDecline,
-                            ),
-                        ],
-                      );
-                    }
-
-                    if (reducedMotion) {
-                      return buildProgress(pvalue);
-                    }
-
-                    return SingleMotionBuilder(
-                      value: pvalue,
-                      motion: Motion.smoothSpring(),
-                      builder: (context, value, child) => buildProgress(value),
                     );
-                  },
-                ),
-                dense: true,
+                  }
+
+                  if (reducedMotion) {
+                    return buildProgress(pvalue);
+                  }
+
+                  return SingleMotionBuilder(
+                    value: pvalue,
+                    motion: Motion.smoothSpring(),
+                    builder: (context, value, child) => buildProgress(value),
+                  );
+                },
               ),
-            ],
-          ),
+              dense: true,
+            ),
+          ],
         ),
       ),
     );
