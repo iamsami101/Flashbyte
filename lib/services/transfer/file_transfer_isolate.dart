@@ -1263,10 +1263,22 @@ void _handleSocketConnection(
     int fileSize, {
     required bool chunked,
   }) async {
-    final fileTarget = await _createOutputTarget(
-      configuredDownloadDirectory: configuredDownloadDirectory,
-      originalFileName: headerJson['name'] as String,
-    );
+    _OutputTarget? fileTarget;
+    try {
+      fileTarget = await _createOutputTarget(
+        configuredDownloadDirectory: configuredDownloadDirectory,
+        originalFileName: headerJson['name'] as String,
+      );
+    } catch (e) {
+      connectionErrorSent = true;
+      toUiSendPort.send({
+        'status': 'error',
+        'fatal': 'true',
+        'message': 'Could not prepare file for download: ${e.toString()}',
+      });
+      closeSocket();
+      return;
+    }
     activeOutputTarget = fileTarget;
     activeFileHeader = headerJson;
     fileBytesLength = fileSize;
@@ -1299,7 +1311,21 @@ void _handleSocketConnection(
       'timeTaken': timeTaken,
     });
 
-    await target.closeWriter();
+    try {
+      await target.closeWriter();
+    } catch (e) {
+      connectionErrorSent = true;
+      toUiSendPort.send({
+        'status': 'error',
+        'fatal': 'true',
+        'message': 'Could not save received file: ${e.toString()}',
+      });
+      stopwatch.stop();
+      activeOutputTarget = null;
+      resetFrameState();
+      closeSocket();
+      return;
+    }
 
     toUiSendPort.send({
       'status': 'completed',
@@ -1813,6 +1839,14 @@ Future<_OutputTarget> _createOutputTarget({
 
   if (Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory)) {
     final saf = Saf();
+
+    final dirStat = await saf.stat(resolvedDirectory);
+    if (dirStat == null) {
+      throw Exception(
+        'Download folder is no longer available. Select a new folder in Settings.',
+      );
+    }
+
     final fileName = await _generateSafUniqueFileName(
       saf: saf,
       directoryUri: resolvedDirectory,
