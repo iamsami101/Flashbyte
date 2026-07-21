@@ -145,7 +145,6 @@ class TransferWidget extends StatelessWidget {
                   builder: (context, pvalue, child) {
                     Widget buildProgress(double value) {
                       return Column(
-                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         spacing: 10,
                         children: [
