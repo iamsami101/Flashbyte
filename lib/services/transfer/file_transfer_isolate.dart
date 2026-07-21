@@ -67,11 +67,13 @@ void fileReceiverIsolate(List<Object> args) {
   }
 
   void handleRemoteTransferPaused(String fileId, {String? pausedBy}) {
+    if (locallyPausedTransfers.containsKey(fileId)) return;
     remotelyPausedTransfers[fileId] = pausedBy ?? 'remote';
     sendTransferPausedState(fileId, pausedBy: pausedBy);
   }
 
   void handleRemoteTransferResumed(String fileId, {String? pausedBy}) {
+    if (locallyPausedTransfers.containsKey(fileId)) return;
     remotelyPausedTransfers.remove(fileId);
     sendTransferResumeState(fileId);
   }
