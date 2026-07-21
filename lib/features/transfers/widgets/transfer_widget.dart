@@ -209,7 +209,7 @@ class TransferWidget extends StatelessWidget {
     }
 
     return Heroine(
-      motion: Motion.bouncySpring(),
+      motion: Motion.smoothSpring(),
       tag: uuid,
       child: card,
     );

@@ -66,9 +66,9 @@ class HeroDialogRoute extends HeroinePageRoute {
                   curve: Curves.easeOut,
                 )
               : DragDismissable(
-                  motion: CupertinoMotion.bouncy(),
+                  motion: Motion.smoothSpring(),
                   child: Heroine(
-                    motion: CupertinoMotion.bouncy(),
+                    motion: Motion.smoothSpring(),
                     tag: heroTag,
                     flightShuttleBuilder: fadeColor == null
                         ? null
