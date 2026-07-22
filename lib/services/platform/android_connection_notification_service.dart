@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
-import 'package:flashbyte/services/platform/foreground_service_manager.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class AndroidConnectionNotificationService {
   AndroidConnectionNotificationService._();
@@ -16,16 +15,12 @@ class AndroidConnectionNotificationService {
 
   static const int _foregroundServiceId = 8050;
   static const int _progressNotificationId = 8051;
-  static const String _connectionChannelId = 'tcp_connection_service';
-  static const String _connectionChannelName = 'TCP connection service';
-  static const String _progressChannelId = 'file_transfer_progress';
-  static const String _progressChannelName = 'File transfer progress';
-  static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
-  static const String _notificationIcon = 'ic_notification';
-
   static const int _offerNotificationId = 8052;
-  static const String _offerChannelId = 'file_offers';
-  static const String _offerChannelName = 'File offers';
+
+  static const String _connectionChannelKey = 'tcp_connection_service';
+  static const String _progressChannelKey = 'file_transfer_progress';
+  static const String _offerChannelKey = 'file_offers';
+  static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
 
   static const String _actionPause = 'progress_pause';
   static const String _actionResume = 'progress_resume';
@@ -36,12 +31,9 @@ class AndroidConnectionNotificationService {
   static const String _actionDeclineFile = 'offer_decline';
   static const String _actionCancelOffer = 'offer_cancel';
 
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
   final Set<String> _pendingOffers = {};
-  AndroidFlutterLocalNotificationsPlugin? _androidNotifications;
 
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -55,21 +47,6 @@ class AndroidConnectionNotificationService {
 
     if (!Platform.isAndroid) return;
 
-    await _localNotifications.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings(_notificationIcon),
-        iOS: DarwinInitializationSettings(),
-        macOS: DarwinInitializationSettings(),
-      ),
-      onDidReceiveNotificationResponse: _handleNotificationAction,
-    );
-
-    _androidNotifications = _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await _androidNotifications?.requestNotificationsPermission();
-
     _connectionSubscription = SocketService.instance.connectionStatusStream
         .listen(_handleConnectionChanged);
     _messageSubscription = SocketService.instance.messageStream.listen(
@@ -81,10 +58,8 @@ class AndroidConnectionNotificationService {
     }
   }
 
-  void _handleNotificationAction(NotificationResponse response) {
-    final action = response.actionId;
-    if (action == null) return;
-
+  void handleNotificationAction(ReceivedAction receivedAction) {
+    final action = receivedAction.buttonKeyPressed;
     switch (action) {
       case _actionPause:
         _pauseActiveTransfer();
@@ -179,7 +154,6 @@ class AndroidConnectionNotificationService {
 
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
-      await ForegroundServiceManager.start();
       await _showConnectionNotification();
       return;
     }
@@ -189,10 +163,9 @@ class AndroidConnectionNotificationService {
     _pendingOffers.clear();
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
-    await _localNotifications.cancel(id: _progressNotificationId);
-    await _localNotifications.cancel(id: _offerNotificationId);
-    await _localNotifications.cancel(id: _foregroundServiceId);
-    await ForegroundServiceManager.stop();
+    unawaited(AwesomeNotifications().cancel(_progressNotificationId));
+    unawaited(AwesomeNotifications().cancel(_offerNotificationId));
+    unawaited(AwesomeNotifications().cancel(_foregroundServiceId));
   }
 
   Future<void> _showConnectionNotification() async {
@@ -200,46 +173,36 @@ class AndroidConnectionNotificationService {
 
     final hasTransfers = _activeTransfers.isNotEmpty;
     final actions = hasTransfers
-        ? <AndroidNotificationAction>[]
+        ? <NotificationActionButton>[]
         : [
-            AndroidNotificationAction(
-              _actionSendFile,
-              'Send file',
-              showsUserInterface: true,
-              cancelNotification: false,
+            NotificationActionButton(
+              key: _actionSendFile,
+              label: 'Send file',
+              actionType: ActionType.Default,
             ),
-            AndroidNotificationAction(
-              _actionSendClipboard,
-              'Send clipboard',
-              showsUserInterface: true,
-              cancelNotification: false,
+            NotificationActionButton(
+              key: _actionSendClipboard,
+              label: 'Send clipboard',
+              actionType: ActionType.SilentAction,
             ),
           ];
 
     try {
-      await _localNotifications.show(
-        id: _foregroundServiceId,
-        title: 'Flashbyte',
-        body: 'Connected to $_peerName',
-        notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-            _connectionChannelId,
-            _connectionChannelName,
-            channelDescription:
-                'Shows when Flashbyte has an active TCP connection.',
-            category: AndroidNotificationCategory.service,
-            icon: _notificationIcon,
-            importance: Importance.min,
-            priority: Priority.min,
-            ongoing: true,
-            autoCancel: false,
-            onlyAlertOnce: true,
-            playSound: false,
-            enableVibration: false,
-            showWhen: false,
-            actions: actions,
-          ),
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _foregroundServiceId,
+          channelKey: _connectionChannelKey,
+          title: 'Flashbyte',
+          body: 'Connected to $_peerName',
+          category: NotificationCategory.Service,
+          locked: true,
+          autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
+          wakeUpScreen: false,
         ),
+        actionButtons: actions.isEmpty ? null : actions,
       );
     } catch (error, stackTrace) {
       FlutterError.reportError(
@@ -301,7 +264,7 @@ class AndroidConnectionNotificationService {
       case 'disconnect':
         _completeTransfer(message);
         if (status == 'disconnect' || status == 'error') {
-          unawaited(_localNotifications.cancel(id: _foregroundServiceId));
+          unawaited(AwesomeNotifications().cancel(_foregroundServiceId));
         }
         break;
       case 'outgoing_offer_cancelled':
@@ -379,7 +342,7 @@ class AndroidConnectionNotificationService {
     if (_activeTransfers.isEmpty) {
       _progressNotificationTimer?.cancel();
       _progressNotificationTimer = null;
-      unawaited(_localNotifications.cancel(id: _progressNotificationId));
+      unawaited(AwesomeNotifications().cancel(_progressNotificationId));
       return;
     }
 
@@ -393,34 +356,25 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(_localNotifications.show(
-      id: _offerNotificationId,
-      title: 'Waiting for receiver to accept',
-      body: fileName,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _offerChannelId,
-          _offerChannelName,
-          channelDescription: 'Shows incoming file offers and pending sends.',
-          icon: _notificationIcon,
-          importance: Importance.high,
-          priority: Priority.high,
-          ongoing: true,
-          autoCancel: false,
-          onlyAlertOnce: true,
-          playSound: false,
-          enableVibration: false,
-          showWhen: false,
-          actions: [
-            AndroidNotificationAction(
-              _actionCancelOffer,
-              'Cancel',
-              showsUserInterface: true,
-              cancelNotification: false,
-            ),
-          ],
-        ),
+    unawaited(AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _offerNotificationId,
+        channelKey: _offerChannelKey,
+        title: 'Waiting for receiver to accept',
+        body: fileName,
+        locked: true,
+        autoDismissible: false,
+        showWhen: false,
+        displayOnForeground: true,
+        displayOnBackground: true,
       ),
+      actionButtons: [
+        NotificationActionButton(
+          key: _actionCancelOffer,
+          label: 'Cancel',
+          actionType: ActionType.SilentAction,
+        ),
+      ],
     ));
   }
 
@@ -431,37 +385,30 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(_localNotifications.show(
-      id: _offerNotificationId,
-      title: 'Incoming file',
-      body: fileName,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _offerChannelId,
-          _offerChannelName,
-          channelDescription: 'Shows incoming file offers and pending sends.',
-          icon: _notificationIcon,
-          importance: Importance.high,
-          priority: Priority.high,
-          ongoing: true,
-          autoCancel: false,
-          onlyAlertOnce: true,
-          actions: [
-            AndroidNotificationAction(
-              _actionAcceptFile,
-              'Accept',
-              showsUserInterface: true,
-              cancelNotification: false,
-            ),
-            AndroidNotificationAction(
-              _actionDeclineFile,
-              'Decline',
-              showsUserInterface: true,
-              cancelNotification: false,
-            ),
-          ],
-        ),
+    unawaited(AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _offerNotificationId,
+        channelKey: _offerChannelKey,
+        title: 'Incoming file',
+        body: fileName,
+        locked: true,
+        autoDismissible: false,
+        showWhen: false,
+        displayOnForeground: true,
+        displayOnBackground: true,
       ),
+      actionButtons: [
+        NotificationActionButton(
+          key: _actionAcceptFile,
+          label: 'Accept',
+          actionType: ActionType.SilentAction,
+        ),
+        NotificationActionButton(
+          key: _actionDeclineFile,
+          label: 'Decline',
+          actionType: ActionType.SilentAction,
+        ),
+      ],
     ));
   }
 
@@ -471,13 +418,13 @@ class AndroidConnectionNotificationService {
       _pendingOffers.remove(fileId);
     }
     if (_pendingOffers.isEmpty) {
-      unawaited(_localNotifications.cancel(id: _offerNotificationId));
+      unawaited(AwesomeNotifications().cancel(_offerNotificationId));
     }
   }
 
   void _handleOfferCancelledBySender() {
     _pendingOffers.clear();
-    unawaited(_localNotifications.cancel(id: _offerNotificationId));
+    unawaited(AwesomeNotifications().cancel(_offerNotificationId));
   }
 
   void _acceptPendingOffer() {
@@ -540,52 +487,41 @@ class AndroidConnectionNotificationService {
     final isPaused = _pausedTransfers.contains(transfer.fileId);
     final actions = [
       if (isPaused)
-        AndroidNotificationAction(
-          _actionResume,
-          'Resume',
-          showsUserInterface: true,
-          cancelNotification: false,
+        NotificationActionButton(
+          key: _actionResume,
+          label: 'Resume',
+          actionType: ActionType.SilentAction,
         )
       else
-        AndroidNotificationAction(
-          _actionPause,
-          'Pause',
-          showsUserInterface: true,
-          cancelNotification: false,
+        NotificationActionButton(
+          key: _actionPause,
+          label: 'Pause',
+          actionType: ActionType.SilentAction,
         ),
-      AndroidNotificationAction(
-        _actionCancel,
-        'Cancel',
-        showsUserInterface: true,
-        cancelNotification: false,
+      NotificationActionButton(
+        key: _actionCancel,
+        label: 'Cancel',
+        actionType: ActionType.SilentAction,
       ),
     ];
 
     try {
-      await _localNotifications.show(
-        id: _progressNotificationId,
-        title: '${transfer.direction} ${transfer.fileName}',
-        body: '$percent% complete',
-        notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-            _progressChannelId,
-            _progressChannelName,
-            channelDescription:
-                'Shows active Flashbyte file transfer progress.',
-            icon: _notificationIcon,
-            importance: Importance.high,
-            priority: Priority.high,
-            onlyAlertOnce: true,
-            showProgress: true,
-            maxProgress: 100,
-            progress: percent,
-            ongoing: true,
-            autoCancel: false,
-            playSound: false,
-            enableVibration: false,
-            actions: actions,
-          ),
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _progressNotificationId,
+          channelKey: _progressChannelKey,
+          title: '${transfer.direction} ${transfer.fileName}',
+          body: '$percent% complete',
+          notificationLayout: NotificationLayout.ProgressBar,
+          locked: true,
+          progress: transfer.progress.clamp(0.0, 1.0),
+          autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
+          category: NotificationCategory.Progress,
         ),
+        actionButtons: actions,
       );
     } catch (error, stackTrace) {
       FlutterError.reportError(
@@ -603,7 +539,7 @@ class AndroidConnectionNotificationService {
     _progressNotificationTimer?.cancel();
     await _connectionSubscription?.cancel();
     await _messageSubscription?.cancel();
-    await _localNotifications.cancel(id: _foregroundServiceId);
+    await AwesomeNotifications().cancel(_foregroundServiceId);
   }
 }
 

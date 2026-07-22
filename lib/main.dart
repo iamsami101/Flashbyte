@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flashbyte/services/platform/android_connection_notification_service.dart';
@@ -18,8 +19,57 @@ import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+@pragma('vm:entry-point')
+Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
+  AndroidConnectionNotificationService.instance
+      .handleNotificationAction(receivedAction);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await AwesomeNotifications().initialize(
+    null,
+    [
+      NotificationChannel(
+        channelKey: 'tcp_connection_service',
+        channelName: 'TCP connection service',
+        channelDescription: 'Shows when Flashbyte has an active TCP connection.',
+        channelShowBadge: false,
+        importance: NotificationImportance.Min,
+        playSound: false,
+        enableVibration: false,
+        onlyAlertOnce: true,
+      ),
+      NotificationChannel(
+        channelKey: 'file_transfer_progress',
+        channelName: 'File transfer progress',
+        channelDescription:
+            'Shows active Flashbyte file transfer progress.',
+        channelShowBadge: false,
+        importance: NotificationImportance.High,
+        playSound: false,
+        enableVibration: false,
+        onlyAlertOnce: true,
+      ),
+      NotificationChannel(
+        channelKey: 'file_offers',
+        channelName: 'File offers',
+        channelDescription:
+            'Shows incoming file offers and pending sends.',
+        channelShowBadge: false,
+        importance: NotificationImportance.High,
+        playSound: false,
+        enableVibration: false,
+        onlyAlertOnce: true,
+      ),
+    ],
+  );
+
+  await AwesomeNotifications().setListeners(
+    onActionReceivedMethod: onNotificationActionReceived,
+  );
+
   if (await AppSettings.getUseTls()) {
     await TlsIdentityService.getOrCreateIdentity();
   }
