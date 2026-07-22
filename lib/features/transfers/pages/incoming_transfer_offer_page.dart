@@ -44,7 +44,18 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
     super.initState();
     _subscription = SocketService.instance.messageStream.listen((message) {
       if (!mounted || _isClosing || _outcome != null) return;
+      final messageFileId = message['fileId'] as String?;
+      if (messageFileId != null && messageFileId != widget.fileId) {
+        return;
+      }
+
       switch (message['status']) {
+        case 'transfer_accepted':
+          _completeFromNotification(true);
+          break;
+        case 'transfer_declined':
+          _completeFromNotification(false);
+          break;
         case 'offer_cancelled_by_sender':
           setState(() => _outcome = _IncomingOfferOutcome.senderCancelled);
           break;
@@ -66,6 +77,12 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
     if (_isClosing || _outcome != null) return;
     widget.onDecline();
     setState(() => _outcome = _IncomingOfferOutcome.declined);
+  }
+
+  void _completeFromNotification(bool accepted) {
+    if (_isClosing || !mounted) return;
+    _isClosing = true;
+    Navigator.of(context).pop(accepted);
   }
 
   @override
