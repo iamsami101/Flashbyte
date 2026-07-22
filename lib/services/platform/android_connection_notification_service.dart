@@ -33,6 +33,7 @@ class AndroidConnectionNotificationService {
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
   AndroidFlutterLocalNotificationsPlugin? _androidNotifications;
+  String? _cachedClipboardText;
 
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -95,26 +96,40 @@ class AndroidConnectionNotificationService {
     }
   }
 
+  String? _activeTransferFileId() {
+    if (_activeTransfers.isNotEmpty) return _activeTransfers.keys.last;
+    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    return activeTransfers.keys.isEmpty ? null : activeTransfers.keys.last;
+  }
+
+  bool _activeTransferIsReceived(String fileId) {
+    final transfer = _activeTransfers[fileId];
+    if (transfer != null) return transfer.isReceived;
+    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    return activeTransfers[fileId] ?? true;
+  }
+
   void _pauseActiveTransfer() {
-    if (_activeTransfers.isEmpty) return;
-    final fileId = _activeTransfers.keys.last;
-    final transfer = _activeTransfers[fileId]!;
-    SocketService.instance.pauseTransfer(fileId, isReceiver: transfer.isReceived);
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
+    SocketService.instance.pauseTransfer(
+      fileId,
+      isReceiver: _activeTransferIsReceived(fileId),
+    );
   }
 
   void _resumeActiveTransfer() {
-    if (_activeTransfers.isEmpty) return;
-    final fileId = _activeTransfers.keys.last;
-    final transfer = _activeTransfers[fileId]!;
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
     SocketService.instance.resumeTransfer(
       fileId,
-      isReceiver: transfer.isReceived,
+      isReceiver: _activeTransferIsReceived(fileId),
     );
   }
 
   void _cancelActiveTransfer() {
-    if (_activeTransfers.isEmpty) return;
-    final fileId = _activeTransfers.keys.last;
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
     SocketService.instance.cancelTransfer(fileId);
   }
 
@@ -132,9 +147,9 @@ class AndroidConnectionNotificationService {
 
   Future<void> _sendClipboard() async {
     try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      if (data?.text == null || data!.text!.isEmpty) return;
-      SocketService.instance.sendClipboard(data.text!);
+      final text = _cachedClipboardText;
+      if (text == null || text.isEmpty) return;
+      SocketService.instance.sendClipboard(text);
     } catch (_) {}
   }
 
@@ -161,6 +176,13 @@ class AndroidConnectionNotificationService {
 
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
+
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      _cachedClipboardText = data?.text;
+    } catch (_) {
+      _cachedClipboardText = null;
+    }
 
     final hasTransfers = _activeTransfers.isNotEmpty;
     final actions = hasTransfers

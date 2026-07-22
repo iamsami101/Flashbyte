@@ -434,6 +434,19 @@ class SocketService {
     _connectionStatusController.add(value);
   }
 
+  Map<String, bool> getActiveTransferIsReceived() {
+    final result = <String, bool>{};
+    for (final entry in _transferStartMessages.entries) {
+      final status = entry.value['status'] as String?;
+      if (status == 'start') {
+        result[entry.key] = true;
+      } else if (status == 'send_start') {
+        result[entry.key] = false;
+      }
+    }
+    return result;
+  }
+
   void _publishMessage(IsolateMessage message) {
     final status = message['status'] ?? message['command'];
     if (status == 'peer_info') {
