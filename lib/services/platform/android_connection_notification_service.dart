@@ -374,20 +374,20 @@ class AndroidConnectionNotificationService {
         AndroidNotificationAction(
           _actionResume,
           'Resume',
-          showsUserInterface: true,
+          showsUserInterface: false,
           cancelNotification: false,
         )
       else
         AndroidNotificationAction(
           _actionPause,
           'Pause',
-          showsUserInterface: true,
+          showsUserInterface: false,
           cancelNotification: false,
         ),
       AndroidNotificationAction(
         _actionCancel,
         'Cancel',
-        showsUserInterface: true,
+        showsUserInterface: false,
         cancelNotification: false,
       ),
     ];
