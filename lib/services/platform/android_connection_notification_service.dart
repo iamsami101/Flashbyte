@@ -178,12 +178,14 @@ class AndroidConnectionNotificationService {
             NotificationActionButton(
               key: _actionSendFile,
               label: 'Send file',
-              actionType: ActionType.Default,
+              actionType: ActionType.SilentAction,
+              autoDismissible: false,
             ),
             NotificationActionButton(
               key: _actionSendClipboard,
               label: 'Send clipboard',
               actionType: ActionType.SilentAction,
+              autoDismissible: false,
             ),
           ];
 
@@ -317,14 +319,14 @@ class AndroidConnectionNotificationService {
     final fileId = message['fileId'] as String?;
     if (fileId == null) return;
     _pausedTransfers.add(fileId);
-    _scheduleProgressNotificationUpdate(force: true);
+    _scheduleProgressNotificationUpdate();
   }
 
   void _markTransferResumed(Map<String, dynamic> message) {
     final fileId = message['fileId'] as String?;
     if (fileId == null) return;
     _pausedTransfers.remove(fileId);
-    _scheduleProgressNotificationUpdate(force: true);
+    _scheduleProgressNotificationUpdate();
   }
 
   void _completeTransfer(Map<String, dynamic> message) {
@@ -337,16 +339,17 @@ class AndroidConnectionNotificationService {
       _pausedTransfers.remove(fileId);
     }
 
-    unawaited(_showConnectionNotification());
-
     if (_activeTransfers.isEmpty) {
       _progressNotificationTimer?.cancel();
       _progressNotificationTimer = null;
       unawaited(AwesomeNotifications().cancel(_progressNotificationId));
-      return;
     }
 
-    _scheduleProgressNotificationUpdate(force: true);
+    unawaited(_showConnectionNotification());
+
+    if (_activeTransfers.isNotEmpty) {
+      _scheduleProgressNotificationUpdate();
+    }
   }
 
   void _showSenderPendingNotification(Map<String, dynamic> message) {
@@ -373,6 +376,7 @@ class AndroidConnectionNotificationService {
           key: _actionCancelOffer,
           label: 'Cancel',
           actionType: ActionType.SilentAction,
+          autoDismissible: false,
         ),
       ],
     ));
@@ -402,11 +406,13 @@ class AndroidConnectionNotificationService {
           key: _actionAcceptFile,
           label: 'Accept',
           actionType: ActionType.SilentAction,
+          autoDismissible: false,
         ),
         NotificationActionButton(
           key: _actionDeclineFile,
           label: 'Decline',
           actionType: ActionType.SilentAction,
+          autoDismissible: false,
         ),
       ],
     ));
@@ -491,17 +497,20 @@ class AndroidConnectionNotificationService {
           key: _actionResume,
           label: 'Resume',
           actionType: ActionType.SilentAction,
+          autoDismissible: false,
         )
       else
         NotificationActionButton(
           key: _actionPause,
           label: 'Pause',
           actionType: ActionType.SilentAction,
+          autoDismissible: false,
         ),
       NotificationActionButton(
         key: _actionCancel,
         label: 'Cancel',
         actionType: ActionType.SilentAction,
+        autoDismissible: false,
       ),
     ];
 
@@ -513,7 +522,6 @@ class AndroidConnectionNotificationService {
           title: '${transfer.direction} ${transfer.fileName}',
           body: '$percent% complete',
           notificationLayout: NotificationLayout.ProgressBar,
-          locked: true,
           progress: transfer.progress.clamp(0.0, 1.0),
           autoDismissible: false,
           showWhen: false,
