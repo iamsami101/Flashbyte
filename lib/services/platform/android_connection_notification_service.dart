@@ -450,13 +450,13 @@ class AndroidConnectionNotificationService {
             AndroidNotificationAction(
               _actionAcceptFile,
               'Accept',
-              showsUserInterface: true,
+              showsUserInterface: false,
               cancelNotification: false,
             ),
             AndroidNotificationAction(
               _actionDeclineFile,
               'Decline',
-              showsUserInterface: true,
+              showsUserInterface: false,
               cancelNotification: false,
             ),
           ],
