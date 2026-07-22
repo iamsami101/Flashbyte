@@ -21,7 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
 Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
-  AndroidConnectionNotificationService.instance
+  await AndroidConnectionNotificationService.instance
       .handleNotificationAction(receivedAction);
 }
 
@@ -29,7 +29,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AwesomeNotifications().initialize(
-    null,
+    'resource://notification_icon',
     [
       NotificationChannel(
         channelKey: 'tcp_connection_service',

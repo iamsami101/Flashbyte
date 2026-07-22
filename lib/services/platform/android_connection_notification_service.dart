@@ -34,6 +34,7 @@ class AndroidConnectionNotificationService {
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
   final Set<String> _pendingOffers = {};
+  String? _cachedClipboardText;
 
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -58,7 +59,7 @@ class AndroidConnectionNotificationService {
     }
   }
 
-  void handleNotificationAction(ReceivedAction receivedAction) {
+  Future<void> handleNotificationAction(ReceivedAction receivedAction) async {
     final action = receivedAction.buttonKeyPressed;
     switch (action) {
       case _actionPause:
@@ -71,10 +72,10 @@ class AndroidConnectionNotificationService {
         _cancelActiveTransfer();
         break;
       case _actionSendFile:
-        unawaited(_pickAndSendFile());
+        await _pickAndSendFile();
         break;
       case _actionSendClipboard:
-        unawaited(_sendClipboard());
+        await _sendClipboard();
         break;
       case _actionAcceptFile:
         _acceptPendingOffer();
@@ -134,15 +135,36 @@ class AndroidConnectionNotificationService {
           : pickedFile.path;
       if (fileLocation == null) return;
       SocketService.instance.sendFile(fileLocation);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'flashbyte notifications',
+          context: ErrorDescription('pick and send file'),
+        ),
+      );
+    }
   }
 
   Future<void> _sendClipboard() async {
+    String? text;
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
-      if (data?.text == null || data!.text!.isEmpty) return;
-      SocketService.instance.sendClipboard(data.text!);
-    } catch (_) {}
+      text = data?.text;
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'flashbyte notifications',
+          context: ErrorDescription('clipboard getData'),
+        ),
+      );
+      text = _cachedClipboardText;
+    }
+    if (text == null || text.isEmpty) return;
+    SocketService.instance.sendClipboard(text);
   }
 
   String get _peerName {
@@ -161,6 +183,7 @@ class AndroidConnectionNotificationService {
     _activeTransfers.clear();
     _pausedTransfers.clear();
     _pendingOffers.clear();
+    _cachedClipboardText = null;
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     unawaited(AwesomeNotifications().cancel(_progressNotificationId));
@@ -171,6 +194,8 @@ class AndroidConnectionNotificationService {
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
 
+    _cachedClipboardText = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+
     final hasTransfers = _activeTransfers.isNotEmpty;
     final actions = hasTransfers
         ? <NotificationActionButton>[]
@@ -178,7 +203,7 @@ class AndroidConnectionNotificationService {
             NotificationActionButton(
               key: _actionSendFile,
               label: 'Send file',
-              actionType: ActionType.SilentAction,
+              actionType: ActionType.Default,
               autoDismissible: false,
             ),
             NotificationActionButton(
@@ -522,7 +547,8 @@ class AndroidConnectionNotificationService {
           title: '${transfer.direction} ${transfer.fileName}',
           body: '$percent% complete',
           notificationLayout: NotificationLayout.ProgressBar,
-          progress: transfer.progress.clamp(0.0, 1.0),
+          locked: true,
+          progress: percent.toDouble(),
           autoDismissible: false,
           showWhen: false,
           displayOnForeground: true,
