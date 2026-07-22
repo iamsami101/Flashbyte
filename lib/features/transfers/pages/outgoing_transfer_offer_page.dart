@@ -49,10 +49,10 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
           setState(() => _receiver = Map<String, dynamic>.from(message));
           break;
         case 'transfer_accepted':
-          _completeApproval();
+          _completeResolution(true);
           break;
         case 'transfer_declined':
-          _showOutcome(_OutgoingOfferOutcome.declined);
+          _completeResolution(false);
           break;
         case 'error':
         case 'disconnect':
@@ -65,10 +65,10 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
     );
   }
 
-  void _completeApproval() {
+  void _completeResolution(bool accepted) {
     if (_isClosing) return;
     _isClosing = true;
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(accepted);
   }
 
   void _showOutcome(_OutgoingOfferOutcome outcome) {

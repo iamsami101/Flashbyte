@@ -474,12 +474,20 @@ class AndroidConnectionNotificationService {
     if (_pendingOffers.isEmpty) return;
     final fileId = _pendingOffers.last;
     SocketService.instance.acceptTransfer(fileId);
+    SocketService.instance.emitLocalMessage({
+      'status': 'transfer_accepted',
+      'fileId': fileId,
+    });
   }
 
   void _declinePendingOffer() {
     if (_pendingOffers.isEmpty) return;
     final fileId = _pendingOffers.last;
     SocketService.instance.declineTransfer(fileId);
+    SocketService.instance.emitLocalMessage({
+      'status': 'transfer_declined',
+      'fileId': fileId,
+    });
   }
 
   void _cancelPendingOffer() {

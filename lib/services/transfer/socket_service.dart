@@ -310,6 +310,10 @@ class SocketService {
     _sendTransferControl('decline_transfer', fileId);
   }
 
+  void emitLocalMessage(IsolateMessage message) {
+    _publishMessage(Map<String, dynamic>.from(message));
+  }
+
   Future<void> cancelOutgoingOffer() async {
     final sendPort = _toIsolateSendPort;
     if (sendPort == null) return;
@@ -473,5 +477,4 @@ class SocketService {
 
     _messageStreamController.add(message);
   }
-
 }
