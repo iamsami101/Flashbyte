@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
+import 'package:flashbyte/services/platform/foreground_service_manager.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -162,6 +163,7 @@ class AndroidConnectionNotificationService {
 
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
+      await ForegroundServiceManager.start();
       await _showConnectionNotification();
       return;
     }
@@ -172,6 +174,7 @@ class AndroidConnectionNotificationService {
     _progressNotificationTimer = null;
     await _localNotifications.cancel(id: _progressNotificationId);
     await _localNotifications.cancel(id: _foregroundServiceId);
+    await ForegroundServiceManager.stop();
   }
 
   Future<void> _showConnectionNotification() async {
