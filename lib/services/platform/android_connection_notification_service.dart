@@ -23,16 +23,24 @@ class AndroidConnectionNotificationService {
   static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
   static const String _notificationIcon = 'ic_notification';
 
+  static const int _offerNotificationId = 8052;
+  static const String _offerChannelId = 'file_offers';
+  static const String _offerChannelName = 'File offers';
+
   static const String _actionPause = 'progress_pause';
   static const String _actionResume = 'progress_resume';
   static const String _actionCancel = 'progress_cancel';
   static const String _actionSendFile = 'notif_send_file';
   static const String _actionSendClipboard = 'notif_send_clipboard';
+  static const String _actionAcceptFile = 'offer_accept';
+  static const String _actionDeclineFile = 'offer_decline';
+  static const String _actionCancelOffer = 'offer_cancel';
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
+  final Set<String> _pendingOffers = {};
   AndroidFlutterLocalNotificationsPlugin? _androidNotifications;
 
   StreamSubscription<bool>? _connectionSubscription;
@@ -92,6 +100,15 @@ class AndroidConnectionNotificationService {
         break;
       case _actionSendClipboard:
         unawaited(_sendClipboard());
+        break;
+      case _actionAcceptFile:
+        _acceptPendingOffer();
+        break;
+      case _actionDeclineFile:
+        _declinePendingOffer();
+        break;
+      case _actionCancelOffer:
+        _cancelPendingOffer();
         break;
     }
   }
@@ -169,9 +186,11 @@ class AndroidConnectionNotificationService {
 
     _activeTransfers.clear();
     _pausedTransfers.clear();
+    _pendingOffers.clear();
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     await _localNotifications.cancel(id: _progressNotificationId);
+    await _localNotifications.cancel(id: _offerNotificationId);
     await _localNotifications.cancel(id: _foregroundServiceId);
     await ForegroundServiceManager.stop();
   }
@@ -242,10 +261,19 @@ class AndroidConnectionNotificationService {
         unawaited(_showConnectionNotification());
         break;
       case 'send_start':
-        _startTransfer(message, isReceived: false);
+        if (message['pendingAcceptance'] == true) {
+          _startTransfer(message, isReceived: false);
+          _showSenderPendingNotification(message);
+        } else {
+          _startTransfer(message, isReceived: false);
+        }
         break;
       case 'start':
-        _startTransfer(message, isReceived: true);
+        if (message['pendingAcceptance'] == true) {
+          _showReceiverOfferNotification(message);
+        } else {
+          _startTransfer(message, isReceived: true);
+        }
         break;
       case 'send_progress':
       case 'progress':
@@ -257,15 +285,28 @@ class AndroidConnectionNotificationService {
       case 'transfer_resumed':
         _markTransferResumed(message);
         break;
+      case 'transfer_accepted':
+        _handleOfferResolved(message);
+        break;
+      case 'transfer_declined':
+        _handleOfferResolved(message);
+        break;
+      case 'transfer_cancelled':
+        _handleOfferResolved(message);
+        _completeTransfer(message);
+        break;
       case 'send_complete':
       case 'completed':
-      case 'transfer_cancelled':
       case 'error':
       case 'disconnect':
         _completeTransfer(message);
         if (status == 'disconnect' || status == 'error') {
           unawaited(_localNotifications.cancel(id: _foregroundServiceId));
         }
+        break;
+      case 'outgoing_offer_cancelled':
+      case 'offer_cancelled_by_sender':
+        _handleOfferCancelledBySender();
         break;
     }
   }
@@ -343,6 +384,117 @@ class AndroidConnectionNotificationService {
     }
 
     _scheduleProgressNotificationUpdate(force: true);
+  }
+
+  void _showSenderPendingNotification(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    final fileName = message['fileName'] as String? ?? 'file';
+    if (fileId == null) return;
+
+    _pendingOffers.add(fileId);
+
+    unawaited(_localNotifications.show(
+      id: _offerNotificationId,
+      title: 'Waiting for receiver to accept',
+      body: fileName,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _offerChannelId,
+          _offerChannelName,
+          channelDescription: 'Shows incoming file offers and pending sends.',
+          icon: _notificationIcon,
+          importance: Importance.high,
+          priority: Priority.high,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          playSound: false,
+          enableVibration: false,
+          showWhen: false,
+          actions: [
+            AndroidNotificationAction(
+              _actionCancelOffer,
+              'Cancel',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  void _showReceiverOfferNotification(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    final fileName = message['fileName'] as String? ?? 'file';
+    if (fileId == null) return;
+
+    _pendingOffers.add(fileId);
+
+    unawaited(_localNotifications.show(
+      id: _offerNotificationId,
+      title: 'Incoming file',
+      body: fileName,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _offerChannelId,
+          _offerChannelName,
+          channelDescription: 'Shows incoming file offers and pending sends.',
+          icon: _notificationIcon,
+          importance: Importance.high,
+          priority: Priority.high,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          actions: [
+            AndroidNotificationAction(
+              _actionAcceptFile,
+              'Accept',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+            AndroidNotificationAction(
+              _actionDeclineFile,
+              'Decline',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  void _handleOfferResolved(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    if (fileId != null) {
+      _pendingOffers.remove(fileId);
+    }
+    if (_pendingOffers.isEmpty) {
+      unawaited(_localNotifications.cancel(id: _offerNotificationId));
+    }
+  }
+
+  void _handleOfferCancelledBySender() {
+    _pendingOffers.clear();
+    unawaited(_localNotifications.cancel(id: _offerNotificationId));
+  }
+
+  void _acceptPendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    final fileId = _pendingOffers.last;
+    SocketService.instance.acceptTransfer(fileId);
+  }
+
+  void _declinePendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    final fileId = _pendingOffers.last;
+    SocketService.instance.declineTransfer(fileId);
+  }
+
+  void _cancelPendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    SocketService.instance.cancelOutgoingOffer();
   }
 
   void _scheduleProgressNotificationUpdate({bool force = false}) {
