@@ -134,10 +134,7 @@ class AndroidConnectionNotificationService {
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       if (data?.text == null || data!.text!.isEmpty) return;
-      final tempDir = Directory.systemTemp;
-      final file = File('${tempDir.path}/clipboard.txt');
-      await file.writeAsString(data.text!);
-      SocketService.instance.sendFile(file.path);
+      SocketService.instance.sendClipboard(data.text!);
     } catch (_) {}
   }
 
@@ -377,20 +374,20 @@ class AndroidConnectionNotificationService {
         AndroidNotificationAction(
           _actionResume,
           'Resume',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         )
       else
         AndroidNotificationAction(
           _actionPause,
           'Pause',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         ),
       AndroidNotificationAction(
         _actionCancel,
         'Cancel',
-        showsUserInterface: false,
+        showsUserInterface: true,
         cancelNotification: false,
       ),
     ];
