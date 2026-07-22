@@ -34,7 +34,6 @@ class AndroidConnectionNotificationService {
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
   AndroidFlutterLocalNotificationsPlugin? _androidNotifications;
-  String? _cachedClipboardText;
 
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -148,9 +147,9 @@ class AndroidConnectionNotificationService {
 
   Future<void> _sendClipboard() async {
     try {
-      final text = _cachedClipboardText;
-      if (text == null || text.isEmpty) return;
-      SocketService.instance.sendClipboard(text);
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (data?.text == null || data!.text!.isEmpty) return;
+      SocketService.instance.sendClipboard(data.text!);
     } catch (_) {}
   }
 
@@ -179,13 +178,6 @@ class AndroidConnectionNotificationService {
 
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
-
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      _cachedClipboardText = data?.text;
-    } catch (_) {
-      _cachedClipboardText = null;
-    }
 
     final hasTransfers = _activeTransfers.isNotEmpty;
     final actions = hasTransfers
@@ -399,20 +391,20 @@ class AndroidConnectionNotificationService {
         AndroidNotificationAction(
           _actionResume,
           'Resume',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         )
       else
         AndroidNotificationAction(
           _actionPause,
           'Pause',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         ),
       AndroidNotificationAction(
         _actionCancel,
         'Cancel',
-        showsUserInterface: false,
+        showsUserInterface: true,
         cancelNotification: false,
       ),
     ];
