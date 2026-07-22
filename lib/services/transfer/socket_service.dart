@@ -204,6 +204,13 @@ class SocketService {
           }
           _outgoingOfferCancelCompleter = null;
         }
+        if (typedMessage['command'] == 'set_clipboard') {
+          final text = typedMessage['text'] as String?;
+          if (text != null) {
+            Clipboard.setData(ClipboardData(text: text));
+          }
+          return;
+        }
         if (status == 'error' && _disconnectRequested) {
           return;
         }
@@ -262,6 +269,16 @@ class SocketService {
     _toIsolateSendPort!.send({
       'command': 'send_file',
       'filePath': filePath,
+    });
+  }
+
+  void sendClipboard(String text) {
+    if (_toIsolateSendPort == null) {
+      return;
+    }
+    _toIsolateSendPort!.send({
+      'command': 'send_clipboard',
+      'text': text,
     });
   }
 
@@ -415,6 +432,19 @@ class SocketService {
 
     _hasEstablishedConnection = value;
     _connectionStatusController.add(value);
+  }
+
+  Map<String, bool> getActiveTransferIsReceived() {
+    final result = <String, bool>{};
+    for (final entry in _transferStartMessages.entries) {
+      final status = entry.value['status'] as String?;
+      if (status == 'start') {
+        result[entry.key] = true;
+      } else if (status == 'send_start') {
+        result[entry.key] = false;
+      }
+    }
+    return result;
   }
 
   void _publishMessage(IsolateMessage message) {

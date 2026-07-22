@@ -180,9 +180,16 @@ class _TcpChatPageState extends State<TcpChatPage> {
             break;
 
           case 'error':
-            _showErrorAfterCancellationWindow(
-              message['message'] as String? ?? 'Unknown error',
-            );
+            final isFatal = message['fatal'] == 'true';
+            final errorText = message['message'] as String? ?? 'Unknown error';
+            if (isFatal) {
+              _showErrorAfterCancellationWindow(errorText);
+            } else {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(errorText)),
+              );
+            }
             break;
         }
       },

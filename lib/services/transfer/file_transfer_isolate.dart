@@ -613,6 +613,17 @@ void fileReceiverIsolate(List<Object> args) {
         toUiSendPort.send({'status': 'outgoing_offer_cancelled'});
       }
       return;
+    } else if (command['command'] == 'send_clipboard') {
+      final text = command['text'] as String?;
+      if (text != null && text.isNotEmpty && clientSocket != null) {
+        await _sendSocketFrame(
+          clientSocket,
+          {'type': 'set_clipboard'},
+          payloadBytes: utf8.encode(text),
+        );
+        toUiSendPort.send({'status': 'clipboard_sent', 'text': text});
+      }
+      return;
     }
     commandQueue.add(command);
     processCommandQueue();
@@ -1385,6 +1396,19 @@ void _handleSocketConnection(
           continue;
         }
 
+        if (frameType == 'set_clipboard') {
+          if (readBuffer.availableBytes < frameHeader.payloadLength) {
+            return;
+          }
+          final payloadBytes = readBuffer.tryReadBytes(frameHeader.payloadLength)!;
+          final text = utf8.decode(payloadBytes);
+          toUiSendPort.send({
+            'command': 'set_clipboard',
+            'text': text,
+          });
+          continue;
+        }
+
         await beginFileFrame(
           headerJson,
           frameHeader.payloadLength,
@@ -1467,6 +1491,19 @@ void _handleSocketConnection(
             if (!keepReading) {
               return;
             }
+            continue;
+          }
+
+          if (frameType == 'set_clipboard') {
+            if (readBuffer.availableBytes < frameHeader.payloadLength) {
+              return;
+            }
+            final payloadBytes = readBuffer.tryReadBytes(frameHeader.payloadLength)!;
+            final text = utf8.decode(payloadBytes);
+            toUiSendPort.send({
+              'command': 'set_clipboard',
+              'text': text,
+            });
             continue;
           }
 

@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fast_file_picker/fast_file_picker.dart';
+import 'package:flashbyte/services/platform/foreground_service_manager.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class AndroidConnectionNotificationService {
@@ -18,13 +21,26 @@ class AndroidConnectionNotificationService {
   static const String _progressChannelId = 'file_transfer_progress';
   static const String _progressChannelName = 'File transfer progress';
   static const Duration _progressUpdateInterval = Duration(milliseconds: 500);
-  static const String _foregroundNotificationTitle = 'Flashbyte';
-  static const String _foregroundNotificationText = 'Connection established';
   static const String _notificationIcon = 'ic_notification';
+
+  static const int _offerNotificationId = 8052;
+  static const String _offerChannelId = 'file_offers';
+  static const String _offerChannelName = 'File offers';
+
+  static const String _actionPause = 'progress_pause';
+  static const String _actionResume = 'progress_resume';
+  static const String _actionCancel = 'progress_cancel';
+  static const String _actionSendFile = 'notif_send_file';
+  static const String _actionSendClipboard = 'notif_send_clipboard';
+  static const String _actionAcceptFile = 'offer_accept';
+  static const String _actionDeclineFile = 'offer_decline';
+  static const String _actionCancelOffer = 'offer_cancel';
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final Map<String, _TransferProgress> _activeTransfers = {};
+  final Set<String> _pausedTransfers = {};
+  final Set<String> _pendingOffers = {};
   AndroidFlutterLocalNotificationsPlugin? _androidNotifications;
 
   StreamSubscription<bool>? _connectionSubscription;
@@ -34,14 +50,10 @@ class AndroidConnectionNotificationService {
   bool _initialized = false;
 
   Future<void> initialize() async {
-    if (_initialized) {
-      return;
-    }
+    if (_initialized) return;
     _initialized = true;
 
-    if (!Platform.isAndroid) {
-      return;
-    }
+    if (!Platform.isAndroid) return;
 
     await _localNotifications.initialize(
       settings: const InitializationSettings(
@@ -49,6 +61,7 @@ class AndroidConnectionNotificationService {
         iOS: DarwinInitializationSettings(),
         macOS: DarwinInitializationSettings(),
       ),
+      onDidReceiveNotificationResponse: _handleNotificationAction,
     );
 
     _androidNotifications = _localNotifications
@@ -68,30 +81,147 @@ class AndroidConnectionNotificationService {
     }
   }
 
+  void _handleNotificationAction(NotificationResponse response) {
+    final action = response.actionId;
+    if (action == null) return;
+
+    switch (action) {
+      case _actionPause:
+        _pauseActiveTransfer();
+        break;
+      case _actionResume:
+        _resumeActiveTransfer();
+        break;
+      case _actionCancel:
+        _cancelActiveTransfer();
+        break;
+      case _actionSendFile:
+        unawaited(_pickAndSendFile());
+        break;
+      case _actionSendClipboard:
+        unawaited(_sendClipboard());
+        break;
+      case _actionAcceptFile:
+        _acceptPendingOffer();
+        break;
+      case _actionDeclineFile:
+        _declinePendingOffer();
+        break;
+      case _actionCancelOffer:
+        _cancelPendingOffer();
+        break;
+    }
+  }
+
+  String? _activeTransferFileId() {
+    if (_activeTransfers.isNotEmpty) return _activeTransfers.keys.last;
+    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    return activeTransfers.keys.isEmpty ? null : activeTransfers.keys.last;
+  }
+
+  bool _activeTransferIsReceived(String fileId) {
+    final transfer = _activeTransfers[fileId];
+    if (transfer != null) return transfer.isReceived;
+    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    return activeTransfers[fileId] ?? true;
+  }
+
+  void _pauseActiveTransfer() {
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
+    SocketService.instance.pauseTransfer(
+      fileId,
+      isReceiver: _activeTransferIsReceived(fileId),
+    );
+  }
+
+  void _resumeActiveTransfer() {
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
+    SocketService.instance.resumeTransfer(
+      fileId,
+      isReceiver: _activeTransferIsReceived(fileId),
+    );
+  }
+
+  void _cancelActiveTransfer() {
+    final fileId = _activeTransferFileId();
+    if (fileId == null) return;
+    SocketService.instance.cancelTransfer(fileId);
+  }
+
+  Future<void> _pickAndSendFile() async {
+    try {
+      final pickedFile = await FastFilePicker.pickFile();
+      if (pickedFile == null) return;
+      final fileLocation = Platform.isAndroid && pickedFile.uri != null
+          ? pickedFile.uri
+          : pickedFile.path;
+      if (fileLocation == null) return;
+      SocketService.instance.sendFile(fileLocation);
+    } catch (_) {}
+  }
+
+  Future<void> _sendClipboard() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (data?.text == null || data!.text!.isEmpty) return;
+      SocketService.instance.sendClipboard(data.text!);
+    } catch (_) {}
+  }
+
+  String get _peerName {
+    final info = SocketService.instance.connectedPeerInfo;
+    if (info == null) return 'Unknown';
+    final name = info['name'];
+    return name is String ? name : 'Unknown';
+  }
+
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
+      await ForegroundServiceManager.start();
       await _showConnectionNotification();
       return;
     }
 
     _activeTransfers.clear();
+    _pausedTransfers.clear();
+    _pendingOffers.clear();
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     await _localNotifications.cancel(id: _progressNotificationId);
+    await _localNotifications.cancel(id: _offerNotificationId);
     await _localNotifications.cancel(id: _foregroundServiceId);
+    await ForegroundServiceManager.stop();
   }
 
   Future<void> _showConnectionNotification() async {
-    if (!Platform.isAndroid) {
-      return;
-    }
+    if (!Platform.isAndroid) return;
+
+    final hasTransfers = _activeTransfers.isNotEmpty;
+    final actions = hasTransfers
+        ? <AndroidNotificationAction>[]
+        : [
+            AndroidNotificationAction(
+              _actionSendFile,
+              'Send file',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+            AndroidNotificationAction(
+              _actionSendClipboard,
+              'Send clipboard',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+          ];
 
     try {
       await _localNotifications.show(
         id: _foregroundServiceId,
-        title: _foregroundNotificationTitle,
-        body: _foregroundNotificationText,
-        notificationDetails: const NotificationDetails(
+        title: 'Flashbyte',
+        body: 'Connected to $_peerName',
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _connectionChannelId,
             _connectionChannelName,
@@ -107,6 +237,7 @@ class AndroidConnectionNotificationService {
             playSound: false,
             enableVibration: false,
             showWhen: false,
+            actions: actions,
           ),
         ),
       );
@@ -126,19 +257,46 @@ class AndroidConnectionNotificationService {
     final status = message['status'] ?? message['command'];
 
     switch (status) {
+      case 'peer_info':
+        unawaited(_showConnectionNotification());
+        break;
       case 'send_start':
-        _startTransfer(message, direction: 'Sending');
+        if (message['pendingAcceptance'] == true) {
+          _startTransfer(message, isReceived: false);
+          _showSenderPendingNotification(message);
+        } else {
+          _startTransfer(message, isReceived: false);
+        }
         break;
       case 'start':
-        _startTransfer(message, direction: 'Receiving');
+        if (message['pendingAcceptance'] == true) {
+          _showReceiverOfferNotification(message);
+        } else {
+          _startTransfer(message, isReceived: true);
+        }
         break;
       case 'send_progress':
       case 'progress':
         _updateTransfer(message);
         break;
+      case 'transfer_paused':
+        _markTransferPaused(message);
+        break;
+      case 'transfer_resumed':
+        _markTransferResumed(message);
+        break;
+      case 'transfer_accepted':
+        _handleOfferResolved(message);
+        break;
+      case 'transfer_declined':
+        _handleOfferResolved(message);
+        break;
+      case 'transfer_cancelled':
+        _handleOfferResolved(message);
+        _completeTransfer(message);
+        break;
       case 'send_complete':
       case 'completed':
-      case 'transfer_cancelled':
       case 'error':
       case 'disconnect':
         _completeTransfer(message);
@@ -146,61 +304,77 @@ class AndroidConnectionNotificationService {
           unawaited(_localNotifications.cancel(id: _foregroundServiceId));
         }
         break;
+      case 'outgoing_offer_cancelled':
+      case 'offer_cancelled_by_sender':
+        _handleOfferCancelledBySender();
+        break;
     }
   }
 
   void _startTransfer(
     Map<String, dynamic> message, {
-    required String direction,
+    required bool isReceived,
   }) {
     final fileId = message['fileId'] as String?;
-    if (fileId == null) {
-      return;
-    }
+    if (fileId == null) return;
 
     _activeTransfers[fileId] = _TransferProgress(
-      direction: direction,
+      fileId: fileId,
+      isReceived: isReceived,
+      direction: isReceived ? 'Receiving' : 'Sending',
       fileName: message['fileName'] as String? ?? 'file',
       progress: 0,
     );
+
+    unawaited(_showConnectionNotification());
     _scheduleProgressNotificationUpdate(force: true);
   }
 
   void _updateTransfer(Map<String, dynamic> message) {
     final fileId = message['fileId'] as String?;
     final progress = (message['progress'] as num?)?.toDouble();
-    if (fileId == null || progress == null) {
-      return;
-    }
+    if (fileId == null || progress == null) return;
 
     final transfer = _activeTransfers[fileId];
-    if (transfer == null) {
-      return;
-    }
+    if (transfer == null) return;
 
     final nextPercent = (progress.clamp(0.0, 1.0) * 100).floor();
-    if (nextPercent == transfer.lastShownPercent) {
-      return;
-    }
+    if (nextPercent == transfer.lastShownPercent) return;
 
     transfer
       ..progress = progress.clamp(0.0, 1.0)
       ..lastShownPercent = nextPercent;
 
-    if (nextPercent >= 100) {
-      return;
-    }
+    if (nextPercent >= 100) return;
 
     _scheduleProgressNotificationUpdate();
+  }
+
+  void _markTransferPaused(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    if (fileId == null) return;
+    _pausedTransfers.add(fileId);
+    _scheduleProgressNotificationUpdate(force: true);
+  }
+
+  void _markTransferResumed(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    if (fileId == null) return;
+    _pausedTransfers.remove(fileId);
+    _scheduleProgressNotificationUpdate(force: true);
   }
 
   void _completeTransfer(Map<String, dynamic> message) {
     final fileId = message['fileId'] as String?;
     if (fileId == null) {
       _activeTransfers.clear();
+      _pausedTransfers.clear();
     } else {
       _activeTransfers.remove(fileId);
+      _pausedTransfers.remove(fileId);
     }
+
+    unawaited(_showConnectionNotification());
 
     if (_activeTransfers.isEmpty) {
       _progressNotificationTimer?.cancel();
@@ -212,16 +386,123 @@ class AndroidConnectionNotificationService {
     _scheduleProgressNotificationUpdate(force: true);
   }
 
-  void _scheduleProgressNotificationUpdate({bool force = false}) {
-    if (_activeTransfers.isEmpty) {
-      return;
+  void _showSenderPendingNotification(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    final fileName = message['fileName'] as String? ?? 'file';
+    if (fileId == null) return;
+
+    _pendingOffers.add(fileId);
+
+    unawaited(_localNotifications.show(
+      id: _offerNotificationId,
+      title: 'Waiting for receiver to accept',
+      body: fileName,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _offerChannelId,
+          _offerChannelName,
+          channelDescription: 'Shows incoming file offers and pending sends.',
+          icon: _notificationIcon,
+          importance: Importance.high,
+          priority: Priority.high,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          playSound: false,
+          enableVibration: false,
+          showWhen: false,
+          actions: [
+            AndroidNotificationAction(
+              _actionCancelOffer,
+              'Cancel',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  void _showReceiverOfferNotification(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    final fileName = message['fileName'] as String? ?? 'file';
+    if (fileId == null) return;
+
+    _pendingOffers.add(fileId);
+
+    unawaited(_localNotifications.show(
+      id: _offerNotificationId,
+      title: 'Incoming file',
+      body: fileName,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _offerChannelId,
+          _offerChannelName,
+          channelDescription: 'Shows incoming file offers and pending sends.',
+          icon: _notificationIcon,
+          importance: Importance.high,
+          priority: Priority.high,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          actions: [
+            AndroidNotificationAction(
+              _actionAcceptFile,
+              'Accept',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+            AndroidNotificationAction(
+              _actionDeclineFile,
+              'Decline',
+              showsUserInterface: true,
+              cancelNotification: false,
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  void _handleOfferResolved(Map<String, dynamic> message) {
+    final fileId = message['fileId'] as String?;
+    if (fileId != null) {
+      _pendingOffers.remove(fileId);
     }
+    if (_pendingOffers.isEmpty) {
+      unawaited(_localNotifications.cancel(id: _offerNotificationId));
+    }
+  }
+
+  void _handleOfferCancelledBySender() {
+    _pendingOffers.clear();
+    unawaited(_localNotifications.cancel(id: _offerNotificationId));
+  }
+
+  void _acceptPendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    final fileId = _pendingOffers.last;
+    SocketService.instance.acceptTransfer(fileId);
+  }
+
+  void _declinePendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    final fileId = _pendingOffers.last;
+    SocketService.instance.declineTransfer(fileId);
+  }
+
+  void _cancelPendingOffer() {
+    if (_pendingOffers.isEmpty) return;
+    SocketService.instance.cancelOutgoingOffer();
+  }
+
+  void _scheduleProgressNotificationUpdate({bool force = false}) {
+    if (_activeTransfers.isEmpty) return;
 
     final transfer = _activeTransfers.values.last;
     final percent = (transfer.progress.clamp(0.0, 1.0) * 100).floor();
-    if (percent >= 100) {
-      return;
-    }
+    if (percent >= 100) return;
 
     if (force || _lastProgressNotificationUpdate == null) {
       _progressNotificationTimer?.cancel();
@@ -248,17 +529,37 @@ class AndroidConnectionNotificationService {
   }
 
   Future<void> _showProgressNotification() async {
-    if (_activeTransfers.isEmpty) {
-      return;
-    }
+    if (_activeTransfers.isEmpty) return;
 
     final transfer = _activeTransfers.values.last;
     final percent = (transfer.progress.clamp(0.0, 1.0) * 100).floor();
-    if (percent >= 100) {
-      return;
-    }
+    if (percent >= 100) return;
 
     _lastProgressNotificationUpdate = DateTime.now();
+
+    final isPaused = _pausedTransfers.contains(transfer.fileId);
+    final actions = [
+      if (isPaused)
+        AndroidNotificationAction(
+          _actionResume,
+          'Resume',
+          showsUserInterface: true,
+          cancelNotification: false,
+        )
+      else
+        AndroidNotificationAction(
+          _actionPause,
+          'Pause',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+      AndroidNotificationAction(
+        _actionCancel,
+        'Cancel',
+        showsUserInterface: true,
+        cancelNotification: false,
+      ),
+    ];
 
     try {
       await _localNotifications.show(
@@ -282,6 +583,7 @@ class AndroidConnectionNotificationService {
             autoCancel: false,
             playSound: false,
             enableVibration: false,
+            actions: actions,
           ),
         ),
       );
@@ -307,11 +609,15 @@ class AndroidConnectionNotificationService {
 
 class _TransferProgress {
   _TransferProgress({
+    required this.fileId,
+    required this.isReceived,
     required this.direction,
     required this.fileName,
     required this.progress,
   });
 
+  final String fileId;
+  final bool isReceived;
   final String direction;
   final String fileName;
   double progress;
