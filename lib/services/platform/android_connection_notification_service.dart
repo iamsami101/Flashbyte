@@ -91,14 +91,16 @@ class AndroidConnectionNotificationService {
 
   String? _activeTransferFileId() {
     if (_activeTransfers.isNotEmpty) return _activeTransfers.keys.last;
-    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    final activeTransfers = SocketService.instance
+        .getActiveTransferIsReceived();
     return activeTransfers.keys.isEmpty ? null : activeTransfers.keys.last;
   }
 
   bool _activeTransferIsReceived(String fileId) {
     final transfer = _activeTransfers[fileId];
     if (transfer != null) return transfer.isReceived;
-    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    final activeTransfers = SocketService.instance
+        .getActiveTransferIsReceived();
     return activeTransfers[fileId] ?? true;
   }
 
@@ -174,6 +176,9 @@ class AndroidConnectionNotificationService {
     return name is String ? name : 'Unknown';
   }
 
+  bool get _showConnectionActions =>
+      _activeTransfers.isEmpty && _pendingOffers.isEmpty;
+
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
       await _showConnectionNotification();
@@ -194,12 +199,12 @@ class AndroidConnectionNotificationService {
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
 
-    _cachedClipboardText = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    _cachedClipboardText = (await Clipboard.getData(
+      Clipboard.kTextPlain,
+    ))?.text;
 
-    final hasTransfers = _activeTransfers.isNotEmpty;
-    final actions = hasTransfers
-        ? <NotificationActionButton>[]
-        : [
+    final actions = _showConnectionActions
+        ? [
             NotificationActionButton(
               key: _actionSendFile,
               label: 'Send file',
@@ -212,7 +217,8 @@ class AndroidConnectionNotificationService {
               actionType: ActionType.SilentAction,
               autoDismissible: false,
             ),
-          ];
+          ]
+        : <NotificationActionButton>[];
 
     try {
       await AwesomeNotifications().createNotification(
@@ -384,27 +390,30 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: _offerNotificationId,
-        channelKey: _offerChannelKey,
-        title: 'Waiting for receiver to accept',
-        body: fileName,
-        locked: true,
-        autoDismissible: false,
-        showWhen: false,
-        displayOnForeground: true,
-        displayOnBackground: true,
-      ),
-      actionButtons: [
-        NotificationActionButton(
-          key: _actionCancelOffer,
-          label: 'Cancel',
-          actionType: ActionType.SilentAction,
+    unawaited(_showConnectionNotification());
+    unawaited(
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _offerNotificationId,
+          channelKey: _offerChannelKey,
+          title: 'Waiting for receiver to accept',
+          body: fileName,
+          locked: true,
           autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
         ),
-      ],
-    ));
+        actionButtons: [
+          NotificationActionButton(
+            key: _actionCancelOffer,
+            label: 'Cancel',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+        ],
+      ),
+    );
   }
 
   void _showReceiverOfferNotification(Map<String, dynamic> message) {
@@ -414,33 +423,36 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: _offerNotificationId,
-        channelKey: _offerChannelKey,
-        title: 'Incoming file',
-        body: fileName,
-        locked: true,
-        autoDismissible: false,
-        showWhen: false,
-        displayOnForeground: true,
-        displayOnBackground: true,
+    unawaited(_showConnectionNotification());
+    unawaited(
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _offerNotificationId,
+          channelKey: _offerChannelKey,
+          title: 'Incoming file',
+          body: fileName,
+          locked: true,
+          autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
+        ),
+        actionButtons: [
+          NotificationActionButton(
+            key: _actionAcceptFile,
+            label: 'Accept',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+          NotificationActionButton(
+            key: _actionDeclineFile,
+            label: 'Decline',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+        ],
       ),
-      actionButtons: [
-        NotificationActionButton(
-          key: _actionAcceptFile,
-          label: 'Accept',
-          actionType: ActionType.SilentAction,
-          autoDismissible: false,
-        ),
-        NotificationActionButton(
-          key: _actionDeclineFile,
-          label: 'Decline',
-          actionType: ActionType.SilentAction,
-          autoDismissible: false,
-        ),
-      ],
-    ));
+    );
   }
 
   void _handleOfferResolved(Map<String, dynamic> message) {
