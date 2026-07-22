@@ -472,9 +472,11 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   void _scheduleDeviceNameSave(String value) {
-    setState(() {
-      deviceName = value;
-    });
+    if (value.isNotEmpty) {
+      setState(() {
+        deviceName = value;
+      });
+    }
     _nameSaveDebounce?.cancel();
     _nameSaveDebounce = Timer(
       const Duration(milliseconds: 400),
@@ -486,12 +488,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _nameSaveDebounce?.cancel();
     final name = _deviceNameController.text.trim();
     if (name.isEmpty) {
-      final savedName = await AppSettings.getDeviceName();
-      if (!mounted) return;
-      setState(() {
-        deviceName = savedName;
-        _deviceNameController.text = savedName;
-      });
       return;
     }
 
@@ -504,6 +500,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       }
     });
     await _refreshAdvertisement();
+    DeviceDiscoveryService.instance.requestRefresh();
   }
 
   Future<void> _generateDeviceName() async {
