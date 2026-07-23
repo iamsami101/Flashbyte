@@ -377,6 +377,7 @@ class AndroidConnectionNotificationService {
       _progressNotificationTimer?.cancel();
       _progressNotificationTimer = null;
       unawaited(AwesomeNotifications().cancel(_progressNotificationId));
+      unawaited(_showConnectionNotification());
     }
 
     if (_activeTransfers.isNotEmpty) {
