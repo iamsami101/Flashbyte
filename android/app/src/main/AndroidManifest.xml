@@ -40,7 +40,9 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:noHistory="true" />
+            android:noHistory="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

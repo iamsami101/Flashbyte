@@ -15,10 +15,12 @@ class ClipboardSendActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate called")
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        Log.d(TAG, "onWindowFocusChanged: hasFocus=$hasFocus")
         if (hasFocus) {
             readAndSendClipboard()
         }
