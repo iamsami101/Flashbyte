@@ -40,6 +40,7 @@ class AndroidConnectionNotificationService {
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
   Timer? _progressNotificationTimer;
   DateTime? _lastProgressNotificationUpdate;
+  int _notificationRevision = 0;
   bool _initialized = false;
 
   Future<void> initialize() async {
@@ -179,6 +180,10 @@ class AndroidConnectionNotificationService {
   bool get _showConnectionActions =>
       _activeTransfers.isEmpty && _pendingOffers.isEmpty;
 
+  void _bumpNotificationRevision() {
+    _notificationRevision++;
+  }
+
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
       await _showConnectionNotification();
@@ -189,6 +194,7 @@ class AndroidConnectionNotificationService {
     _pausedTransfers.clear();
     _pendingOffers.clear();
     _cachedClipboardText = null;
+    _bumpNotificationRevision();
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     unawaited(AwesomeNotifications().cancel(_progressNotificationId));
@@ -199,9 +205,14 @@ class AndroidConnectionNotificationService {
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
 
+    final expectedRevision = _notificationRevision;
     _cachedClipboardText = (await Clipboard.getData(
       Clipboard.kTextPlain,
     ))?.text;
+
+    if (expectedRevision != _notificationRevision) {
+      return;
+    }
 
     final actions = _showConnectionActions
         ? [
@@ -322,6 +333,7 @@ class AndroidConnectionNotificationService {
       progress: 0,
     );
 
+    _bumpNotificationRevision();
     unawaited(_showConnectionNotification());
     _scheduleProgressNotificationUpdate(force: true);
   }
@@ -376,6 +388,7 @@ class AndroidConnectionNotificationService {
       unawaited(AwesomeNotifications().cancel(_progressNotificationId));
     }
 
+    _bumpNotificationRevision();
     unawaited(_showConnectionNotification());
 
     if (_activeTransfers.isNotEmpty) {
@@ -389,6 +402,7 @@ class AndroidConnectionNotificationService {
     if (fileId == null) return;
 
     _pendingOffers.add(fileId);
+    _bumpNotificationRevision();
 
     unawaited(_showConnectionNotification());
     unawaited(
@@ -422,6 +436,7 @@ class AndroidConnectionNotificationService {
     if (fileId == null) return;
 
     _pendingOffers.add(fileId);
+    _bumpNotificationRevision();
 
     unawaited(_showConnectionNotification());
     unawaited(
@@ -460,6 +475,7 @@ class AndroidConnectionNotificationService {
     if (fileId != null) {
       _pendingOffers.remove(fileId);
     }
+    _bumpNotificationRevision();
     if (_pendingOffers.isEmpty) {
       unawaited(AwesomeNotifications().cancel(_offerNotificationId));
     }
@@ -467,6 +483,7 @@ class AndroidConnectionNotificationService {
 
   void _handleOfferCancelledBySender() {
     _pendingOffers.clear();
+    _bumpNotificationRevision();
     unawaited(AwesomeNotifications().cancel(_offerNotificationId));
   }
 
