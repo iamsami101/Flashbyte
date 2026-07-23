@@ -7,6 +7,8 @@ import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+const MethodChannel _requestClipboardChannel = MethodChannel('com.flashbyte/request_clipboard');
+
 class AndroidConnectionNotificationService {
   AndroidConnectionNotificationService._();
 
@@ -148,23 +150,35 @@ class AndroidConnectionNotificationService {
   }
 
   Future<void> _sendClipboard() async {
-    String? text;
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
-      text = data?.text;
-    } catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'flashbyte notifications',
-          context: ErrorDescription('clipboard getData'),
-        ),
-      );
-      text = _cachedClipboardText;
+      if (data?.text != null && data!.text!.isNotEmpty) {
+        SocketService.instance.sendClipboard(data.text!);
+        return;
+      }
+    } catch (_) {
+      // Foreground clipboard access failed — likely running in background
     }
-    if (text == null || text.isEmpty) return;
-    SocketService.instance.sendClipboard(text);
+
+    if (Platform.isAndroid) {
+      try {
+        await _requestClipboardChannel.invokeMethod('requestClipboard');
+        return;
+      } catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'flashbyte notifications',
+            context: ErrorDescription('request clipboard via native activity'),
+          ),
+        );
+      }
+    }
+
+    if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
+      SocketService.instance.sendClipboard(_cachedClipboardText!);
+    }
   }
 
   String get _peerName {

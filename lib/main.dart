@@ -9,6 +9,7 @@ import 'package:flashbyte/app/app_settings.dart';
 import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
 import 'package:flashbyte/app/controllers/app_motion_controller.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flashbyte/features/settings/settings_page.dart';
 import 'package:flashbyte/features/transfers/pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -19,22 +20,26 @@ import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+const MethodChannel _clipboardChannel = MethodChannel('com.flashbyte/clipboard_bridge');
+
 @pragma('vm:entry-point')
 Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
-  await AndroidConnectionNotificationService.instance
-      .handleNotificationAction(receivedAction);
+  await AndroidConnectionNotificationService.instance.handleNotificationAction(
+    receivedAction,
+  );
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AwesomeNotifications().initialize(
-    'resource://notification_icon',
+    'resource://drawable/ic_notification',
     [
       NotificationChannel(
         channelKey: 'tcp_connection_service',
         channelName: 'TCP connection service',
-        channelDescription: 'Shows when Flashbyte has an active TCP connection.',
+        channelDescription:
+            'Shows when Flashbyte has an active TCP connection.',
         channelShowBadge: false,
         importance: NotificationImportance.Min,
         playSound: false,
@@ -44,8 +49,7 @@ Future<void> main() async {
       NotificationChannel(
         channelKey: 'file_transfer_progress',
         channelName: 'File transfer progress',
-        channelDescription:
-            'Shows active Flashbyte file transfer progress.',
+        channelDescription: 'Shows active Flashbyte file transfer progress.',
         channelShowBadge: false,
         importance: NotificationImportance.High,
         playSound: false,
@@ -55,8 +59,7 @@ Future<void> main() async {
       NotificationChannel(
         channelKey: 'file_offers',
         channelName: 'File offers',
-        channelDescription:
-            'Shows incoming file offers and pending sends.',
+        channelDescription: 'Shows incoming file offers and pending sends.',
         channelShowBadge: false,
         importance: NotificationImportance.High,
         playSound: false,
@@ -75,6 +78,16 @@ Future<void> main() async {
   }
   await AppAppearanceController.instance.load();
   await AppMotionController.instance.load();
+
+  _clipboardChannel.setMethodCallHandler((call) async {
+    if (call.method == 'sendClipboardText') {
+      final text = call.arguments as String?;
+      if (text != null && text.isNotEmpty) {
+        SocketService.instance.sendClipboard(text);
+      }
+    }
+  });
+
   runApp(const MainApp());
 }
 

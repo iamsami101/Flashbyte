@@ -35,6 +35,12 @@
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <activity
+            android:name=".ClipboardSendActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

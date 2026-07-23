@@ -621,6 +621,7 @@ void fileReceiverIsolate(List<Object> args) {
           {'type': 'set_clipboard'},
           payloadBytes: utf8.encode(text),
         );
+        await clientSocket!.flush();
         toUiSendPort.send({'status': 'clipboard_sent', 'text': text});
       }
       return;
