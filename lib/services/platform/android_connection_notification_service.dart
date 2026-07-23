@@ -160,45 +160,41 @@ class AndroidConnectionNotificationService {
   }
 
   Future<void> _sendClipboard() async {
-    // Path 1: direct Clipboard.getData() — works when app has foreground focus
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      if (data?.text != null && data!.text!.isNotEmpty) {
-        _clipLog('direct Clipboard.getData() succeeded, text="${data.text!}"');
-        SocketService.instance.sendClipboard(data.text!);
-        return;
-      }
-      _clipLog('direct Clipboard.getData() returned null/empty');
-    } catch (e) {
-      _clipLog('direct Clipboard.getData() threw: $e');
-    }
-
-    // Path 2: native translucent activity (Android)
-    if (Platform.isAndroid) {
+    if (!Platform.isAndroid) {
+      _clipLog('non-Android: trying direct clipboard');
       try {
-        _clipLog('invoking request_clipboard native channel');
-        await _requestClipboardChannel.invokeMethod('requestClipboard');
-        _clipLog('request_clipboard invoke returned (activity launched)');
-        return;
-      } catch (error, stackTrace) {
-        _clipLog('request_clipboard invoke failed: $error');
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'flashbyte notifications',
-            context: ErrorDescription('request clipboard via native activity'),
-          ),
-        );
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        if (data?.text != null && data!.text!.isNotEmpty) {
+          SocketService.instance.sendClipboard(data.text!);
+          return;
+        }
+      } catch (e) {
+        _clipLog('non-Android clipboard failed: $e');
       }
+      if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
+        SocketService.instance.sendClipboard(_cachedClipboardText!);
+      }
+      return;
     }
 
-    // Path 3: cached clipboard text (last resort)
-    if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
-      _clipLog('falling back to cached clipboard text: "$_cachedClipboardText"');
-      SocketService.instance.sendClipboard(_cachedClipboardText!);
-    } else {
-      _clipLog('all clipboard paths exhausted, nothing to send');
+    try {
+      _clipLog('invoking request_clipboard native channel');
+      await _requestClipboardChannel.invokeMethod('requestClipboard');
+      _clipLog('request_clipboard invoke returned (activity launched)');
+    } catch (error, stackTrace) {
+      _clipLog('request_clipboard invoke failed: $error');
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'flashbyte notifications',
+          context: ErrorDescription('request clipboard via native activity'),
+        ),
+      );
+      if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
+        _clipLog('falling back to cached clipboard text: "$_cachedClipboardText"');
+        SocketService.instance.sendClipboard(_cachedClipboardText!);
+      }
     }
   }
 

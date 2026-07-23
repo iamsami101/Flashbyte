@@ -15,7 +15,16 @@ class ClipboardSendActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+    }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            readAndSendClipboard()
+        }
+    }
+
+    private fun readAndSendClipboard() {
         try {
             val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             if (!clipboardManager.hasPrimaryClip()) {
