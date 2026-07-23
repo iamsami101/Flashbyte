@@ -90,6 +90,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
               message['fileId'] as String?,
               (message['progress'] as num?)?.toDouble(),
             );
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.inProgress,
+            );
             break;
           case 'completed':
             replaceTransferWidget(
@@ -129,6 +133,10 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _setTransferProgress(
               message['fileId'] as String?,
               (message['progress'] as num?)?.toDouble(),
+            );
+            _updateTransferStatus(
+              message['fileId'] as String?,
+              TransferStatus.inProgress,
             );
             break;
           case 'send_complete':
@@ -839,6 +847,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
     }
     final progress = ValueNotifier<double>(0);
     _transferProgress[uuid] = progress;
+    final hadPendingStatus = _pendingTransferStatuses.containsKey(uuid);
     final pendingStatus =
         _pendingTransferStatuses.remove(uuid) ?? TransferStatus.inProgress;
     final pendingPausedBy = _pendingTransferPausedBy.remove(uuid);
@@ -856,7 +865,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
         value: progress,
         isReceived: isReceived,
         uuid: uuid,
-        status: status == TransferStatus.inProgress ? pendingStatus : status,
+        status: hadPendingStatus ? pendingStatus : status,
         canResume: pendingCanResume,
         onPause: () =>
             SocketService.instance.pauseTransfer(uuid, isReceiver: isReceived),

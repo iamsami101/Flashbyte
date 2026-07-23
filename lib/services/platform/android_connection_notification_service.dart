@@ -247,9 +247,18 @@ class AndroidConnectionNotificationService {
         }
         break;
       case 'send_progress':
-      case 'progress':
+      case 'progress': {
         _updateTransfer(message);
+        final fileId = message['fileId'] as String?;
+        if (fileId != null && _pendingOffers.contains(fileId)) {
+          _handleOfferResolved(message);
+          if (_activeTransfers.containsKey(fileId)) {
+            unawaited(_showConnectionNotification());
+            _scheduleProgressNotificationUpdate(force: true);
+          }
+        }
         break;
+      }
       case 'transfer_paused':
         _markTransferPaused(message);
         break;
