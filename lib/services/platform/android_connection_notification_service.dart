@@ -9,6 +9,16 @@ import 'package:flutter/services.dart';
 
 const MethodChannel _requestClipboardChannel = MethodChannel('com.flashbyte/request_clipboard');
 
+/// Set to true to see clipboard send diagnostic logs.
+bool _clipboardLog = true;
+
+void _clipLog(String message) {
+  if (_clipboardLog) {
+    // ignore: avoid_print
+    debugPrint('[ClipboardSend] $message');
+  }
+}
+
 class AndroidConnectionNotificationService {
   AndroidConnectionNotificationService._();
 
@@ -150,21 +160,28 @@ class AndroidConnectionNotificationService {
   }
 
   Future<void> _sendClipboard() async {
+    // Path 1: direct Clipboard.getData() — works when app has foreground focus
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       if (data?.text != null && data!.text!.isNotEmpty) {
+        _clipLog('direct Clipboard.getData() succeeded, text="${data.text!}"');
         SocketService.instance.sendClipboard(data.text!);
         return;
       }
-    } catch (_) {
-      // Foreground clipboard access failed — likely running in background
+      _clipLog('direct Clipboard.getData() returned null/empty');
+    } catch (e) {
+      _clipLog('direct Clipboard.getData() threw: $e');
     }
 
+    // Path 2: native translucent activity (Android)
     if (Platform.isAndroid) {
       try {
+        _clipLog('invoking request_clipboard native channel');
         await _requestClipboardChannel.invokeMethod('requestClipboard');
+        _clipLog('request_clipboard invoke returned (activity launched)');
         return;
       } catch (error, stackTrace) {
+        _clipLog('request_clipboard invoke failed: $error');
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: error,
@@ -176,8 +193,12 @@ class AndroidConnectionNotificationService {
       }
     }
 
+    // Path 3: cached clipboard text (last resort)
     if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
+      _clipLog('falling back to cached clipboard text: "$_cachedClipboardText"');
       SocketService.instance.sendClipboard(_cachedClipboardText!);
+    } else {
+      _clipLog('all clipboard paths exhausted, nothing to send');
     }
   }
 

@@ -82,6 +82,8 @@ Future<void> main() async {
   _clipboardChannel.setMethodCallHandler((call) async {
     if (call.method == 'sendClipboardText') {
       final text = call.arguments as String?;
+      // ignore: avoid_print
+      debugPrint('[ClipboardBridge] received text from native, length=${text?.length}');
       if (text != null && text.isNotEmpty) {
         SocketService.instance.sendClipboard(text);
       }

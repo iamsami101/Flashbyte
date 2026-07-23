@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:flashbyte/app/app_settings.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
 import 'package:flashbyte/services/transfer/file_transfer_isolate.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
@@ -206,8 +207,12 @@ class SocketService {
         }
         if (typedMessage['command'] == 'set_clipboard') {
           final text = typedMessage['text'] as String?;
+          // ignore: avoid_print
+          debugPrint('[SocketService] set_clipboard received, text="$text"');
           if (text != null) {
             Clipboard.setData(ClipboardData(text: text));
+            // ignore: avoid_print
+            debugPrint('[SocketService] set_clipboard written to system clipboard');
           }
           return;
         }
@@ -273,13 +278,19 @@ class SocketService {
   }
 
   void sendClipboard(String text) {
+    // ignore: avoid_print
+    debugPrint('[SocketService] sendClipboard: length=${text.length}');
     if (_toIsolateSendPort == null) {
+      // ignore: avoid_print
+      debugPrint('[SocketService] sendClipboard: no isolate send port, dropping');
       return;
     }
     _toIsolateSendPort!.send({
       'command': 'send_clipboard',
       'text': text,
     });
+    // ignore: avoid_print
+    debugPrint('[SocketService] sendClipboard: command sent to isolate');
   }
 
   void pauseTransfer(String fileId, {required bool isReceiver}) {

@@ -3,6 +3,7 @@ package com.flashbyte
 import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -12,6 +13,7 @@ import java.net.NetworkInterface
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        Log.d("Flashbyte/Main", "configureFlutterEngine: caching engine")
 
         FlutterEngineCache.getInstance().put("clipboard_engine", flutterEngine)
 
@@ -31,8 +33,9 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestClipboard" -> {
+                    Log.d("Flashbyte/Main", "requestClipboard: launching ClipboardSendActivity")
                     val intent = Intent(this, ClipboardSendActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     startActivity(intent)
                     result.success(true)

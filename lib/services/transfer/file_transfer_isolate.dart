@@ -4,10 +4,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
-
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf/saf.dart';
@@ -615,6 +614,8 @@ void fileReceiverIsolate(List<Object> args) {
       return;
     } else if (command['command'] == 'send_clipboard') {
       final text = command['text'] as String?;
+      // ignore: avoid_print
+      debugPrint('[FileTransferIsolate] send_clipboard: text="$text", socket=${clientSocket != null}');
       if (text != null && text.isNotEmpty && clientSocket != null) {
         await _sendSocketFrame(
           clientSocket,
@@ -623,6 +624,11 @@ void fileReceiverIsolate(List<Object> args) {
         );
         await clientSocket!.flush();
         toUiSendPort.send({'status': 'clipboard_sent', 'text': text});
+        // ignore: avoid_print
+        debugPrint('[FileTransferIsolate] send_clipboard: frame sent and flushed');
+      } else {
+        // ignore: avoid_print
+        debugPrint('[FileTransferIsolate] send_clipboard: skipped (text=${text?.length}, socket=${clientSocket != null})');
       }
       return;
     }
