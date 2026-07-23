@@ -29,6 +29,13 @@ Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
   );
 }
 
+@pragma('vm:entry-point')
+Future<void> onNotificationDismissed(ReceivedAction receivedAction) async {
+  await AndroidConnectionNotificationService.instance.handleNotificationDismissed(
+    receivedAction,
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -71,6 +78,7 @@ Future<void> main() async {
 
   await AwesomeNotifications().setListeners(
     onActionReceivedMethod: onNotificationActionReceived,
+    onDismissActionReceivedMethod: onNotificationDismissed,
   );
 
   if (await AppSettings.getUseTls()) {
@@ -157,6 +165,7 @@ class _StartupEffectsState extends State<StartupEffects> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(AndroidConnectionNotificationService.instance.initialize());
       unawaited(_showBatteryOptimizationPromptIfNeeded());
+      unawaited(_requestNotificationPermissionIfNeeded());
     });
   }
 
@@ -230,6 +239,15 @@ class _StartupEffectsState extends State<StartupEffects> {
 
     if (shouldOpenSettings == true) {
       await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+    }
+  }
+
+  Future<void> _requestNotificationPermissionIfNeeded() async {
+    if (!Platform.isAndroid) return;
+    if (!mounted) return;
+    final allowed = await AwesomeNotifications().isNotificationAllowed();
+    if (!allowed) {
+      await AwesomeNotifications().requestPermissionToSendNotifications();
     }
   }
 

@@ -101,6 +101,13 @@ class AndroidConnectionNotificationService {
     }
   }
 
+  Future<void> handleNotificationDismissed(ReceivedAction receivedAction) async {
+    if (receivedAction.id == _foregroundServiceId &&
+        SocketService.instance.hasEstablishedConnection) {
+      unawaited(_showConnectionNotification());
+    }
+  }
+
   String? _activeTransferFileId() {
     if (_activeTransfers.isNotEmpty) return _activeTransfers.keys.last;
     final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
@@ -253,7 +260,6 @@ class AndroidConnectionNotificationService {
           title: 'Flashbyte',
           body: 'Connected to $_peerName',
           category: NotificationCategory.Service,
-          locked: true,
           autoDismissible: false,
           showWhen: false,
           displayOnForeground: true,
