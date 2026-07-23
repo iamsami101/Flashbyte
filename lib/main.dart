@@ -229,7 +229,7 @@ class _StartupEffectsState extends State<StartupEffects> {
   }
 
   Future<void> _requestNotificationPermissionIfNeeded() async {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS) return;
     if (!mounted) return;
     final allowed = await AwesomeNotifications().isNotificationAllowed();
     if (!allowed) {
