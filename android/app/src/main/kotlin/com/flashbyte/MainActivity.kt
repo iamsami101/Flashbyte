@@ -1,21 +1,15 @@
 package com.flashbyte
 
 import android.content.Context
-import android.content.Intent
 import android.net.wifi.WifiManager
-import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.net.NetworkInterface
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        Log.d("Flashbyte/Main", "configureFlutterEngine: caching engine")
-
-        FlutterEngineCache.getInstance().put("clipboard_engine", flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -23,23 +17,6 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isHotspotEnabled" -> result.success(isHotspotEnabled())
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "com.flashbyte/request_clipboard"
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "requestClipboard" -> {
-                    Log.d("Flashbyte/Main", "requestClipboard: launching ClipboardSendActivity")
-                    val intent = Intent(this, ClipboardSendActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    startActivity(intent)
-                    result.success(true)
-                }
                 else -> result.notImplemented()
             }
         }

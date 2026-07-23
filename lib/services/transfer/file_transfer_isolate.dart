@@ -6,7 +6,8 @@ import 'dart:isolate';
 import 'dart:math';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf/saf.dart';
@@ -610,25 +611,6 @@ void fileReceiverIsolate(List<Object> args) {
         });
       } finally {
         toUiSendPort.send({'status': 'outgoing_offer_cancelled'});
-      }
-      return;
-    } else if (command['command'] == 'send_clipboard') {
-      final text = command['text'] as String?;
-      // ignore: avoid_print
-      debugPrint('[FileTransferIsolate] send_clipboard: text="$text", socket=${clientSocket != null}');
-      if (text != null && text.isNotEmpty && clientSocket != null) {
-        await _sendSocketFrame(
-          clientSocket,
-          {'type': 'set_clipboard'},
-          payloadBytes: utf8.encode(text),
-        );
-        await clientSocket!.flush();
-        toUiSendPort.send({'status': 'clipboard_sent', 'text': text});
-        // ignore: avoid_print
-        debugPrint('[FileTransferIsolate] send_clipboard: frame sent and flushed');
-      } else {
-        // ignore: avoid_print
-        debugPrint('[FileTransferIsolate] send_clipboard: skipped (text=${text?.length}, socket=${clientSocket != null})');
       }
       return;
     }
@@ -1403,19 +1385,6 @@ void _handleSocketConnection(
           continue;
         }
 
-        if (frameType == 'set_clipboard') {
-          if (readBuffer.availableBytes < frameHeader.payloadLength) {
-            return;
-          }
-          final payloadBytes = readBuffer.tryReadBytes(frameHeader.payloadLength)!;
-          final text = utf8.decode(payloadBytes);
-          toUiSendPort.send({
-            'command': 'set_clipboard',
-            'text': text,
-          });
-          continue;
-        }
-
         await beginFileFrame(
           headerJson,
           frameHeader.payloadLength,
@@ -1498,19 +1467,6 @@ void _handleSocketConnection(
             if (!keepReading) {
               return;
             }
-            continue;
-          }
-
-          if (frameType == 'set_clipboard') {
-            if (readBuffer.availableBytes < frameHeader.payloadLength) {
-              return;
-            }
-            final payloadBytes = readBuffer.tryReadBytes(frameHeader.payloadLength)!;
-            final text = utf8.decode(payloadBytes);
-            toUiSendPort.send({
-              'command': 'set_clipboard',
-              'text': text,
-            });
             continue;
           }
 

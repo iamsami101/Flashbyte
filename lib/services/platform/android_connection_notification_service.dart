@@ -5,19 +5,6 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-
-const MethodChannel _requestClipboardChannel = MethodChannel('com.flashbyte/request_clipboard');
-
-/// Set to true to see clipboard send diagnostic logs.
-bool _clipboardLog = true;
-
-void _clipLog(String message) {
-  if (_clipboardLog) {
-    // ignore: avoid_print
-    debugPrint('[ClipboardSend] $message');
-  }
-}
 
 class AndroidConnectionNotificationService {
   AndroidConnectionNotificationService._();
@@ -38,7 +25,7 @@ class AndroidConnectionNotificationService {
   static const String _actionResume = 'progress_resume';
   static const String _actionCancel = 'progress_cancel';
   static const String _actionSendFile = 'notif_send_file';
-  static const String _actionSendClipboard = 'notif_send_clipboard';
+  static const String _actionDisconnect = 'notif_disconnect';
   static const String _actionAcceptFile = 'offer_accept';
   static const String _actionDeclineFile = 'offer_decline';
   static const String _actionCancelOffer = 'offer_cancel';
@@ -46,7 +33,6 @@ class AndroidConnectionNotificationService {
   final Map<String, _TransferProgress> _activeTransfers = {};
   final Set<String> _pausedTransfers = {};
   final Set<String> _pendingOffers = {};
-  String? _cachedClipboardText;
 
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -86,8 +72,8 @@ class AndroidConnectionNotificationService {
       case _actionSendFile:
         await _pickAndSendFile();
         break;
-      case _actionSendClipboard:
-        await _sendClipboard();
+      case _actionDisconnect:
+        unawaited(SocketService.instance.disconnect());
         break;
       case _actionAcceptFile:
         _acceptPendingOffer();
@@ -166,45 +152,6 @@ class AndroidConnectionNotificationService {
     }
   }
 
-  Future<void> _sendClipboard() async {
-    if (!Platform.isAndroid) {
-      _clipLog('non-Android: trying direct clipboard');
-      try {
-        final data = await Clipboard.getData(Clipboard.kTextPlain);
-        if (data?.text != null && data!.text!.isNotEmpty) {
-          SocketService.instance.sendClipboard(data.text!);
-          return;
-        }
-      } catch (e) {
-        _clipLog('non-Android clipboard failed: $e');
-      }
-      if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
-        SocketService.instance.sendClipboard(_cachedClipboardText!);
-      }
-      return;
-    }
-
-    try {
-      _clipLog('invoking request_clipboard native channel');
-      await _requestClipboardChannel.invokeMethod('requestClipboard');
-      _clipLog('request_clipboard invoke returned (activity launched)');
-    } catch (error, stackTrace) {
-      _clipLog('request_clipboard invoke failed: $error');
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'flashbyte notifications',
-          context: ErrorDescription('request clipboard via native activity'),
-        ),
-      );
-      if (_cachedClipboardText != null && _cachedClipboardText!.isNotEmpty) {
-        _clipLog('falling back to cached clipboard text: "$_cachedClipboardText"');
-        SocketService.instance.sendClipboard(_cachedClipboardText!);
-      }
-    }
-  }
-
   String get _peerName {
     final info = SocketService.instance.connectedPeerInfo;
     if (info == null) return 'Unknown';
@@ -221,7 +168,6 @@ class AndroidConnectionNotificationService {
     _activeTransfers.clear();
     _pausedTransfers.clear();
     _pendingOffers.clear();
-    _cachedClipboardText = null;
     _progressNotificationTimer?.cancel();
     _progressNotificationTimer = null;
     unawaited(AwesomeNotifications().cancel(_progressNotificationId));
@@ -231,8 +177,6 @@ class AndroidConnectionNotificationService {
 
   Future<void> _showConnectionNotification() async {
     if (!Platform.isAndroid) return;
-
-    _cachedClipboardText = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
 
     final hasTransfers = _activeTransfers.isNotEmpty;
     final actions = hasTransfers
@@ -245,8 +189,8 @@ class AndroidConnectionNotificationService {
               autoDismissible: false,
             ),
             NotificationActionButton(
-              key: _actionSendClipboard,
-              label: 'Send clipboard',
+              key: _actionDisconnect,
+              label: 'Disconnect',
               actionType: ActionType.SilentAction,
               autoDismissible: false,
             ),
