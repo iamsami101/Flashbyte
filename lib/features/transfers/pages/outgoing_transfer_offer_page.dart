@@ -54,6 +54,11 @@ class _OutgoingTransferOfferPageState extends State<OutgoingTransferOfferPage> {
         case 'transfer_declined':
           _showOutcome(_OutgoingOfferOutcome.declined);
           break;
+        case 'outgoing_offer_cancelled':
+          if (_isClosing || _outcome != null) return;
+          _isClosing = true;
+          if (mounted) Navigator.of(context).pop(false);
+          break;
         case 'error':
         case 'disconnect':
           _showOutcome(_OutgoingOfferOutcome.connectionEnded);

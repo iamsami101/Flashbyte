@@ -176,7 +176,7 @@ class AndroidConnectionNotificationService {
 
   Future<void> _handleConnectionChanged(bool isConnected) async {
     if (isConnected) {
-      await _showConnectionNotification();
+      // Shown when a transfer starts (after acceptance)
       return;
     }
 
@@ -248,12 +248,12 @@ class AndroidConnectionNotificationService {
 
     switch (status) {
       case 'peer_info':
-        unawaited(_showConnectionNotification());
+        // Shown when a transfer starts (after acceptance)
         break;
       case 'send_start':
         if (message['pendingAcceptance'] == true) {
-          _startTransfer(message, isReceived: false);
           _showSenderPendingNotification(message);
+          _startTransfer(message, isReceived: false);
         } else {
           _startTransfer(message, isReceived: false);
         }
@@ -275,11 +275,18 @@ class AndroidConnectionNotificationService {
       case 'transfer_resumed':
         _markTransferResumed(message);
         break;
-      case 'transfer_accepted':
+      case 'transfer_accepted': {
+        final fileId = message['fileId'] as String?;
         _handleOfferResolved(message);
+        if (fileId != null && _activeTransfers.containsKey(fileId)) {
+          unawaited(_showConnectionNotification());
+          _scheduleProgressNotificationUpdate(force: true);
+        }
         break;
+      }
       case 'transfer_declined':
         _handleOfferResolved(message);
+        _completeTransfer(message);
         break;
       case 'transfer_cancelled':
         _handleOfferResolved(message);
@@ -315,6 +322,8 @@ class AndroidConnectionNotificationService {
       fileName: message['fileName'] as String? ?? 'file',
       progress: 0,
     );
+
+    if (_pendingOffers.contains(fileId)) return;
 
     unawaited(_showConnectionNotification());
     _scheduleProgressNotificationUpdate(force: true);
@@ -369,8 +378,6 @@ class AndroidConnectionNotificationService {
       _progressNotificationTimer = null;
       unawaited(AwesomeNotifications().cancel(_progressNotificationId));
     }
-
-    unawaited(_showConnectionNotification());
 
     if (_activeTransfers.isNotEmpty) {
       _scheduleProgressNotificationUpdate();

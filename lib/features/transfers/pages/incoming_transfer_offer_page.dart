@@ -48,6 +48,20 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
         case 'offer_cancelled_by_sender':
           setState(() => _outcome = _IncomingOfferOutcome.senderCancelled);
           break;
+        case 'transfer_accepted':
+          if (message['fileId'] == widget.fileId) {
+            if (_isClosing || _outcome != null) return;
+            _isClosing = true;
+            if (mounted) Navigator.of(context).pop(true);
+          }
+          break;
+        case 'transfer_cancelled':
+          if (message['fileId'] == widget.fileId) {
+            if (_isClosing || _outcome != null) return;
+            _isClosing = true;
+            if (mounted) Navigator.of(context).pop(false);
+          }
+          break;
         case 'error':
         case 'disconnect':
           setState(() => _outcome = _IncomingOfferOutcome.connectionEnded);
