@@ -1,0 +1,42 @@
+Categories:
+  - Connectivity
+  - FileSharing
+License: MIT
+AuthorName: Muhammad Sami
+SourceCode: https://github.com/iamsami101/Flashbyte
+IssueTracker: https://github.com/iamsami101/Flashbyte/issues
+Changelog: https://github.com/iamsami101/Flashbyte/releases
+
+AutoName: Flashbyte
+
+RepoType: git
+Repo: https://github.com/iamsami101/Flashbyte.git
+
+Builds:
+  - versionName: 2.0.0
+    versionCode: 1
+    commit: e4e4ec317779989c53af1f426dd9ff476ab830aa
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@3.44.2
+    rm:
+      - ios
+      - linux
+      - macos
+      - web
+      - windows
+    prebuild:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get --enforce-lockfile
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --release
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+CurrentVersion: 2.0.0
+CurrentVersionCode: 1

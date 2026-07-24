@@ -1,0 +1,12 @@
+Flashbyte lets you send and receive files directly between your devices — phone, laptop, or desktop — with no internet, no accounts, and no cloud uploads. Just pick a file, tap the device you want to send it to, and it transfers straight across your local network at full speed.
+
+No sign-ups, no file size limits, no third parties involved. Everything stays on your local network.
+
+• Direct device-to-device transfers over your local network
+• No internet connection required
+• No accounts, no sign-ups, no tracking
+• No file size limits — send files of any size
+• All file types supported
+• Cross-platform: Android, Linux, macOS, Windows, iOS
+• Full encryption support
+• Open source under MIT license

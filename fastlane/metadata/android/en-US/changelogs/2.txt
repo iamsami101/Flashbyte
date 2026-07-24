@@ -1,0 +1,3 @@
+- Initial F-Droid release
+- Direct peer-to-peer file sharing over local network
+- TLS encryption for secure transfers
