@@ -24,7 +24,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.44.2
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Install dependencies
@@ -77,7 +77,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.44.2
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Enable Linux desktop
@@ -111,7 +111,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.44.2
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Enable Windows desktop
@@ -146,7 +146,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.44.2
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Enable macOS desktop
