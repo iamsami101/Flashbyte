@@ -456,5 +456,4 @@ class SocketService {
 
     _messageStreamController.add(message);
   }
-
 }

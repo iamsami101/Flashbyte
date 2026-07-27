@@ -1481,8 +1481,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                       children: [
                         for (final (index, device) in discoveredDevices.indexed)
                           reducedMotion
-                              ? _buildDeviceTile(device, key: ValueKey(device.id))
-                              : _buildDeviceTile(device, key: ValueKey(device.id))
+                              ? _buildDeviceTile(
+                                  device,
+                                  key: ValueKey(device.id),
+                                )
+                              : _buildDeviceTile(
+                                      device,
+                                      key: ValueKey(device.id),
+                                    )
                                     .animate()
                                     .fadeIn(
                                       duration: 180.ms,

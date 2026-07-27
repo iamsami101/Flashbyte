@@ -28,16 +28,17 @@ Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
 
 @pragma('vm:entry-point')
 Future<void> onNotificationDismissed(ReceivedAction receivedAction) async {
-  await AndroidConnectionNotificationService.instance.handleNotificationDismissed(
-    receivedAction,
-  );
+  await AndroidConnectionNotificationService.instance
+      .handleNotificationDismissed(
+        receivedAction,
+      );
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AwesomeNotifications().initialize(
-    'resource://drawable/notification_icon',
+    'resource://drawable/ic_notification',
     [
       NotificationChannel(
         channelKey: 'tcp_connection_service',

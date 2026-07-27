@@ -87,7 +87,9 @@ class AndroidConnectionNotificationService {
     }
   }
 
-  Future<void> handleNotificationDismissed(ReceivedAction receivedAction) async {
+  Future<void> handleNotificationDismissed(
+    ReceivedAction receivedAction,
+  ) async {
     if (receivedAction.id == _foregroundServiceId &&
         SocketService.instance.hasEstablishedConnection) {
       unawaited(_showConnectionNotification());
@@ -96,14 +98,16 @@ class AndroidConnectionNotificationService {
 
   String? _activeTransferFileId() {
     if (_activeTransfers.isNotEmpty) return _activeTransfers.keys.last;
-    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    final activeTransfers = SocketService.instance
+        .getActiveTransferIsReceived();
     return activeTransfers.keys.isEmpty ? null : activeTransfers.keys.last;
   }
 
   bool _activeTransferIsReceived(String fileId) {
     final transfer = _activeTransfers[fileId];
     if (transfer != null) return transfer.isReceived;
-    final activeTransfers = SocketService.instance.getActiveTransferIsReceived();
+    final activeTransfers = SocketService.instance
+        .getActiveTransferIsReceived();
     return activeTransfers[fileId] ?? true;
   }
 
@@ -247,33 +251,35 @@ class AndroidConnectionNotificationService {
         }
         break;
       case 'send_progress':
-      case 'progress': {
-        _updateTransfer(message);
-        final fileId = message['fileId'] as String?;
-        if (fileId != null && _pendingOffers.contains(fileId)) {
-          _handleOfferResolved(message);
-          if (_activeTransfers.containsKey(fileId)) {
-            unawaited(_showConnectionNotification());
-            _scheduleProgressNotificationUpdate(force: true);
+      case 'progress':
+        {
+          _updateTransfer(message);
+          final fileId = message['fileId'] as String?;
+          if (fileId != null && _pendingOffers.contains(fileId)) {
+            _handleOfferResolved(message);
+            if (_activeTransfers.containsKey(fileId)) {
+              unawaited(_showConnectionNotification());
+              _scheduleProgressNotificationUpdate(force: true);
+            }
           }
+          break;
         }
-        break;
-      }
       case 'transfer_paused':
         _markTransferPaused(message);
         break;
       case 'transfer_resumed':
         _markTransferResumed(message);
         break;
-      case 'transfer_accepted': {
-        final fileId = message['fileId'] as String?;
-        _handleOfferResolved(message);
-        if (fileId != null && _activeTransfers.containsKey(fileId)) {
-          unawaited(_showConnectionNotification());
-          _scheduleProgressNotificationUpdate(force: true);
+      case 'transfer_accepted':
+        {
+          final fileId = message['fileId'] as String?;
+          _handleOfferResolved(message);
+          if (fileId != null && _activeTransfers.containsKey(fileId)) {
+            unawaited(_showConnectionNotification());
+            _scheduleProgressNotificationUpdate(force: true);
+          }
+          break;
         }
-        break;
-      }
       case 'transfer_declined':
         _handleOfferResolved(message);
         _completeTransfer(message);
@@ -382,27 +388,29 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: _offerNotificationId,
-        channelKey: _offerChannelKey,
-        title: 'Waiting for receiver to accept',
-        body: fileName,
-        locked: true,
-        autoDismissible: false,
-        showWhen: false,
-        displayOnForeground: true,
-        displayOnBackground: true,
-      ),
-      actionButtons: [
-        NotificationActionButton(
-          key: _actionCancelOffer,
-          label: 'Cancel',
-          actionType: ActionType.SilentAction,
+    unawaited(
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _offerNotificationId,
+          channelKey: _offerChannelKey,
+          title: 'Waiting for receiver to accept',
+          body: fileName,
+          locked: true,
           autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
         ),
-      ],
-    ));
+        actionButtons: [
+          NotificationActionButton(
+            key: _actionCancelOffer,
+            label: 'Cancel',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+        ],
+      ),
+    );
   }
 
   void _showReceiverOfferNotification(Map<String, dynamic> message) {
@@ -412,33 +420,35 @@ class AndroidConnectionNotificationService {
 
     _pendingOffers.add(fileId);
 
-    unawaited(AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: _offerNotificationId,
-        channelKey: _offerChannelKey,
-        title: 'Incoming file',
-        body: fileName,
-        locked: true,
-        autoDismissible: false,
-        showWhen: false,
-        displayOnForeground: true,
-        displayOnBackground: true,
+    unawaited(
+      AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: _offerNotificationId,
+          channelKey: _offerChannelKey,
+          title: 'Incoming file',
+          body: fileName,
+          locked: true,
+          autoDismissible: false,
+          showWhen: false,
+          displayOnForeground: true,
+          displayOnBackground: true,
+        ),
+        actionButtons: [
+          NotificationActionButton(
+            key: _actionAcceptFile,
+            label: 'Accept',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+          NotificationActionButton(
+            key: _actionDeclineFile,
+            label: 'Decline',
+            actionType: ActionType.SilentAction,
+            autoDismissible: false,
+          ),
+        ],
       ),
-      actionButtons: [
-        NotificationActionButton(
-          key: _actionAcceptFile,
-          label: 'Accept',
-          actionType: ActionType.SilentAction,
-          autoDismissible: false,
-        ),
-        NotificationActionButton(
-          key: _actionDeclineFile,
-          label: 'Decline',
-          actionType: ActionType.SilentAction,
-          autoDismissible: false,
-        ),
-      ],
-    ));
+    );
   }
 
   void _handleOfferResolved(Map<String, dynamic> message) {
