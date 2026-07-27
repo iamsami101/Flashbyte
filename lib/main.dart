@@ -37,7 +37,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AwesomeNotifications().initialize(
-    'resource://drawable/ic_notification',
+    'resource://drawable/notification_icon',
     [
       NotificationChannel(
         channelKey: 'tcp_connection_service',
