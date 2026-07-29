@@ -4,6 +4,12 @@
     <h3>A Simple and fast local file sharing app.</h3>
 </div>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/version-2.0.0-blue?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/github/actions/workflow/status/iamsami101/Flashbyte/ci.yml?label=CI&style=for-the-badge" alt="CI Status"/>
+  <img src="https://img.shields.io/badge/flutter-3.29-blue?logo=flutter&style=for-the-badge" alt="Flutter"/>
+  <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="Flutter"/>
+</p>
 
 ### Features
 - **TLS Encryption**: You can send files over an encrypted connection.
