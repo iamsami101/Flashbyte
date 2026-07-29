@@ -52,7 +52,7 @@ void fileReceiverIsolate(List<Object> args) {
     toUiSendPort.send({
       'status': 'transfer_paused',
       'fileId': fileId,
-      'pausedBy': ?owner,
+      'pausedBy': owner,
       'canResume': locallyPausedTransfers.containsKey(fileId),
     });
   }
@@ -67,13 +67,11 @@ void fileReceiverIsolate(List<Object> args) {
   }
 
   void handleRemoteTransferPaused(String fileId, {String? pausedBy}) {
-    if (locallyPausedTransfers.containsKey(fileId)) return;
     remotelyPausedTransfers[fileId] = pausedBy ?? 'remote';
     sendTransferPausedState(fileId, pausedBy: pausedBy);
   }
 
   void handleRemoteTransferResumed(String fileId, {String? pausedBy}) {
-    if (locallyPausedTransfers.containsKey(fileId)) return;
     remotelyPausedTransfers.remove(fileId);
     sendTransferResumeState(fileId);
   }
@@ -82,12 +80,7 @@ void fileReceiverIsolate(List<Object> args) {
     remotelyCancelledTransfers.add(fileId);
     locallyPausedTransfers.remove(fileId);
     remotelyPausedTransfers.remove(fileId);
-    toUiSendPort.send({
-      'status': 'transfer_cancelled',
-      'fileId': fileId,
-      'cancelledBy': 'remote',
-    });
-    toUiSendPort.send({'status': 'transfer_cancel_ready', 'fileId': fileId});
+    toUiSendPort.send({'status': 'transfer_cancelled', 'fileId': fileId});
   }
 
   void handleRemoteTransferAccepted(String fileId) {
@@ -422,7 +415,7 @@ void fileReceiverIsolate(List<Object> args) {
         } else if (command['command'] == 'pause_transfer') {
           final fileId = command['fileId'] as String?;
           final role = command['role'] as String? ?? 'receiver';
-          if (fileId != null && !isTransferPaused(fileId)) {
+          if (fileId != null) {
             locallyPausedTransfers[fileId] = role;
             await _sendTransferControlFrame(clientSocket, {
               'type': transferControlType(role, 'paused'),
@@ -542,7 +535,7 @@ void fileReceiverIsolate(List<Object> args) {
     } else if (command['command'] == 'pause_transfer') {
       final fileId = command['fileId'] as String?;
       final role = command['role'] as String? ?? 'receiver';
-      if (fileId != null && !isTransferPaused(fileId)) {
+      if (fileId != null) {
         locallyPausedTransfers[fileId] = role;
         await _sendTransferControlFrame(clientSocket, {
           'type': transferControlType(role, 'paused'),
@@ -1237,9 +1230,6 @@ void _handleSocketConnection(
         }
         return true;
       case 'file_transfer_cancel':
-        // A sender cancellation is an intentional terminal state, not a
-        // transport failure if the sender closes the connection afterward.
-        gracefulDisconnect = true;
         final fileId = headerJson['fileId'] as String?;
         if (fileId != null) {
           onRemoteTransferCancelled?.call(fileId);

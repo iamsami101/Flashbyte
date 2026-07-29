@@ -220,56 +220,58 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
         final hasComfortableHeight = constraints.maxHeight >= 560;
         final verticalGap = hasComfortableHeight ? 28.0 : 18.0;
 
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.only(bottom: verticalGap),
-              child: Column(
-                mainAxisAlignment: hasComfortableHeight
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _maybeAnimate(
-                    context,
-                    _ApprovalHeader(
-                      icon: Icons.file_download_rounded,
-                      title: 'Approve incoming file',
-                      message:
-                          'Review the sender and file before saving it here.',
-                    ),
-                    (child) => child
-                        .animate()
-                        .fadeIn(duration: 180.ms)
-                        .slideY(
-                          begin: 0.05,
-                          end: 0,
-                          curve: Curves.easeOutCubic,
+        return Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: verticalGap),
+                  child: Column(
+                    mainAxisAlignment: hasComfortableHeight
+                        ? MainAxisAlignment.center
+                        : MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _maybeAnimate(
+                        context,
+                        _ApprovalHeader(
+                          icon: Icons.file_download_rounded,
+                          title: 'Approve incoming file',
+                          message:
+                              'Review the sender and file before saving it here.',
                         ),
-                  ),
-                  const SizedBox(height: 20),
-                  _maybeAnimate(
-                    context,
-                    _ResponsiveOfferCards(
-                      senderCard: senderCard,
-                      fileCard: fileCard,
-                    ),
-                    (child) => child
-                        .animate()
-                        .fadeIn(delay: 160.ms, duration: 200.ms)
-                        .slideY(
-                          begin: 0.04,
-                          end: 0,
-                          curve: Curves.easeOutCubic,
+                        (child) => child
+                            .animate()
+                            .fadeIn(duration: 180.ms)
+                            .slideY(
+                              begin: 0.05,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ),
+                      const SizedBox(height: 20),
+                      _maybeAnimate(
+                        context,
+                        _ResponsiveOfferCards(
+                          senderCard: senderCard,
+                          fileCard: fileCard,
                         ),
+                        (child) => child
+                            .animate()
+                            .fadeIn(delay: 160.ms, duration: 200.ms)
+                            .slideY(
+                              begin: 0.04,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: verticalGap),
-                  _OfferActions(onAccept: _accept, onDecline: _decline),
-                ],
+                ),
               ),
             ),
-          ),
+            _OfferActions(onAccept: _accept, onDecline: _decline),
+          ],
         );
       },
     );

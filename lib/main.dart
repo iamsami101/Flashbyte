@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flashbyte/models/discovered_device.dart';
+import 'package:flashbyte/services/discovery/device_discovery_service.dart';
 import 'package:flashbyte/services/platform/android_connection_notification_service.dart';
 import 'package:flashbyte/app/app_settings.dart';
 import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
@@ -253,6 +256,43 @@ class StartPage extends StatefulWidget {
 }
 
 class _StartPageState extends State<StartPage> {
+  List<DiscoveredDevice> _devices = [];
+  final _starRotationTarget = ValueNotifier<double>(0);
+  StreamSubscription<List<DiscoveredDevice>>? _discoverySub;
+  int _previousDeviceCount = 0;
+  final _seenDeviceIds = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _initDiscovery();
+  }
+
+  Future<void> _initDiscovery() async {
+    try {
+      final id = await AppSettings.getDeviceId();
+      final port = await AppSettings.getPort();
+      await DeviceDiscoveryService.instance.startDiscovery(
+        localDeviceId: id,
+        port: port,
+      );
+      DeviceDiscoveryService.instance.requestRefresh();
+      if (mounted) {
+        setState(() => _devices = DeviceDiscoveryService.instance.devices);
+      }
+    } catch (_) {}
+    _discoverySub = DeviceDiscoveryService.instance.devicesStream.listen((d) {
+      if (mounted) setState(() => _devices = d);
+    });
+  }
+
+  @override
+  void dispose() {
+    _discoverySub?.cancel();
+    DeviceDiscoveryService.instance.stopDiscovery();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final useDesktopLayout =
@@ -460,8 +500,6 @@ class _StartPageState extends State<StartPage> {
 
   Widget _buildDesktopHome() {
     final colorScheme = Theme.of(context).colorScheme;
-    final primaryColor = colorScheme.primary;
-    final brightness = Theme.of(context).brightness;
 
     return ColoredBox(
       color: colorScheme.surface,
@@ -474,7 +512,7 @@ class _StartPageState extends State<StartPage> {
               spacing: 48,
               children: [
                 Expanded(
-                  flex: 6,
+                  flex: 5,
                   child: SizedBox(
                     height: 440,
                     child: Column(
@@ -589,7 +627,7 @@ class _StartPageState extends State<StartPage> {
                   ),
                 ),
                 Expanded(
-                  flex: 4,
+                  flex: 5,
                   child: _maybeAnimate(
                     context,
                     Container(
@@ -610,51 +648,7 @@ class _StartPageState extends State<StartPage> {
                           ),
                         ],
                       ),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            top: 24,
-                            left: 26,
-                            child: Text(
-                              "Local network",
-                              style:
-                                  Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 76,
-                            left: 28,
-                            child: _NetworkNode(
-                              icon: Icons.laptop_rounded,
-                              color: colorScheme.tertiaryContainer,
-                              foreground: colorScheme.onTertiaryContainer,
-                            ),
-                          ),
-                          Positioned(
-                            right: 28,
-                            bottom: 44,
-                            child: _NetworkNode(
-                              icon: Icons.smartphone_rounded,
-                              color: colorScheme.secondaryContainer,
-                              foreground: colorScheme.onSecondaryContainer,
-                            ),
-                          ),
-                          Center(
-                            child: RepaintBoundary(
-                              child: StarWidget(
-                                key: ValueKey(
-                                  'desktop-${primaryColor.value}-${brightness.name}',
-                                ),
-                                size: 220,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: _buildOrbitLayout(colorScheme),
                     ),
                     (child) => child
                         .animate()
@@ -691,6 +685,162 @@ class _StartPageState extends State<StartPage> {
       context,
       MaterialPageRoute(builder: (context) => const SettingsPage()),
     );
+  }
+
+  Widget _buildOrbitLayout(ColorScheme colorScheme) {
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+    if (_devices.length > _previousDeviceCount) {
+      _starRotationTarget.value += 1;
+    } else if (_devices.length < _previousDeviceCount) {
+      _starRotationTarget.value -= 1;
+    }
+    _previousDeviceCount = _devices.length;
+
+    final configs = _buildNodeConfigs(colorScheme);
+
+    final starWidget = RepaintBoundary(
+      child: StarWidget(
+        key: ValueKey(
+          'desktop-${colorScheme.primary.value}-${Theme.of(context).brightness.name}',
+        ),
+        size: 220,
+        rotationTarget: _starRotationTarget,
+      ),
+    );
+
+    if (reducedMotion) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Center(child: starWidget),
+          for (final c in configs)
+            _OrbitingNode(
+              angle: c.angle,
+              radius: c.radius,
+              child: c.widget,
+            ),
+        ],
+      );
+    }
+
+    return ListenableBuilder(
+      listenable: _starRotationTarget,
+      builder: (context, _) {
+        return MotionBuilder(
+          converter: SingleMotionConverter(),
+          value: _starRotationTarget.value * 0.5,
+          motion: Motion.smoothSpring(),
+          child: starWidget,
+          builder: (context, orbitValue, child) {
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: child!),
+                for (final c in configs)
+                  _OrbitingNode(
+                    angle: c.angle + orbitValue,
+                    radius: c.radius,
+                    child: c.widget,
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<_NodeConfig> _buildNodeConfigs(ColorScheme colorScheme) {
+    const maxNodes = 6;
+    const remainingSlots = maxNodes - 1;
+    final deviceCount = _devices.length;
+    final showOverflow = deviceCount > remainingSlots;
+    final nodeCount = showOverflow ? remainingSlots : deviceCount;
+
+    const radii = [175.0, 175.0, 175.0, 175.0, 140.0, 140.0];
+    const angles = [
+      -0.79,
+      -2.36,
+      0.79,
+      2.36,
+      0.0,
+      3.14,
+    ];
+
+    final isPhone = Platform.isAndroid || Platform.isIOS;
+    final configs = <_NodeConfig>[
+      _NodeConfig(
+        angle: angles[0],
+        radius: radii[0],
+        widget: _NetworkNode(
+          icon: isPhone ? Icons.phone_iphone_rounded : Icons.laptop_rounded,
+          color: colorScheme.primaryContainer,
+          foreground: colorScheme.onPrimaryContainer,
+          badge: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: colorScheme.primary,
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: colorScheme.surface, width: 2),
+            ),
+            child: Text(
+              'You',
+              style: TextStyle(
+                color: colorScheme.onPrimary,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
+
+    for (var i = 0; i < nodeCount; i++) {
+      final slot = i + 1;
+      Widget node;
+      if (showOverflow && i == remainingSlots - 1) {
+        node = _NetworkNode(
+          icon: Icons.more_horiz_rounded,
+          label: '+${deviceCount - remainingSlots + 1}',
+          color: colorScheme.surfaceContainerHighest,
+          foreground: colorScheme.onSurfaceVariant,
+        );
+      } else {
+        final device = _devices[i];
+        final isNew = _seenDeviceIds.add(device.id);
+        node = _NetworkNode(
+          icon: device.type == DiscoveredDeviceType.laptop
+              ? Icons.laptop_rounded
+              : Icons.smartphone_rounded,
+          color: device.type == DiscoveredDeviceType.laptop
+              ? colorScheme.tertiaryContainer
+              : colorScheme.secondaryContainer,
+          foreground: device.type == DiscoveredDeviceType.laptop
+              ? colorScheme.onTertiaryContainer
+              : colorScheme.onSecondaryContainer,
+        );
+        if (isNew) {
+          node = node
+              .animate()
+              .fadeIn(
+                duration: 400.ms,
+                curve: Curves.easeOutCubic,
+              )
+              .scale(
+                begin: const Offset(0.5, 0.5),
+                end: const Offset(1, 1),
+                duration: 400.ms,
+                curve: Curves.easeOutCubic,
+              );
+        }
+      }
+      configs.add(
+        _NodeConfig(angle: angles[slot], radius: radii[slot], widget: node),
+      );
+    }
+    return configs;
   }
 }
 
@@ -781,38 +931,101 @@ class _NetworkNode extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.foreground,
+    this.label,
+    this.badge,
   });
 
   final IconData icon;
   final Color color;
   final Color foreground;
+  final String? label;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: SizedBox.square(
+                dimension: 58,
+                child: Icon(icon, color: foreground, size: 25),
+              ),
+            ),
+            if (badge != null) Positioned(top: -4, right: -4, child: badge!),
+          ],
+        ),
+        if (label != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              label!,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: foreground),
+            ),
           ),
-        ],
-      ),
-      child: SizedBox.square(
-        dimension: 58,
-        child: Icon(icon, color: foreground, size: 25),
+      ],
+    );
+  }
+}
+
+class _NodeConfig {
+  const _NodeConfig({
+    required this.angle,
+    required this.radius,
+    required this.widget,
+  });
+  final double angle;
+  final double radius;
+  final Widget widget;
+}
+
+class _OrbitingNode extends StatelessWidget {
+  const _OrbitingNode({
+    required this.angle,
+    required this.radius,
+    required this.child,
+  });
+
+  final double angle;
+  final double radius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: Transform.translate(
+        offset: Offset(
+          radius * math.cos(angle),
+          radius * math.sin(angle),
+        ),
+        child: child,
       ),
     );
   }
 }
 
 class StarWidget extends StatefulWidget {
-  const StarWidget({super.key, this.size = 200});
+  const StarWidget({super.key, this.size = 200, this.rotationTarget});
 
   final double size;
+  final ValueNotifier<double>? rotationTarget;
 
   @override
   State<StarWidget> createState() => _StarWidgetState();
@@ -821,6 +1034,7 @@ class StarWidget extends StatefulWidget {
 class _StarWidgetState extends State<StarWidget>
     with SingleTickerProviderStateMixin {
   double rotation = 0.0;
+  late double _lastAngle;
 
   final List<RoundedPolygon> shapeList = [
     MaterialShapes.clover4Leaf,
@@ -834,7 +1048,6 @@ class _StarWidgetState extends State<StarWidget>
   ];
 
   int current = 0;
-  int nextIndex = 0;
 
   late Morph morph;
   late AnimationController controller;
@@ -853,15 +1066,15 @@ class _StarWidgetState extends State<StarWidget>
       shapeList[current],
     );
 
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => setState(() => rotation = -5),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      rotation = -5;
+      widget.rotationTarget?.value = rotation;
+      if (mounted) setState(() {});
+    });
   }
 
   void goToShape(int newIndex) {
     setState(() {
-      nextIndex = newIndex;
-
       morph = Morph(
         shapeList[current],
         shapeList[newIndex],
@@ -904,11 +1117,27 @@ class _StarWidgetState extends State<StarWidget>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onPanStart: (details) {
+        final c = widget.size / 2;
+        _lastAngle = math.atan2(
+          details.localPosition.dy - c,
+          details.localPosition.dx - c,
+        );
+      },
       onPanUpdate: (details) {
+        final c = widget.size / 2;
+        final angle = math.atan2(
+          details.localPosition.dy - c,
+          details.localPosition.dx - c,
+        );
         setState(() {
-          rotation += details.delta.dx / 75;
-          rotation += details.delta.dy / -75;
+          var delta = angle - _lastAngle;
+          if (delta > math.pi) delta -= 2 * math.pi;
+          if (delta < -math.pi) delta += 2 * math.pi;
+          rotation += delta;
         });
+        _lastAngle = angle;
+        widget.rotationTarget?.value = rotation;
       },
       onPanEnd: (details) {
         final v = details.velocity.pixelsPerSecond.dy;

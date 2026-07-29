@@ -146,7 +146,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _exitNotificationSent = true;
     try {
       await SocketService.instance.stopConnectionGracefully();
-      await DeviceDiscoveryService.instance.stop();
+      await DeviceDiscoveryService.instance.stopAdvertising();
     } catch (_) {
       // Leaving the page should not be blocked by cleanup failures.
     }

@@ -313,7 +313,7 @@ class SocketService {
     _toIsolateSendPort?.send({
       'command': command,
       'fileId': fileId,
-      'role': ?role,
+      'role': role,
     });
   }
 

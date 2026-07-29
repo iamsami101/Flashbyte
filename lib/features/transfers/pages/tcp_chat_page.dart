@@ -65,10 +65,15 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _handleDisconnectAfterCancellationWindow();
             break;
           case 'start':
+            final fileId = message['fileId'] as String;
             if (isSharingInProgress &&
                 message['pendingAcceptance'] != true &&
-                !_hasTransferWidget(message['fileId'] as String?)) {
+                !_hasTransferWidget(fileId)) {
               break;
+            }
+
+            if (message['pendingAcceptance'] == true) {
+              SocketService.instance.acceptTransfer(fileId);
             }
 
             setState(() {
@@ -78,21 +83,15 @@ class _TcpChatPageState extends State<TcpChatPage> {
               filePath: message['filePath'],
               fileName: message['fileName'],
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
-              uuid: message['fileId'],
+              uuid: fileId,
               isReceived: true,
-              status: message['pendingAcceptance'] == true
-                  ? TransferStatus.pending
-                  : TransferStatus.inProgress,
+              status: TransferStatus.inProgress,
             );
             break;
           case 'progress':
             _setTransferProgress(
               message['fileId'] as String?,
               (message['progress'] as num?)?.toDouble(),
-            );
-            _updateTransferStatus(
-              message['fileId'] as String?,
-              TransferStatus.inProgress,
             );
             break;
           case 'completed':
@@ -108,10 +107,15 @@ class _TcpChatPageState extends State<TcpChatPage> {
             });
             break;
           case 'send_start':
+            final sendFileId = message['fileId'] as String;
             if (isSharingInProgress == true &&
                 message['pendingAcceptance'] != true &&
-                !_hasTransferWidget(message['fileId'] as String?)) {
+                !_hasTransferWidget(sendFileId)) {
               break;
+            }
+
+            if (message['pendingAcceptance'] == true) {
+              SocketService.instance.acceptTransfer(sendFileId);
             }
 
             setState(() {
@@ -120,23 +124,17 @@ class _TcpChatPageState extends State<TcpChatPage> {
 
             addFileWidget(
               filePath: message['filePath'],
-              uuid: message['fileId'],
+              uuid: sendFileId,
               fileName: message['fileName'],
               fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
               isReceived: false,
-              status: message['pendingAcceptance'] == true
-                  ? TransferStatus.pending
-                  : TransferStatus.inProgress,
+              status: TransferStatus.inProgress,
             );
             break;
           case 'send_progress':
             _setTransferProgress(
               message['fileId'] as String?,
               (message['progress'] as num?)?.toDouble(),
-            );
-            _updateTransferStatus(
-              message['fileId'] as String?,
-              TransferStatus.inProgress,
             );
             break;
           case 'send_complete':
@@ -168,9 +166,6 @@ class _TcpChatPageState extends State<TcpChatPage> {
             );
             break;
           case 'transfer_cancelled':
-            if (message['cancelledBy'] == 'remote') {
-              _suppressNextConnectionIssueAfterCancellation = true;
-            }
             _updateTransferStatus(
               message['fileId'] as String?,
               TransferStatus.cancelled,
@@ -760,22 +755,27 @@ class _TcpChatPageState extends State<TcpChatPage> {
     if (uuid == null) {
       return;
     }
-    _fileTransferWidgets.value = [
-      for (final widget in _fileTransferWidgets.value)
-        widget.uuid == uuid
-            ? TransferWidget(
-                key: ValueKey(widget.uuid),
-                filePath: filePath ?? widget.filePath,
-                fileName: fileName ?? widget.fileName,
-                fileSize: widget.fileSize,
-                isReceived: widget.isReceived,
-                uuid: widget.uuid,
-                value: null,
-                status: TransferStatus.completed,
-                canResume: true,
-              )
-            : widget,
-    ];
+    var found = false;
+    _fileTransferWidgets.value = _fileTransferWidgets.value.map((widget) {
+      if (widget.uuid == uuid) {
+        found = true;
+        return TransferWidget(
+          key: ValueKey(widget.uuid),
+          filePath: filePath ?? widget.filePath,
+          fileName: fileName ?? widget.fileName,
+          fileSize: widget.fileSize,
+          isReceived: widget.isReceived,
+          uuid: widget.uuid,
+          value: null,
+          status: TransferStatus.completed,
+          canResume: true,
+        );
+      }
+      return widget;
+    }).toList();
+    if (!found) {
+      _pendingTransferStatuses[uuid] = TransferStatus.completed;
+    }
   }
 
   void _updateTransferStatus(
@@ -793,14 +793,18 @@ class _TcpChatPageState extends State<TcpChatPage> {
     _fileTransferWidgets.value = [
       for (final widget in widgets)
         if (widget.uuid == uuid) ...[
-          _copyTransferWidget(
-            widget,
-            status: status,
-            canResume: pausedBy == null
-                ? canResume
-                : _transferRole(widget.isReceived) == pausedBy,
-            value: status == TransferStatus.completed ? null : widget.value,
-          ),
+          if (widget.status == TransferStatus.completed ||
+              widget.status == TransferStatus.cancelled)
+            widget
+          else
+            _copyTransferWidget(
+              widget,
+              status: status,
+              canResume: pausedBy == null
+                  ? canResume
+                  : _transferRole(widget.isReceived) == pausedBy,
+              value: status == TransferStatus.completed ? null : widget.value,
+            ),
         ] else
           widget,
     ];
@@ -812,12 +816,15 @@ class _TcpChatPageState extends State<TcpChatPage> {
       return;
     }
 
-    _pendingTransferStatuses[uuid] = status;
-    _pendingTransferCanResume[uuid] = canResume;
-    if (pausedBy == null) {
-      _pendingTransferPausedBy.remove(uuid);
-    } else {
-      _pendingTransferPausedBy[uuid] = pausedBy;
+    if (_pendingTransferStatuses[uuid] != TransferStatus.completed &&
+        _pendingTransferStatuses[uuid] != TransferStatus.cancelled) {
+      _pendingTransferStatuses[uuid] = status;
+      _pendingTransferCanResume[uuid] = canResume;
+      if (pausedBy == null) {
+        _pendingTransferPausedBy.remove(uuid);
+      } else {
+        _pendingTransferPausedBy[uuid] = pausedBy;
+      }
     }
   }
 
