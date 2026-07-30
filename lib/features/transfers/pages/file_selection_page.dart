@@ -692,31 +692,41 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       return;
     }
 
-    final fileId = message['fileId'] as String?;
-    final fileName = message['fileName'] as String?;
-    final fileSize = message['fileSize'] as int?;
-    if (fileId == null || fileName == null || fileSize == null) {
-      return;
+    List<Map<String, dynamic>> files;
+    if (message['isBatch'] == true) {
+      final rawFiles = message['files'] as List<dynamic>?;
+      if (rawFiles == null || rawFiles.isEmpty) return;
+      files = rawFiles.cast<Map<String, dynamic>>();
+    } else {
+      final fileId = message['fileId'] as String?;
+      final fileName = message['fileName'] as String?;
+      final fileSize = message['fileSize'] as int?;
+      if (fileId == null || fileName == null || fileSize == null) {
+        return;
+      }
+      files = [
+        {'fileId': fileId, 'fileName': fileName, 'fileSize': fileSize},
+      ];
     }
+
+    final firstFileId = files.first['fileId'] as String;
 
     _incomingOfferOpen = true;
     Navigator.of(context)
         .push(
           _buildApprovalRoute(
             IncomingTransferOfferPage(
-              fileId: fileId,
-              fileName: fileName,
-              fileSize: fileSize,
+              files: files,
               sender: SocketService.instance.connectedPeerInfo,
               receiverName: deviceName ?? _deviceNameController.text,
               receiverType: _localDeviceType,
               receiverUsesTls: SocketService.instance.isSecureHosting,
               onAccept: () {
-                SocketService.instance.acceptTransfer(fileId);
+                SocketService.instance.acceptTransfer(firstFileId);
                 Navigator.of(context).pop(true);
               },
               onDecline: () {
-                SocketService.instance.declineTransfer(fileId);
+                SocketService.instance.declineTransfer(firstFileId);
                 Navigator.of(context).pop(false);
               },
             ),
@@ -726,7 +736,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           if (!mounted) return;
           _incomingOfferOpen = false;
           if (accepted == true) {
-            _openChatIfNeeded(initialFiles: const []);
+            _openChatIfNeeded(
+              initialFiles: const [],
+              initialBatchFiles: files,
+            );
           } else {
             unawaited(_restartServer());
           }
@@ -801,13 +814,17 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       : DiscoveredDeviceType.laptop;
 
   void _sendSelectedFiles() {
+    final paths = <String>[];
     for (final pickedFile in selectedFiles) {
       final fileLocation = Platform.isAndroid && pickedFile.uri != null
           ? pickedFile.uri
           : pickedFile.path;
       if (fileLocation != null) {
-        SocketService.instance.sendFile(fileLocation);
+        paths.add(fileLocation);
       }
+    }
+    if (paths.isNotEmpty) {
+      SocketService.instance.sendFiles(paths);
     }
   }
 
@@ -818,6 +835,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
   void _openChatIfNeeded({
     required List<FastFilePickerPath> initialFiles,
+    List<Map<String, dynamic>>? initialBatchFiles,
   }) {
     if (chatOpened) {
       return;
@@ -829,7 +847,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TcpChatPage(initialFiles: initialFiles),
+        builder: (context) => TcpChatPage(
+          initialFiles: initialFiles,
+          initialBatchFiles: initialBatchFiles,
+        ),
       ),
     ).then((_) async {
       if (!mounted) return;

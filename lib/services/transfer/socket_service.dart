@@ -265,6 +265,17 @@ class SocketService {
     });
   }
 
+  void sendFiles(List<String> filePaths) {
+    if (_toIsolateSendPort == null || filePaths.isEmpty) {
+      return;
+    }
+
+    _toIsolateSendPort!.send({
+      'command': 'send_files',
+      'filePaths': filePaths,
+    });
+  }
+
   void pauseTransfer(String fileId, {required bool isReceiver}) {
     _sendTransferControl(
       'pause_transfer',

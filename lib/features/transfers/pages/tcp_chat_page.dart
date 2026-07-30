@@ -11,8 +11,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 class TcpChatPage extends StatefulWidget {
   final List<FastFilePickerPath> initialFiles;
+  final List<Map<String, dynamic>>? initialBatchFiles;
 
-  const TcpChatPage({super.key, this.initialFiles = const []});
+  const TcpChatPage({
+    super.key,
+    this.initialFiles = const [],
+    this.initialBatchFiles,
+  });
 
   @override
   State<TcpChatPage> createState() => _TcpChatPageState();
@@ -48,6 +53,13 @@ class _TcpChatPageState extends State<TcpChatPage> {
     super.initState();
     _peerInfo = SocketService.instance.connectedPeerInfo;
 
+    if (widget.initialBatchFiles != null &&
+        widget.initialBatchFiles!.isNotEmpty) {
+      for (final file in widget.initialBatchFiles!) {
+        _prepopulateBatchWidget(file);
+      }
+    }
+
     _streamSubscription = SocketService.instance.messageStream.listen(
       (message) {
         final status = message['status'] ?? message['command'];
@@ -65,15 +77,25 @@ class _TcpChatPageState extends State<TcpChatPage> {
             _handleDisconnectAfterCancellationWindow();
             break;
           case 'start':
-            final fileId = message['fileId'] as String;
-            if (isSharingInProgress &&
-                message['pendingAcceptance'] != true &&
-                !_hasTransferWidget(fileId)) {
-              break;
-            }
+            if (message['isBatch'] == true) break;
+            final fileId = message['fileId'] as String?;
+            if (fileId == null) break;
 
             if (message['pendingAcceptance'] == true) {
-              SocketService.instance.acceptTransfer(fileId);
+              setState(() {
+                isSharingInProgress = true;
+              });
+              addFileWidget(
+                filePath: message['filePath'],
+                fileName: message['fileName'],
+                fileSize: sizeConvert(
+                  (message['fileSize'] as int).toDouble(),
+                ),
+                uuid: fileId,
+                isReceived: true,
+                status: TransferStatus.pending,
+              );
+              break;
             }
 
             setState(() {
@@ -107,28 +129,34 @@ class _TcpChatPageState extends State<TcpChatPage> {
             });
             break;
           case 'send_start':
-            final sendFileId = message['fileId'] as String;
+            final sendFileId = message['fileId'] as String?;
+            if (sendFileId == null) break;
             if (isSharingInProgress == true &&
                 message['pendingAcceptance'] != true &&
                 !_hasTransferWidget(sendFileId)) {
               break;
             }
 
-            if (message['pendingAcceptance'] == true) {
-              SocketService.instance.acceptTransfer(sendFileId);
-            }
-
             setState(() {
               isSharingInProgress = true;
             });
 
+            final isBatch = message['isBatch'] == true;
+            final needsAccept = message['pendingAcceptance'] == true;
+            final transferStatus = isBatch && needsAccept
+                ? TransferStatus.queued
+                : needsAccept
+                ? TransferStatus.pending
+                : TransferStatus.inProgress;
             addFileWidget(
-              filePath: message['filePath'],
+              filePath: message['filePath'] ?? '',
               uuid: sendFileId,
-              fileName: message['fileName'],
-              fileSize: sizeConvert((message['fileSize'] as int).toDouble()),
+              fileName: message['fileName'] ?? '',
+              fileSize: sizeConvert(
+                (message['fileSize'] as int?)?.toDouble() ?? 0,
+              ),
               isReceived: false,
-              status: TransferStatus.inProgress,
+              status: transferStatus,
             );
             break;
           case 'send_progress':
@@ -826,6 +854,36 @@ class _TcpChatPageState extends State<TcpChatPage> {
         _pendingTransferPausedBy[uuid] = pausedBy;
       }
     }
+  }
+
+  void _prepopulateBatchWidget(Map<String, dynamic> file) {
+    final uuid = file['fileId'] as String?;
+    final fileName = file['fileName'] as String?;
+    final fileSize = file['fileSize'] as int?;
+    if (uuid == null || fileName == null || fileSize == null) return;
+    final progress = ValueNotifier<double>(0);
+    _transferProgress[uuid] = progress;
+    _fileTransferWidgets.value = [
+      ..._fileTransferWidgets.value,
+      TransferWidget(
+        key: ValueKey(uuid),
+        filePath: '',
+        fileName: fileName,
+        fileSize: sizeConvert(fileSize.toDouble()),
+        value: progress,
+        isReceived: true,
+        uuid: uuid,
+        status: TransferStatus.queued,
+        canResume: true,
+        onPause: () =>
+            SocketService.instance.pauseTransfer(uuid, isReceiver: true),
+        onResume: () =>
+            SocketService.instance.resumeTransfer(uuid, isReceiver: true),
+        onCancel: () => _cancelTransfer(uuid, isReceived: true),
+        onAccept: () => SocketService.instance.acceptTransfer(uuid),
+        onDecline: () => SocketService.instance.declineTransfer(uuid),
+      ),
+    ];
   }
 
   void addFileWidget({

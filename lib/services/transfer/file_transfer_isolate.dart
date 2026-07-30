@@ -373,32 +373,65 @@ void fileReceiverIsolate(List<Object> args) {
             continue;
           }
 
+          final batch = <Map<String, dynamic>>[command];
+          while (commandQueue.isNotEmpty &&
+              commandQueue.first['command'] == 'send_file') {
+            batch.add(commandQueue.removeFirst());
+          }
+
           try {
             isSendingFile = true;
-            sendingFileId = await _sendFileCommand(
-              command,
-              clientSocket!,
-              toUiSendPort,
-              shouldCancel: () => localDisconnectRequested,
-              shouldPauseTransfer: isTransferPaused,
-              shouldCancelTransfer: (fileId) =>
-                  locallyCancelledTransfers.contains(fileId) ||
-                  remotelyCancelledTransfers.contains(fileId),
-              shouldAcceptTransfer: (fileId) =>
-                  acceptedTransfers.contains(fileId),
-              shouldDeclineTransfer: (fileId) =>
-                  declinedTransfers.contains(fileId),
-              onPaused: (fileId) async {
-                final role = locallyPausedTransfers[fileId];
-                if (role == null) {
-                  return;
-                }
-                await _sendTransferControlFrame(clientSocket, {
-                  'type': transferControlType(role, 'paused'),
-                  'fileId': fileId,
-                });
-              },
-            );
+            if (batch.length == 1) {
+              sendingFileId = await _sendFileCommand(
+                batch[0],
+                clientSocket!,
+                toUiSendPort,
+                shouldCancel: () => localDisconnectRequested,
+                shouldPauseTransfer: isTransferPaused,
+                shouldCancelTransfer: (fileId) =>
+                    locallyCancelledTransfers.contains(fileId) ||
+                    remotelyCancelledTransfers.contains(fileId),
+                shouldAcceptTransfer: (fileId) =>
+                    acceptedTransfers.contains(fileId),
+                shouldDeclineTransfer: (fileId) =>
+                    declinedTransfers.contains(fileId),
+                onPaused: (fileId) async {
+                  final role = locallyPausedTransfers[fileId];
+                  if (role == null) {
+                    return;
+                  }
+                  await _sendTransferControlFrame(clientSocket, {
+                    'type': transferControlType(role, 'paused'),
+                    'fileId': fileId,
+                  });
+                },
+              );
+            } else {
+              sendingFileId = await _sendBatchCommand(
+                batch,
+                clientSocket!,
+                toUiSendPort,
+                shouldCancel: () => localDisconnectRequested,
+                shouldPauseTransfer: isTransferPaused,
+                shouldCancelTransfer: (fileId) =>
+                    locallyCancelledTransfers.contains(fileId) ||
+                    remotelyCancelledTransfers.contains(fileId),
+                shouldAcceptTransfer: (fileId) =>
+                    acceptedTransfers.contains(fileId),
+                shouldDeclineTransfer: (fileId) =>
+                    declinedTransfers.contains(fileId),
+                onPaused: (fileId) async {
+                  final role = locallyPausedTransfers[fileId];
+                  if (role == null) {
+                    return;
+                  }
+                  await _sendTransferControlFrame(clientSocket, {
+                    'type': transferControlType(role, 'paused'),
+                    'fileId': fileId,
+                  });
+                },
+              );
+            }
             if (sendingFileId != null) {
               locallyPausedTransfers.remove(sendingFileId);
               remotelyPausedTransfers.remove(sendingFileId);
@@ -606,6 +639,13 @@ void fileReceiverIsolate(List<Object> args) {
         toUiSendPort.send({'status': 'outgoing_offer_cancelled'});
       }
       return;
+    } else if (command['command'] == 'send_files') {
+      final filePaths = command['filePaths'] as List<dynamic>;
+      for (final path in filePaths) {
+        commandQueue.add({'command': 'send_file', 'filePath': path as String});
+      }
+      processCommandQueue();
+      return;
     }
     commandQueue.add(command);
     processCommandQueue();
@@ -796,6 +836,172 @@ Future<String?> _sendFileCommand(
     });
     rethrow;
   }
+}
+
+Future<String?> _sendBatchCommand(
+  List<Map<String, dynamic>> batch,
+  dynamic clientSocket,
+  SendPort toUiSendPort, {
+  required bool Function() shouldCancel,
+  required bool Function(String fileId) shouldPauseTransfer,
+  required bool Function(String fileId) shouldCancelTransfer,
+  required bool Function(String fileId) shouldAcceptTransfer,
+  required bool Function(String fileId) shouldDeclineTransfer,
+  Future<void> Function(String fileId)? onPaused,
+}) async {
+  final fileEntries = <_FileEntry>[];
+
+  for (final command in batch) {
+    final filePath = command['filePath'] as String;
+    File? fileToSend;
+    Map<String, dynamic>? fileHeader;
+    int? androidFileDescriptor;
+
+    try {
+      if (Platform.isAndroid) {
+        final saf = Saf();
+        final fileStats = await saf.stat(filePath);
+        if (fileStats == null) {
+          continue;
+        }
+        final fdResult = await saf.openFileDescriptor(filePath, 'r');
+        androidFileDescriptor = fdResult.fd;
+        fileToSend = File(fdResult.path);
+        fileHeader = {
+          'uuid': Uuid().v4(),
+          'name': _displayFileName(fileStats.name),
+          'size': fileStats.length,
+        };
+      } else {
+        fileToSend = File(filePath);
+        final fileStats = await fileToSend.stat();
+        fileHeader = {
+          'uuid': Uuid().v4(),
+          'name': _displayFileName(filePath.split('/').last),
+          'size': fileStats.size,
+        };
+      }
+    } on Exception catch (_) {
+      continue;
+    }
+
+    fileEntries.add(
+      _FileEntry(
+        file: fileToSend,
+        header: fileHeader,
+        fd: androidFileDescriptor,
+        filePath: filePath,
+      ),
+    );
+  }
+
+  if (fileEntries.isEmpty) return null;
+
+  final filesJson = fileEntries
+      .map(
+        (e) => {
+          'uuid': e.header['uuid'],
+          'name': e.header['name'],
+          'size': e.header['size'],
+        },
+      )
+      .toList();
+
+  await _sendSocketFrame(clientSocket, {
+    'type': 'file_batch',
+    'files': filesJson,
+  });
+
+  for (final entry in fileEntries) {
+    toUiSendPort.send({
+      'status': 'send_start',
+      'fileId': entry.header['uuid'],
+      'fileName': entry.header['name'],
+      'fileSize': entry.header['size'],
+      'filePath': entry.filePath,
+      'pendingAcceptance': true,
+      'isBatch': true,
+    });
+  }
+
+  final firstFileId = fileEntries.first.header['uuid'] as String;
+  while (!shouldCancel() &&
+      !shouldCancelTransfer(firstFileId) &&
+      !shouldDeclineTransfer(firstFileId) &&
+      !shouldAcceptTransfer(firstFileId)) {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  }
+  if (shouldCancel() ||
+      shouldCancelTransfer(firstFileId) ||
+      shouldDeclineTransfer(firstFileId)) {
+    throw const _TransferCancelled();
+  }
+
+  for (final entry in fileEntries) {
+    final fileId = entry.header['uuid'] as String;
+    final isFirst = entry == fileEntries.first;
+
+    if (!isFirst) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    toUiSendPort.send({
+      'status': 'send_start',
+      'fileId': fileId,
+      'fileName': entry.header['name'],
+      'fileSize': entry.header['size'],
+      'filePath': entry.filePath,
+      'pendingAcceptance': false,
+      'isBatch': true,
+    });
+
+    await _sendSocketFrame(clientSocket, {
+      'type': 'file_start',
+      'uuid': fileId,
+      'name': entry.header['name'],
+      'size': entry.header['size'],
+    });
+
+    await _sendFileWithWindowedReader(
+      fileId: fileId,
+      file: entry.file,
+      fileSize: entry.header['size'] as int,
+      clientSocket: clientSocket,
+      shouldCancel: shouldCancel,
+      shouldPauseTransfer: shouldPauseTransfer,
+      shouldCancelTransfer: shouldCancelTransfer,
+      onPaused: onPaused,
+    );
+
+    await _sendSocketFrame(clientSocket, {
+      'type': 'file_end',
+      'fileId': fileId,
+    });
+    await clientSocket.flush();
+
+    final fd = entry.fd;
+    if (fd != null) {
+      try {
+        await Saf().closeFileDescriptor(fd);
+      } on Exception catch (_) {}
+    }
+  }
+
+  return firstFileId;
+}
+
+class _FileEntry {
+  final File file;
+  final Map<String, dynamic> header;
+  final int? fd;
+  final String filePath;
+
+  const _FileEntry({
+    required this.file,
+    required this.header,
+    this.fd,
+    required this.filePath,
+  });
 }
 
 String _displayFileName(String value) {
@@ -1182,6 +1388,24 @@ void _handleSocketConnection(
             'filePath': '',
             'fileSize': fileSize,
             'pendingAcceptance': true,
+          });
+        }
+        return true;
+      case 'file_batch':
+        final files = headerJson['files'] as List<dynamic>?;
+        if (files != null && files.isNotEmpty) {
+          final fileList = files.map((f) {
+            return <String, dynamic>{
+              'fileId': f['uuid'] as String,
+              'fileName': f['name'] as String,
+              'fileSize': f['size'] as int,
+            };
+          }).toList();
+          toUiSendPort.send({
+            'status': 'start',
+            'files': fileList,
+            'pendingAcceptance': true,
+            'isBatch': true,
           });
         }
         return true;

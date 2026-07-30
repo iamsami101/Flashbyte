@@ -8,9 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 class IncomingTransferOfferPage extends StatefulWidget {
   const IncomingTransferOfferPage({
     super.key,
-    required this.fileId,
-    required this.fileName,
-    required this.fileSize,
+    required this.files,
     required this.sender,
     required this.receiverName,
     required this.receiverType,
@@ -19,9 +17,7 @@ class IncomingTransferOfferPage extends StatefulWidget {
     required this.onDecline,
   });
 
-  final String fileId;
-  final String fileName;
-  final int fileSize;
+  final List<Map<String, dynamic>> files;
   final Map<String, dynamic>? sender;
   final String receiverName;
   final DiscoveredDeviceType receiverType;
@@ -44,19 +40,22 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
     super.initState();
     _subscription = SocketService.instance.messageStream.listen((message) {
       if (!mounted || _isClosing || _outcome != null) return;
+      final fileIds = widget.files.map((f) => f['fileId'] as String).toSet();
       switch (message['status']) {
         case 'offer_cancelled_by_sender':
           setState(() => _outcome = _IncomingOfferOutcome.senderCancelled);
           break;
         case 'transfer_accepted':
-          if (message['fileId'] == widget.fileId) {
+          if (message['fileId'] is String &&
+              fileIds.contains(message['fileId'])) {
             if (_isClosing || _outcome != null) return;
             _isClosing = true;
             if (mounted) Navigator.of(context).pop(true);
           }
           break;
         case 'transfer_cancelled':
-          if (message['fileId'] == widget.fileId) {
+          if (message['fileId'] is String &&
+              fileIds.contains(message['fileId'])) {
             if (_isClosing || _outcome != null) return;
             _isClosing = true;
             if (mounted) Navigator.of(context).pop(false);
@@ -204,13 +203,20 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
         ),
       ),
     );
+    final fileCount = widget.files.length;
     final fileCard = _OfferSurface(
-      title: 'Requested file',
+      title: fileCount == 1 ? 'Requested file' : 'Requested files',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-        child: _ApprovalFileRow(
-          fileName: widget.fileName,
-          fileSize: _formatFileSize(widget.fileSize),
+        child: Column(
+          spacing: 8,
+          children: [
+            for (final file in widget.files)
+              _ApprovalFileRow(
+                fileName: file['fileName'] as String,
+                fileSize: _formatFileSize(file['fileSize'] as int),
+              ),
+          ],
         ),
       ),
     );
@@ -236,9 +242,12 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
                         context,
                         _ApprovalHeader(
                           icon: Icons.file_download_rounded,
-                          title: 'Approve incoming file',
-                          message:
-                              'Review the sender and file before saving it here.',
+                          title: fileCount == 1
+                              ? 'Approve incoming file'
+                              : 'Approve incoming files',
+                          message: fileCount == 1
+                              ? 'Review the sender and file before saving it here.'
+                              : 'Review the sender and $fileCount files before saving them here.',
                         ),
                         (child) => child
                             .animate()

@@ -5,7 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:heroine/heroine.dart';
 import 'package:motor/motor.dart';
 
-enum TransferStatus { pending, inProgress, paused, completed, cancelled }
+enum TransferStatus {
+  pending,
+  queued,
+  inProgress,
+  paused,
+  completed,
+  cancelled,
+}
 
 class TransferWidget extends StatelessWidget {
   final String fileName;
@@ -50,10 +57,12 @@ class TransferWidget extends StatelessWidget {
     final isCancelled = status == TransferStatus.cancelled;
     final isPaused = status == TransferStatus.paused;
     final isPending = status == TransferStatus.pending;
+    final isQueued = status == TransferStatus.queued;
     final isActive =
         status == TransferStatus.inProgress || status == TransferStatus.paused;
     final transferStateText = switch (status) {
       TransferStatus.pending => isReceived ? "request" : "waiting",
+      TransferStatus.queued => "",
       TransferStatus.cancelled => "cancelled",
       TransferStatus.paused => "paused",
       TransferStatus.completed => isReceived ? "received" : "sent",
@@ -88,7 +97,7 @@ class TransferWidget extends StatelessWidget {
                   borderRadius: BorderRadiusGeometry.circular(13),
                 ),
                 onTap: () {
-                  if (isCancelled || isPending) return;
+                  if (isCancelled || isPending || isQueued) return;
                   openFilePreview(context);
                 },
                 contentPadding: EdgeInsets.symmetric(
@@ -151,8 +160,8 @@ class TransferWidget extends StatelessWidget {
                           Text(
                             isCancelled
                                 ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Cancelled"
-                                : isPending
-                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • Waiting"
+                                : isPending || isQueued
+                                ? "$fileSize • ${fileName.split(".").last.toUpperCase()} • 0%"
                                 : "$fileSize • ${fileName.split(".").last.toUpperCase()} • ${(value * 100).round()}%",
                           ),
                           LinearProgressIndicator(
