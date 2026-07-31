@@ -756,6 +756,15 @@ Future<String?> _sendFileCommand(
       throw const _TransferCancelled();
     }
 
+    toUiSendPort.send({
+      'status': 'send_start',
+      'fileId': fileHeader['uuid'],
+      'fileName': fileHeader['name'],
+      'fileSize': fileHeader['size'],
+      'filePath': command['filePath'],
+      'pendingAcceptance': false,
+    });
+
     await _sendSocketFrame(clientSocket, {
       'type': 'file_start',
       'uuid': fileHeader['uuid'],
