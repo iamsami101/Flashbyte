@@ -158,14 +158,16 @@ jobs:
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath release/windows/flashbyte-windows-x64.zip -Force
 
       - name: Install Inno Setup
-        uses: jrsoftware/setup-innosetup@v2
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
 
       - name: Build Windows installer
         shell: pwsh
         run: |
           $version = (Select-String -Path pubspec.yaml -Pattern '^version:').Line -replace '^version:\s*', ''
           $version = $version.Split('+')[0]
-          ISCC.exe "/DMyAppVersion=$version" windows/installer/flashbyte.iss
+          $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" -ErrorAction Stop | Select-Object -First 1
+          & $iscc.FullName "/DMyAppVersion=$version" windows/installer/flashbyte.iss
           Copy-Item build/installer/flashbyte-windows-setup-x64.exe release/windows/flashbyte-windows-setup-x64.exe
 
       - name: Sign Windows installer
