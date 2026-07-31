@@ -948,6 +948,7 @@ Future<String?> _sendBatchCommand(
   for (final entry in fileEntries) {
     final fileId = entry.header['uuid'] as String;
     final isFirst = entry == fileEntries.first;
+    final isLast = entry == fileEntries.last;
 
     if (!isFirst) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -990,6 +991,12 @@ Future<String?> _sendBatchCommand(
         'cancelled': true,
       });
       await clientSocket.flush();
+      if (isLast) {
+        toUiSendPort.send({
+          'status': 'transfer_cancel_ready',
+          'fileId': fileId,
+        });
+      }
     }
 
     if (!fileCancelled) {
