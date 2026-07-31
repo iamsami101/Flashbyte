@@ -722,7 +722,7 @@ Future<String?> _sendFileCommand(
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': _displayFileName(filePath.split('/').last),
+        'name': _displayFileName(filePath),
         'size': fileStats.size,
       };
     }
@@ -885,7 +885,7 @@ Future<String?> _sendBatchCommand(
         final fileStats = await fileToSend.stat();
         fileHeader = {
           'uuid': Uuid().v4(),
-          'name': _displayFileName(filePath.split('/').last),
+          'name': _displayFileName(filePath),
           'size': fileStats.size,
         };
       }
@@ -1046,7 +1046,9 @@ String _displayFileName(String value) {
   if (name.startsWith('primary:')) {
     name = name.substring('primary:'.length);
   }
-  final separator = name.lastIndexOf('/');
+  final forwardSlash = name.lastIndexOf('/');
+  final backSlash = name.lastIndexOf('\\');
+  final separator = forwardSlash > backSlash ? forwardSlash : backSlash;
   return separator == -1 ? name : name.substring(separator + 1);
 }
 
@@ -1406,7 +1408,7 @@ void _handleSocketConnection(
           toUiSendPort.send({
             'status': 'start',
             'fileId': fileId,
-            'fileName': fileName,
+            'fileName': _displayFileName(fileName),
             'filePath': '',
             'fileSize': fileSize,
             'pendingAcceptance': true,
@@ -1419,7 +1421,7 @@ void _handleSocketConnection(
           final fileList = files.map((f) {
             return <String, dynamic>{
               'fileId': f['uuid'] as String,
-              'fileName': f['name'] as String,
+              'fileName': _displayFileName(f['name'] as String),
               'fileSize': f['size'] as int,
             };
           }).toList();
@@ -1505,7 +1507,7 @@ void _handleSocketConnection(
     try {
       fileTarget = await _createOutputTarget(
         configuredDownloadDirectory: configuredDownloadDirectory,
-        originalFileName: headerJson['name'] as String,
+        originalFileName: _displayFileName(headerJson['name'] as String),
       );
     } catch (e) {
       connectionErrorSent = true;
