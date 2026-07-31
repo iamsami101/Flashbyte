@@ -970,28 +970,45 @@ Future<String?> _sendBatchCommand(
       'size': entry.header['size'],
     });
 
-    await _sendFileSequentially(
-      fileId: fileId,
-      file: entry.file,
-      fileSize: entry.header['size'] as int,
-      clientSocket: clientSocket,
-      shouldCancel: shouldCancel,
-      shouldPauseTransfer: shouldPauseTransfer,
-      shouldCancelTransfer: shouldCancelTransfer,
-      onPaused: onPaused,
-    );
+    var fileCancelled = false;
+    try {
+      await _sendFileSequentially(
+        fileId: fileId,
+        file: entry.file,
+        fileSize: entry.header['size'] as int,
+        clientSocket: clientSocket,
+        shouldCancel: shouldCancel,
+        shouldPauseTransfer: shouldPauseTransfer,
+        shouldCancelTransfer: shouldCancelTransfer,
+        onPaused: onPaused,
+      );
+    } on _TransferCancelled {
+      fileCancelled = true;
+      await _sendSocketFrame(clientSocket, {
+        'type': 'file_end',
+        'fileId': fileId,
+        'cancelled': true,
+      });
+      await clientSocket.flush();
+    }
 
-    await _sendSocketFrame(clientSocket, {
-      'type': 'file_end',
-      'fileId': fileId,
-    });
-    await clientSocket.flush();
+    if (!fileCancelled) {
+      await _sendSocketFrame(clientSocket, {
+        'type': 'file_end',
+        'fileId': fileId,
+      });
+      await clientSocket.flush();
+    }
 
     final fd = entry.fd;
     if (fd != null) {
       try {
         await Saf().closeFileDescriptor(fd);
       } on Exception catch (_) {}
+    }
+
+    if (shouldCancel()) {
+      throw const _TransferCancelled();
     }
   }
 
