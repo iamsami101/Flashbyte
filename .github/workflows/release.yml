@@ -123,11 +123,64 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release
 
-      - name: Package Windows
+      - name: Create self-signed code signing certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=Flashbyte" `
+            -FriendlyName "Flashbyte Release Signing" `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -KeyUsage DigitalSignature `
+            -KeyExportPolicy Exportable `
+            -NotAfter (Get-Date).AddYears(5) `
+            -ErrorAction Stop
+          Write-Host "Created certificate thumbprint: $($cert.Thumbprint)"
+
+      - name: Sign Flashbyte executable
+        shell: pwsh
+        run: |
+          $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -match "Flashbyte" } | Select-Object -First 1
+          if ($null -eq $cert) { throw "Flashbyte signing certificate not found" }
+          $exe = "build/windows/x64/runner/Release/flashbyte.exe"
+          try {
+            Set-AuthenticodeSignature -FilePath $exe -Certificate $cert -HashAlgorithm SHA256 -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
+          } catch {
+            Write-Warning "Timestamp server unavailable; signing without timestamp: $($_.Exception.Message)"
+            Set-AuthenticodeSignature -FilePath $exe -Certificate $cert -HashAlgorithm SHA256 -ErrorAction Stop | Out-Null
+          }
+          Write-Host "flashbyte.exe signature status: $((Get-AuthenticodeSignature -FilePath $exe).Status)"
+
+      - name: Package Windows ZIP
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release/windows
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath release/windows/flashbyte-windows-x64.zip -Force
+
+      - name: Install Inno Setup
+        uses: jrsoftware/setup-innosetup@v2
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:').Line -replace '^version:\s*', ''
+          $version = $version.Split('+')[0]
+          ISCC.exe "/DMyAppVersion=$version" windows/installer/flashbyte.iss
+          Copy-Item build/installer/flashbyte-windows-setup-x64.exe release/windows/flashbyte-windows-setup-x64.exe
+
+      - name: Sign Windows installer
+        shell: pwsh
+        run: |
+          $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -match "Flashbyte" } | Select-Object -First 1
+          if ($null -eq $cert) { throw "Flashbyte signing certificate not found" }
+          $installer = "release/windows/flashbyte-windows-setup-x64.exe"
+          try {
+            Set-AuthenticodeSignature -FilePath $installer -Certificate $cert -HashAlgorithm SHA256 -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
+          } catch {
+            Write-Warning "Timestamp server unavailable; signing without timestamp: $($_.Exception.Message)"
+            Set-AuthenticodeSignature -FilePath $installer -Certificate $cert -HashAlgorithm SHA256 -ErrorAction Stop | Out-Null
+          }
+          Write-Host "installer signature status: $((Get-AuthenticodeSignature -FilePath $installer).Status)"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -226,6 +279,7 @@ jobs:
             flashbyte-android.aab \
             flashbyte-linux-x64.tar.gz \
             flashbyte-windows-x64.zip \
+            flashbyte-windows-setup-x64.exe \
             flashbyte-macos.dmg \
             flashbyte-ios-unsigned-runner-app.zip
           do
@@ -245,7 +299,7 @@ jobs:
             Artifacts:
             - Android APK and AAB
             - Linux x64 bundle
-            - Windows x64 bundle
+            - Windows x64 installer (self-signed) and portable ZIP
             - macOS DMG
             - unsigned iOS Runner.app bundle
           files: release-assets/**/*
@@ -285,7 +339,7 @@ jobs:
           | Linux | [TAR]({base}/flashbyte-linux-x64.tar.gz) |
           | macOS | [DMG]({base}/flashbyte-macos.dmg) |
           | iOS | [APP]({base}/flashbyte-ios-unsigned-runner-app.zip) |
-          | Windows | [ZIP]({base}/flashbyte-windows-x64.zip) |
+          | Windows | [EXE]({base}/flashbyte-windows-setup-x64.exe) \\| [ZIP]({base}/flashbyte-windows-x64.zip) |
           {end}""")
           before, marker, rest = text.partition(start)
           if not marker:

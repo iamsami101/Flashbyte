@@ -34,7 +34,7 @@ You can try out Flashbyte on the following platforms:
 | Linux | [TAR](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-linux-x64.tar.gz) |
 | macOS | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-macos.dmg) |
 | iOS | [APP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-ios-unsigned-runner-app.zip) |
-| Windows | [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
+| Windows | [EXE](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-setup-x64.exe) \| [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ### Contents
@@ -180,15 +180,18 @@ gtk-update-icon-cache ~/.local/share/icons/hicolor
 ```
 
 - ### Windows:
-Download `flashbyte-windows-x64.zip` from the [releases](https://github.com/iamsami101/Flashbyte/releases) page.
 
-Extract the zip file, then run:
+Download the **Flashbyte Setup Wizard** (`flashbyte-windows-setup-x64.exe`) or the portable `flashbyte-windows-x64.zip` from the [releases](https://github.com/iamsami101/Flashbyte/releases) page.
+
+**Installer (recommended):** Run the installer and follow the wizard, then launch **Flashbyte** from the Start menu or desktop shortcut. To remove Flashbyte, use **Settings > Apps**.
+
+**Portable:** Extract the zip file, then run:
 
 ```powershell
 flashbyte.exe
 ```
 
-If Windows SmartScreen warns you that the app is from an unknown publisher, choose **More info** and then **Run anyway**. To remove Flashbyte, delete the extracted folder.
+If Windows SmartScreen warns you that the app is from an unknown publisher, choose **More info** and then **Run anyway**. Release builds are signed with a self-signed certificate, so Windows cannot fully trust the signature. To remove the warning, sign releases with a trusted code-signing certificate (see [Signing release builds](#signing-release-builds)). To remove the portable app, delete the extracted folder.
 
 - ### macOS:
 Download `flashbyte-macos.dmg` from the [releases](https://github.com/iamsami101/Flashbyte/releases) page.
@@ -218,7 +221,7 @@ To sign and notarize macOS releases, use an Apple Developer ID Application certi
 
 To create an installable iOS release, add an Apple Distribution certificate and provisioning profile, commonly stored as `APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`, and `APPLE_TEAM_ID`.
 
-To sign Windows releases, use a Windows code-signing certificate with `signtool`, commonly stored as `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`.
+For Windows releases, the workflow currently signs both the executable and the Inno Setup installer with a fresh self-signed certificate. This keeps the binaries tamper-evident but still triggers a SmartScreen warning, because the signing certificate is not trusted. To sign with a trusted certificate, obtain a Windows code-signing certificate and use it with `signtool` in the workflow, commonly stored as `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`.
 
 ## Building from Source
 
@@ -423,7 +426,7 @@ The output bundle will be at:
 build\windows\x64\runner\Release\
 ```
 
-Zip the contents of that folder to distribute a portable Windows build. For wider distribution, sign the executable or installer with a Windows code-signing certificate.
+Zip the contents of that folder to distribute a portable Windows build. A bundled [Inno Setup](https://jrsoftware.org/isinfo.php) installer script is provided at `windows/installer/flashbyte.iss`; the release workflow uses it to build a signed **Setup Wizard** (`flashbyte-windows-setup-x64.exe`). For wider distribution, sign with a trusted Windows code-signing certificate.
 
 ---
 
