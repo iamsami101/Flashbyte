@@ -12,7 +12,6 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf/saf.dart';
 import 'package:uuid/uuid.dart';
-import 'package:windowed_file_reader/windowed_file_reader.dart';
 
 void fileReceiverIsolate(List<Object> args) {
   final toUiSendPort = args[0] as SendPort;
@@ -765,7 +764,7 @@ Future<String?> _sendFileCommand(
     });
     fileStarted = true;
 
-    await _sendFileWithWindowedReader(
+    await _sendFileSequentially(
       fileId: fileId,
       file: fileToSend,
       fileSize: fileHeader['size'] as int,
@@ -962,7 +961,7 @@ Future<String?> _sendBatchCommand(
       'size': entry.header['size'],
     });
 
-    await _sendFileWithWindowedReader(
+    await _sendFileSequentially(
       fileId: fileId,
       file: entry.file,
       fileSize: entry.header['size'] as int,
@@ -1018,7 +1017,7 @@ String _displayFileName(String value) {
   return separator == -1 ? name : name.substring(separator + 1);
 }
 
-Future<void> _sendFileWithWindowedReader({
+Future<void> _sendFileSequentially({
   required String fileId,
   required File file,
   required int fileSize,
@@ -1028,24 +1027,18 @@ Future<void> _sendFileWithWindowedReader({
   required bool Function(String fileId) shouldCancelTransfer,
   Future<void> Function(String fileId)? onPaused,
 }) async {
-  const int windowSize = 65536;
+  const int chunkSize = 65536;
   if (fileSize <= 0) {
     return;
   }
 
-  final effectiveWindowSize = min(windowSize, fileSize);
-  final reader = DefaultWindowedFileReader(
-    file,
-    windowSize: effectiveWindowSize,
-  );
-
-  await reader.initialize();
+  final raf = await file.open();
   try {
-    var currentPosition = 0;
-    final lastWindowStart = max(0, fileSize - effectiveWindowSize);
+    final buffer = Uint8List(chunkSize);
+    var position = 0;
     var lastPauseNoticeAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-    while (currentPosition < fileSize) {
+    while (position < fileSize) {
       while (!shouldCancel() &&
           !shouldCancelTransfer(fileId) &&
           shouldPauseTransfer(fileId)) {
@@ -1061,17 +1054,13 @@ Future<void> _sendFileWithWindowedReader({
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
         throw const _TransferCancelled();
       }
-      final windowStart = min(currentPosition, lastWindowStart);
-      final offset = currentPosition - windowStart;
 
-      await reader.jumpTo(windowStart);
-      final Uint8List windowBuffer = reader.view();
-
-      final bytesToSend = min(
-        effectiveWindowSize - offset,
-        fileSize - currentPosition,
-      );
-      final actualChunk = windowBuffer.sublist(offset, offset + bytesToSend);
+      final bytesToRead = min(chunkSize, fileSize - position);
+      final bytesRead = await raf.readInto(buffer, 0, bytesToRead);
+      if (bytesRead <= 0) {
+        break;
+      }
+      final actualChunk = Uint8List.sublistView(buffer, 0, bytesRead);
 
       await _sendSocketFrame(
         clientSocket,
@@ -1084,10 +1073,10 @@ Future<void> _sendFileWithWindowedReader({
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
         throw const _TransferCancelled();
       }
-      currentPosition += bytesToSend;
+      position += bytesRead;
     }
   } finally {
-    await reader.dispose();
+    await raf.close();
   }
 }
 
