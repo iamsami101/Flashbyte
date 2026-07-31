@@ -6,4 +6,4 @@ Icon=flashbyte
 Terminal=false
 Type=Application
 Categories=Network;FileTransfer;
-StartupWMClass=flashbyte
+StartupWMClass=com.iamsami.flashbyte

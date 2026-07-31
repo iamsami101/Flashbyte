@@ -4,6 +4,7 @@ set -e
 GITHUB_REPO="iamsami101/flashbyte"
 APP_NAME="flashbyte"
 APP_DISPLAY_NAME="Flashbyte"
+DESKTOP_ENTRY="com.iamsami.flashbyte"
 
 APP_DIR="$HOME/.local/share/$APP_NAME"
 BIN_DIR="$HOME/.local/bin"
@@ -127,7 +128,9 @@ else
 fi
 
 # 6. Create the .desktop file, pointing at the launcher (not the raw binary)
-cat > "$DESKTOP_DIR/$APP_NAME.desktop" << DESKTOP_EOF
+#    The filename and StartupWMClass must match the app's GApplication ID so
+#    GNOME can associate the running window with this entry (dock icon + name).
+cat > "$DESKTOP_DIR/$DESKTOP_ENTRY.desktop" << DESKTOP_EOF
 [Desktop Entry]
 Type=Application
 Name=$APP_DISPLAY_NAME
@@ -136,9 +139,15 @@ Exec=$BIN_DIR/$APP_NAME
 Icon=$APP_NAME
 Categories=Network;
 Terminal=false
-StartupWMClass=$APP_NAME
+StartupWMClass=$DESKTOP_ENTRY
 DESKTOP_EOF
-chmod +x "$DESKTOP_DIR/$APP_NAME.desktop"
+chmod +x "$DESKTOP_DIR/$DESKTOP_ENTRY.desktop"
+
+# Remove the legacy desktop entry name so the menu/dock don't show duplicates.
+if [ -f "$DESKTOP_DIR/$APP_NAME.desktop" ]; then
+    rm -f "$DESKTOP_DIR/$APP_NAME.desktop"
+    echo "Removed legacy entry: $DESKTOP_DIR/$APP_NAME.desktop"
+fi
 
 # 7. Refresh caches
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true

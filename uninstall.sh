@@ -4,6 +4,7 @@ set -e
 # ---- Must match install.sh ----
 APP_NAME="flashbyte"
 APP_DISPLAY_NAME="Flashbyte"
+DESKTOP_ENTRY="com.iamsami.flashbyte"
 # --------------------------------
 
 APP_DIR="$HOME/.local/share/$APP_NAME"
@@ -89,7 +90,12 @@ if [ -f "$BIN_DIR/$APP_NAME" ]; then
     REMOVED_ANYTHING=true
 fi
 
-# 3. Remove the desktop file
+# 3. Remove the desktop files (current + legacy entry name)
+if [ -f "$DESKTOP_DIR/$DESKTOP_ENTRY.desktop" ]; then
+    rm -f "$DESKTOP_DIR/$DESKTOP_ENTRY.desktop"
+    echo "Removed: $DESKTOP_DIR/$DESKTOP_ENTRY.desktop"
+    REMOVED_ANYTHING=true
+fi
 if [ -f "$DESKTOP_DIR/$APP_NAME.desktop" ]; then
     rm -f "$DESKTOP_DIR/$APP_NAME.desktop"
     echo "Removed: $DESKTOP_DIR/$APP_NAME.desktop"

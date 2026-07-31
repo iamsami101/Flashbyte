@@ -131,9 +131,13 @@ done
 
 **5. Install the desktop entry**
 
+> The desktop entry filename and `StartupWMClass` must match the app's
+> GApplication ID (`com.iamsami.flashbyte`) so GNOME shows the icon and app
+> name correctly in the dock.
+
 ```bash
 mkdir -p ~/.local/share/applications
-cat > ~/.local/share/applications/flashbyte.desktop << EOF
+cat > ~/.local/share/applications/com.iamsami.flashbyte.desktop << EOF
 [Desktop Entry]
 Type=Application
 Name=Flashbyte
@@ -142,9 +146,10 @@ Exec=$HOME/.local/bin/flashbyte
 Icon=flashbyte
 Categories=Network;
 Terminal=false
-StartupWMClass=flashbyte
+StartupWMClass=com.iamsami.flashbyte
 EOF
-chmod +x ~/.local/share/applications/flashbyte.desktop
+chmod +x ~/.local/share/applications/com.iamsami.flashbyte.desktop
+rm -f ~/.local/share/applications/flashbyte.desktop
 ```
 
 **6. Refresh your desktop caches**
@@ -167,6 +172,7 @@ flashbyte
 ```bash
 rm -rf ~/.local/share/flashbyte
 rm -f ~/.local/bin/flashbyte
+rm -f ~/.local/share/applications/com.iamsami.flashbyte.desktop
 rm -f ~/.local/share/applications/flashbyte.desktop
 rm -f ~/.local/share/icons/hicolor/*/apps/flashbyte.png
 update-desktop-database ~/.local/share/applications

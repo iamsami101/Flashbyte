@@ -118,7 +118,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/flashbyte.png"
   COMPONENT Runtime)
 
 # Install the .desktop file and application icons (for system-wide installs).
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/flashbyte.desktop"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/com.iamsami.flashbyte.desktop"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"
   COMPONENT Runtime)
 
