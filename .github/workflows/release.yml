@@ -263,9 +263,8 @@ jobs:
         id: app-version
         run: |
           version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
-          semver="${version%%+*}"
-          echo "version=${semver}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${semver}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
 
       - name: Remove existing release artifacts
         env:
