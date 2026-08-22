@@ -42,6 +42,13 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release
 
+      - name: Build split APKs
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --split-per-abi
+
       - name: Build app bundle
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -54,6 +61,10 @@ jobs:
           mkdir -p release/android
           cp build/app/outputs/flutter-apk/app-release.apk release/android/flashbyte-android.apk
           cp build/app/outputs/bundle/release/app-release.aab release/android/flashbyte-android.aab
+          base=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "release/android/flashbyte-android-$((base * 10 + 1)).apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "release/android/flashbyte-android-$((base * 10 + 2)).apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "release/android/flashbyte-android-$((base * 10 + 3)).apk"
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
@@ -275,9 +286,13 @@ jobs:
             exit 0
           fi
 
+          base=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
           for asset in \
             flashbyte-android.apk \
             flashbyte-android.aab \
+            "flashbyte-android-$((base * 10 + 1)).apk" \
+            "flashbyte-android-$((base * 10 + 2)).apk" \
+            "flashbyte-android-$((base * 10 + 3)).apk" \
             flashbyte-linux-x64.tar.gz \
             flashbyte-windows-x64.zip \
             flashbyte-windows-setup-x64.exe \
