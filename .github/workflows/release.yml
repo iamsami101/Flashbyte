@@ -27,36 +27,55 @@ jobs:
           flutter-version: '3.44.2'
           cache: true
 
+      - name: Move source to F-Droid build path
+        run: |
+          sudo mkdir -p /home/vagrant/build
+          sudo chown -R "$(whoami)" /home/vagrant
+          cp -a "${GITHUB_WORKSPACE}/." /home/vagrant/build/com.flashbyte/
+
       - name: Install dependencies
-        run: flutter pub get
+        working-directory: /home/vagrant/build/com.flashbyte
+        env:
+          PUB_CACHE: /home/vagrant/build/com.flashbyte/.pub-cache
+        run: |
+          flutter config --no-analytics
+          flutter pub get --enforce-lockfile
 
       - name: Decode Android signing keystore
+        working-directory: /home/vagrant/build/com.flashbyte
         run: echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/app/flashbyte-release.jks
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
       - name: Build APK
+        working-directory: /home/vagrant/build/com.flashbyte
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PUB_CACHE: /home/vagrant/build/com.flashbyte/.pub-cache
         run: flutter build apk --release
 
       - name: Build split APKs
+        working-directory: /home/vagrant/build/com.flashbyte
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PUB_CACHE: /home/vagrant/build/com.flashbyte/.pub-cache
         run: flutter build apk --release --split-per-abi
 
       - name: Build app bundle
+        working-directory: /home/vagrant/build/com.flashbyte
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PUB_CACHE: /home/vagrant/build/com.flashbyte/.pub-cache
         run: flutter build appbundle --release
 
       - name: Collect Android artifacts
+        working-directory: /home/vagrant/build/com.flashbyte
         run: |
           mkdir -p release/android
           cp build/app/outputs/flutter-apk/app-release.apk release/android/flashbyte-android.apk
@@ -70,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android
-          path: release/android/*
+          path: /home/vagrant/build/com.flashbyte/release/android/*
 
   build-linux:
     name: Linux
