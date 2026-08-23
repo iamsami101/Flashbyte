@@ -41,6 +41,10 @@ jobs:
           flutter config --no-analytics
           flutter pub get --enforce-lockfile
 
+      - name: Disable native build-id for reproducibility
+        working-directory: /home/vagrant/build/com.flashbyte
+        run: echo 'set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--build-id=none")' >> .pub-cache/hosted/pub.dev/jni-1.0.0/src/CMakeLists.txt
+
       - name: Decode Android signing keystore
         working-directory: /home/vagrant/build/com.flashbyte
         run: echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/app/flashbyte-release.jks
