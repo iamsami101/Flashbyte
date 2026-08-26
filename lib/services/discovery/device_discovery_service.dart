@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flashbyte/models/discovered_device.dart';
 
 class DeviceDiscoveryService {
@@ -111,6 +112,13 @@ class DeviceDiscoveryService {
           ? DiscoveredDeviceType.phone.name
           : DiscoveredDeviceType.laptop.name,
     };
+    if (kDebugMode) {
+      debugPrint(
+        '[DISCOVERY] advertising name="$name" tls=$usesTls '
+        'fingerprint=${certificateFingerprint != null} '
+        'bytes=${utf8.encode(jsonEncode(_advertisement!)).length}',
+      );
+    }
     _broadcastTimer?.cancel();
     _cancelAdvertiseBurst();
     _broadcastAdvertisement();
@@ -210,9 +218,17 @@ class DeviceDiscoveryService {
     final certificatePem = message['cert'] as String?;
     final instanceId = message['instanceId'] as String?;
     if (name == null || port == null || usesTls == null) {
+      if (kDebugMode) {
+        debugPrint(
+          '[DISCOVERY] dropping hello id=$id (missing name/port/tls)',
+        );
+      }
       return;
     }
     if (usesTls && certificateFingerprint == null) {
+      if (kDebugMode) {
+        debugPrint('[DISCOVERY] dropping hello id=$id (tls w/o fingerprint)');
+      }
       return;
     }
     final deviceType = DiscoveredDeviceType.values.firstWhere(
@@ -484,6 +500,9 @@ class DeviceDiscoveryService {
   void _sendBroadcastPacket(Map<String, dynamic> packet) {
     final port = _discoveryPort;
     if (_sendSockets.isEmpty || port == null) {
+      if (kDebugMode) {
+        debugPrint('[DISCOVERY] cannot broadcast: no send sockets bound');
+      }
       return;
     }
 
@@ -495,8 +514,13 @@ class DeviceDiscoveryService {
           if (bytesSent > 0) {
             break;
           }
-        } on SocketException {
+        } on SocketException catch (e) {
           // Try every broadcast target; the next heartbeat retries failures.
+          if (kDebugMode) {
+            debugPrint(
+              '[DISCOVERY] broadcast to ${target.address}:$port failed: ${e.message}',
+            );
+          }
         }
       }
     }

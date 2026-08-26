@@ -394,6 +394,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     try {
       final useTLS = await AppSettings.getUseTls();
+      debugPrint('[RECEIVE] starting host (tls=$useTLS)');
       final port = await AppSettings.getPort();
       if (!SocketService.instance.isHosting) {
         await SocketService.instance.startHost(
@@ -402,11 +403,21 @@ class _FileSelectionPageState extends State<FileSelectionPage>
           useTLS: useTLS,
         );
       }
+      debugPrint('[RECEIVE] host started');
       final name = deviceName ?? await AppSettings.getDeviceName();
       final id = _deviceId ?? await AppSettings.getDeviceId();
-      final tlsIdentity = useTLS
-          ? await TlsIdentityService.getOrCreateIdentity()
-          : null;
+      TlsIdentity? tlsIdentity;
+      if (useTLS) {
+        try {
+          tlsIdentity = await TlsIdentityService.getOrCreateIdentity();
+          debugPrint(
+            '[RECEIVE] identity ready (fingerprint=${tlsIdentity.fingerprint.substring(0, 12)}…)',
+          );
+        } catch (e) {
+          debugPrint('[RECEIVE] identity load FAILED: $e');
+          rethrow;
+        }
+      }
       await DeviceDiscoveryService.instance.startAdvertising(
         deviceId: id,
         name: name,
@@ -415,8 +426,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         certificateFingerprint: tlsIdentity?.fingerprint,
         certificatePem: tlsIdentity?.certificatePem,
       );
+      debugPrint('[RECEIVE] advertising started');
       receiveStarted = true;
     } catch (e) {
+      debugPrint('[RECEIVE] start FAILED: $e');
       if (!mounted) return;
       await _showErrorDialog(
         title: 'Receive Error',
