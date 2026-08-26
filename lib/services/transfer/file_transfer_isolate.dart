@@ -699,25 +699,21 @@ Future<String?> _sendFileCommand(
 
   final stopwatch = Stopwatch()..start();
 
-  int? androidFileDescriptor;
+  _SendSource? source;
   var fileStarted = false;
 
   try {
     if (Platform.isAndroid) {
-      final saf = Saf();
-      final fileStats = await saf.stat(filePath);
-      if (fileStats == null) {
+      source = await _openAndroidSendSource(Saf(), filePath);
+      if (source == null) {
         throw Exception('Could not read selected file metadata.');
       }
-
-      final fdResult = await saf.openFileDescriptor(filePath, 'r');
-      androidFileDescriptor = fdResult.fd;
-      fileToSend = File(fdResult.path);
+      fileToSend = source.file;
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': _displayFileName(fileStats.name),
-        'size': fileStats.length,
+        'name': _displayFileName(source.fileName),
+        'size': source.fileSize,
       };
     } else {
       fileToSend = File(filePath);
@@ -794,19 +790,11 @@ Future<String?> _sendFileCommand(
 
     stopwatch.stop();
 
-    try {
-      if (androidFileDescriptor != null) {
-        await Saf().closeFileDescriptor(androidFileDescriptor);
-      }
-    } on Exception catch (_) {}
+    await source?.dispose();
     return fileHeader['uuid'] as String;
   } catch (e) {
     stopwatch.stop();
-    try {
-      if (androidFileDescriptor != null) {
-        await Saf().closeFileDescriptor(androidFileDescriptor);
-      }
-    } on Exception catch (_) {}
+    await source?.dispose();
     if (e is _TransferCancelled ||
         shouldCancel() ||
         (fileHeader != null &&
@@ -864,46 +852,46 @@ Future<String?> _sendBatchCommand(
 
   for (final command in batch) {
     final filePath = command['filePath'] as String;
-    File? fileToSend;
-    Map<String, dynamic>? fileHeader;
-    int? androidFileDescriptor;
 
     try {
       if (Platform.isAndroid) {
-        final saf = Saf();
-        final fileStats = await saf.stat(filePath);
-        if (fileStats == null) {
+        final source = await _openAndroidSendSource(Saf(), filePath);
+        if (source == null) {
           continue;
         }
-        final fdResult = await saf.openFileDescriptor(filePath, 'r');
-        androidFileDescriptor = fdResult.fd;
-        fileToSend = File(fdResult.path);
-        fileHeader = {
-          'uuid': Uuid().v4(),
-          'name': _displayFileName(fileStats.name),
-          'size': fileStats.length,
-        };
+        fileEntries.add(
+          _FileEntry(
+            source: source,
+            header: {
+              'uuid': Uuid().v4(),
+              'name': _displayFileName(source.fileName),
+              'size': source.fileSize,
+            },
+            filePath: filePath,
+          ),
+        );
       } else {
-        fileToSend = File(filePath);
+        final fileToSend = File(filePath);
         final fileStats = await fileToSend.stat();
-        fileHeader = {
-          'uuid': Uuid().v4(),
-          'name': _displayFileName(filePath),
-          'size': fileStats.size,
-        };
+        fileEntries.add(
+          _FileEntry(
+            source: _SendSource(
+              file: fileToSend,
+              fileName: _displayFileName(filePath),
+              fileSize: fileStats.size,
+            ),
+            header: {
+              'uuid': Uuid().v4(),
+              'name': _displayFileName(filePath),
+              'size': fileStats.size,
+            },
+            filePath: filePath,
+          ),
+        );
       }
     } on Exception catch (_) {
       continue;
     }
-
-    fileEntries.add(
-      _FileEntry(
-        file: fileToSend,
-        header: fileHeader,
-        fd: androidFileDescriptor,
-        filePath: filePath,
-      ),
-    );
   }
 
   if (fileEntries.isEmpty) return null;
@@ -936,107 +924,218 @@ Future<String?> _sendBatchCommand(
   }
 
   final firstFileId = fileEntries.first.header['uuid'] as String;
-  while (!shouldCancel() &&
-      !shouldCancelTransfer(firstFileId) &&
-      !shouldDeclineTransfer(firstFileId) &&
-      !shouldAcceptTransfer(firstFileId)) {
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-  }
-  if (shouldCancel() ||
-      shouldCancelTransfer(firstFileId) ||
-      shouldDeclineTransfer(firstFileId)) {
-    throw const _TransferCancelled();
-  }
-
-  for (final entry in fileEntries) {
-    final fileId = entry.header['uuid'] as String;
-    final isFirst = entry == fileEntries.first;
-    final isLast = entry == fileEntries.last;
-
-    if (!isFirst) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+  try {
+    while (!shouldCancel() &&
+        !shouldCancelTransfer(firstFileId) &&
+        !shouldDeclineTransfer(firstFileId) &&
+        !shouldAcceptTransfer(firstFileId)) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    if (shouldCancel() ||
+        shouldCancelTransfer(firstFileId) ||
+        shouldDeclineTransfer(firstFileId)) {
+      throw const _TransferCancelled();
     }
 
-    toUiSendPort.send({
-      'status': 'send_start',
-      'fileId': fileId,
-      'fileName': entry.header['name'],
-      'fileSize': entry.header['size'],
-      'filePath': entry.filePath,
-      'pendingAcceptance': false,
-      'isBatch': true,
-    });
+    for (final entry in fileEntries) {
+      final fileId = entry.header['uuid'] as String;
+      final isFirst = entry == fileEntries.first;
+      final isLast = entry == fileEntries.last;
 
-    await _sendSocketFrame(clientSocket, {
-      'type': 'file_start',
-      'uuid': fileId,
-      'name': entry.header['name'],
-      'size': entry.header['size'],
-    });
+      if (!isFirst) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
 
-    var fileCancelled = false;
-    try {
-      await _sendFileSequentially(
-        fileId: fileId,
-        file: entry.file,
-        fileSize: entry.header['size'] as int,
-        clientSocket: clientSocket,
-        shouldCancel: shouldCancel,
-        shouldPauseTransfer: shouldPauseTransfer,
-        shouldCancelTransfer: shouldCancelTransfer,
-        onPaused: onPaused,
-      );
-    } on _TransferCancelled {
-      fileCancelled = true;
-      await _sendSocketFrame(clientSocket, {
-        'type': 'file_end',
+      toUiSendPort.send({
+        'status': 'send_start',
         'fileId': fileId,
-        'cancelled': true,
+        'fileName': entry.header['name'],
+        'fileSize': entry.header['size'],
+        'filePath': entry.filePath,
+        'pendingAcceptance': false,
+        'isBatch': true,
       });
-      await clientSocket.flush();
-      if (isLast) {
-        toUiSendPort.send({
-          'status': 'transfer_cancel_ready',
+
+      await _sendSocketFrame(clientSocket, {
+        'type': 'file_start',
+        'uuid': fileId,
+        'name': entry.header['name'],
+        'size': entry.header['size'],
+      });
+
+      var fileCancelled = false;
+      try {
+        await _sendFileSequentially(
+          fileId: fileId,
+          file: entry.file,
+          fileSize: entry.header['size'] as int,
+          clientSocket: clientSocket,
+          shouldCancel: shouldCancel,
+          shouldPauseTransfer: shouldPauseTransfer,
+          shouldCancelTransfer: shouldCancelTransfer,
+          onPaused: onPaused,
+        );
+      } on _TransferCancelled {
+        fileCancelled = true;
+        await _sendSocketFrame(clientSocket, {
+          'type': 'file_end',
+          'fileId': fileId,
+          'cancelled': true,
+        });
+        await clientSocket.flush();
+        if (isLast) {
+          toUiSendPort.send({
+            'status': 'transfer_cancel_ready',
+            'fileId': fileId,
+          });
+        }
+      }
+
+      if (!fileCancelled) {
+        await _sendSocketFrame(clientSocket, {
+          'type': 'file_end',
           'fileId': fileId,
         });
+        await clientSocket.flush();
+      }
+
+      await entry.source.dispose();
+
+      if (shouldCancel()) {
+        throw const _TransferCancelled();
       }
     }
 
-    if (!fileCancelled) {
-      await _sendSocketFrame(clientSocket, {
-        'type': 'file_end',
-        'fileId': fileId,
-      });
-      await clientSocket.flush();
+    return firstFileId;
+  } catch (_) {
+    for (final entry in fileEntries) {
+      await entry.source.dispose();
     }
+    rethrow;
+  }
+}
 
-    final fd = entry.fd;
+class _FileEntry {
+  final _SendSource source;
+  final Map<String, dynamic> header;
+  final String filePath;
+
+  const _FileEntry({
+    required this.source,
+    required this.header,
+    required this.filePath,
+  });
+
+  File get file => source.file;
+}
+
+/// A readable source file for an outgoing transfer plus any resources that
+/// must be released once the transfer finishes.
+class _SendSource {
+  const _SendSource({
+    required this.file,
+    required this.fileName,
+    required this.fileSize,
+    this.fd,
+    this.tempCopyPath,
+  });
+
+  final File file;
+  final String fileName;
+  final int fileSize;
+  final int? fd;
+  final String? tempCopyPath;
+
+  Future<void> dispose() async {
+    final fd = this.fd;
     if (fd != null) {
       try {
         await Saf().closeFileDescriptor(fd);
       } on Exception catch (_) {}
     }
+    final tempCopyPath = this.tempCopyPath;
+    if (tempCopyPath != null) {
+      try {
+        final copy = File(tempCopyPath);
+        if (await copy.exists()) {
+          await copy.delete();
+        }
+      } on Exception catch (_) {}
+    }
+  }
+}
 
-    if (shouldCancel()) {
-      throw const _TransferCancelled();
+/// Opens a readable source for an Android SAF document.
+///
+/// [Saf.openFileDescriptor] hands out a `/proc/self/fd/<fd>` pseudo-path that
+/// dart:io can usually open directly. Some OEM builds (e.g. Realme UI 6 on
+/// Android 15) ship SELinux policies that deny open(2) on proc fd links, so
+/// opening fails with `Permission denied` (errno 13). The pseudo-path is
+/// probed first and, when the OS refuses, the document is streamed into a
+/// cache file via [Saf.readFileStream] and that copy is sent instead.
+Future<_SendSource?> _openAndroidSendSource(Saf saf, String uri) async {
+  final fileStats = await saf.stat(uri);
+  if (fileStats == null) {
+    return null;
+  }
+  final fileName = fileStats.name;
+  final fileSize = fileStats.length;
+
+  int? openedFd;
+  try {
+    final fdResult = await saf.openFileDescriptor(uri, 'r');
+    openedFd = fdResult.fd;
+    final pseudoFile = File(fdResult.path);
+    final probe = await pseudoFile.open();
+    await probe.close();
+    return _SendSource(
+      file: pseudoFile,
+      fileName: fileName,
+      fileSize: fileSize,
+      fd: openedFd,
+    );
+  } catch (_) {
+    if (openedFd != null) {
+      try {
+        await saf.closeFileDescriptor(openedFd);
+      } on Exception catch (_) {}
     }
   }
 
-  return firstFileId;
+  final tempFile = await _copySafDocumentToCache(saf, uri);
+  return _SendSource(
+    file: tempFile,
+    fileName: fileName,
+    fileSize: fileSize,
+    tempCopyPath: tempFile.path,
+  );
 }
 
-class _FileEntry {
-  final File file;
-  final Map<String, dynamic> header;
-  final int? fd;
-  final String filePath;
-
-  const _FileEntry({
-    required this.file,
-    required this.header,
-    this.fd,
-    required this.filePath,
-  });
+Future<File> _copySafDocumentToCache(Saf saf, String uri) async {
+  final cacheDir = await getTemporaryDirectory();
+  final tempFile = File(
+    '${cacheDir.path}/flashbyte_send_${DateTime.now().microsecondsSinceEpoch}.tmp',
+  );
+  final sink = tempFile.openWrite();
+  try {
+    final stream = await saf.readFileStream(uri);
+    await for (final chunk in stream) {
+      sink.add(chunk);
+    }
+    await sink.flush();
+    await sink.close();
+  } catch (_) {
+    try {
+      await sink.close();
+    } on Exception catch (_) {}
+    try {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    } on Exception catch (_) {}
+    rethrow;
+  }
+  return tempFile;
 }
 
 String _displayFileName(String value) {
