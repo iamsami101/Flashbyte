@@ -30,11 +30,11 @@ You can try out Flashbyte on the following platforms:
 <!-- BEGIN AUTO RELEASE DOWNLOADS -->
 | Platform | Download |
 |----------|----------|
-| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-android.aab) |
-| Linux | [TAR](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-linux-x64.tar.gz) |
-| macOS | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-macos.dmg) |
-| iOS | [APP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-ios-unsigned-runner-app.zip) |
-| Windows | [EXE](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-windows-setup-x64.exe) \| [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.0.0+1/flashbyte-windows-x64.zip) |
+| Android | [APK](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-android.apk) \| [AAB](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-android.aab) |
+| Linux | [TAR](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-linux-x64.tar.gz) |
+| macOS | [DMG](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-macos.dmg) |
+| iOS | [APP](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-ios-unsigned-runner-app.zip) |
+| Windows | [EXE](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-windows-setup-x64.exe) \| [ZIP](https://github.com/iamsami101/Flashbyte/releases/download/v2.1.0+2/flashbyte-windows-x64.zip) |
 <!-- END AUTO RELEASE DOWNLOADS -->
 
 ### Contents
