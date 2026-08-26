@@ -218,6 +218,10 @@ void fileReceiverIsolate(List<Object> args) {
                 final certPath = command['certPath'] as String?;
                 final keyPath = command['keyPath'] as String?;
                 final trustedCertPath = command['trustedCertPath'] as String?;
+                // A pre-trusted peer certificate is optional: when absent the
+                // default context is used and the self-signed peer certificate
+                // is accepted by onBadCertificate after matching
+                // expectedCertificateFingerprint.
                 if (trustedCertPath != null &&
                     File(trustedCertPath).existsSync()) {
                   print(
@@ -225,15 +229,14 @@ void fileReceiverIsolate(List<Object> args) {
                   );
                   securityContext = SecurityContext(withTrustedRoots: false);
                   securityContext.setTrustedCertificates(trustedCertPath);
-                  if (certPath != null &&
-                      keyPath != null &&
-                      File(certPath).existsSync() &&
-                      File(keyPath).existsSync()) {
-                    securityContext.useCertificateChain(certPath);
-                    securityContext.usePrivateKey(keyPath);
-                  }
-                } else {
-                  throw Exception('Trusted receiver certificate not found.');
+                }
+                if (certPath != null &&
+                    keyPath != null &&
+                    File(certPath).existsSync() &&
+                    File(keyPath).existsSync()) {
+                  securityContext ??= SecurityContext(withTrustedRoots: false);
+                  securityContext.useCertificateChain(certPath);
+                  securityContext.usePrivateKey(keyPath);
                 }
               } catch (e) {
                 print('[CLIENT_TLS] cert load error: ${e.toString()}');

@@ -137,19 +137,20 @@ class SocketService {
       certificateFingerprint = identity.fingerprint;
 
       if (mode == 'client') {
-        if (trustedCertificatePem == null ||
-            trustedCertificatePem.trim().isEmpty ||
-            expectedCertificateFingerprint == null ||
+        if (expectedCertificateFingerprint == null ||
             expectedCertificateFingerprint.trim().isEmpty) {
           throw Exception(
             'TLS requires a discovered receiver certificate. Select the receiver from discovery and try again.',
           );
         }
 
-        trustedCertPath = await TlsIdentityService.writeTrustedPeerCertificate(
-          peerId: trustedPeerId ?? host ?? 'peer',
-          certificatePem: trustedCertificatePem,
-        );
+        if (trustedCertificatePem != null &&
+            trustedCertificatePem.trim().isNotEmpty) {
+          trustedCertPath = await TlsIdentityService.writeTrustedPeerCertificate(
+            peerId: trustedPeerId ?? host ?? 'peer',
+            certificatePem: trustedCertificatePem,
+          );
+        }
       }
     }
 

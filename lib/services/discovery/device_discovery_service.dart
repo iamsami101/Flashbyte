@@ -93,6 +93,11 @@ class DeviceDiscoveryService {
 
     await startDiscovery(localDeviceId: deviceId, port: port);
     _advertisingInstanceId = DateTime.now().microsecondsSinceEpoch.toString();
+    // NOTE: The full certificate PEM is deliberately NOT embedded in the
+    // periodic hello. A 2048-bit RSA cert pushes the datagram past the ~1500
+    // byte MTU, and IP-fragmented UDP broadcasts are dropped by many Wi-Fi
+    // stacks (notably Android). Peers instead verify the TLS handshake against
+    // `certFingerprint` via onBadCertificate.
     _advertisement = {
       'protocol': _protocol,
       'action': 'hello',
@@ -102,7 +107,6 @@ class DeviceDiscoveryService {
       'port': port,
       'tls': usesTls,
       'certFingerprint': certificateFingerprint,
-      'cert': certificatePem,
       'deviceType': Platform.isAndroid || Platform.isIOS
           ? DiscoveredDeviceType.phone.name
           : DiscoveredDeviceType.laptop.name,
@@ -201,12 +205,14 @@ class DeviceDiscoveryService {
     final port = message['port'] as int?;
     final usesTls = message['tls'] as bool?;
     final certificateFingerprint = message['certFingerprint'] as String?;
+    // `cert` is optional for compatibility with older peers that still embed
+    // the PEM; fingerprint-based verification is the supported path.
     final certificatePem = message['cert'] as String?;
     final instanceId = message['instanceId'] as String?;
     if (name == null || port == null || usesTls == null) {
       return;
     }
-    if (usesTls && (certificateFingerprint == null || certificatePem == null)) {
+    if (usesTls && certificateFingerprint == null) {
       return;
     }
     final deviceType = DiscoveredDeviceType.values.firstWhere(
