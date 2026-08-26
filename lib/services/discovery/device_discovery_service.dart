@@ -231,6 +231,12 @@ class DeviceDiscoveryService {
       }
       return;
     }
+    if (kDebugMode) {
+      final shortId = id.length > 8 ? id.substring(0, 8) : id;
+      debugPrint(
+        '[DISCOVERY] hello from "$name" id=$shortId… tls=$usesTls',
+      );
+    }
     final deviceType = DiscoveredDeviceType.values.firstWhere(
       (type) => type.name == message['deviceType'],
       orElse: () => DiscoveredDeviceType.phone,

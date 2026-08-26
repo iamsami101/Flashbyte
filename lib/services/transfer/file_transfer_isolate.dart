@@ -6,8 +6,8 @@ import 'dart:isolate';
 import 'dart:math';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saf/saf.dart';
@@ -1610,6 +1610,15 @@ void _handleSocketConnection(
       fileTarget = await _createOutputTarget(
         configuredDownloadDirectory: configuredDownloadDirectory,
         originalFileName: _displayFileName(headerJson['name'] as String),
+        onWriteError: (e) {
+          connectionErrorSent = true;
+          toUiSendPort.send({
+            'status': 'error',
+            'fatal': 'true',
+            'message': 'Could not save received file: ${e.toString()}',
+          });
+          closeSocket();
+        },
       );
     } catch (e) {
       connectionErrorSent = true;
@@ -2114,9 +2123,16 @@ class _OutputTarget {
   factory _OutputTarget.regular({
     required String fileName,
     required String filePath,
+    void Function(Object error)? onWriteError,
   }) {
     final file = File(filePath);
     final sink = file.openWrite();
+    // IOSink.add() failures surface asynchronously through sink.done; without
+    // a listener they escape as unhandled isolate errors and the transfer
+    // silently stalls (e.g. sandboxed macOS denying the Downloads folder).
+    if (onWriteError != null) {
+      unawaited(sink.done.then((_) {}, onError: onWriteError));
+    }
     return _OutputTarget._(
       fileName: fileName,
       filePath: filePath,
@@ -2174,12 +2190,30 @@ class _OutputTarget {
 Future<_OutputTarget> _createOutputTarget({
   required String? configuredDownloadDirectory,
   required String originalFileName,
+  void Function(Object error)? onWriteError,
 }) async {
-  final resolvedDirectory = await _resolveDownloadDirectory(
+  var resolvedDirectory = await _resolveDownloadDirectory(
     commandDirectory: configuredDownloadDirectory,
   );
 
-  if (Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory)) {
+  final usesSaf =
+      Platform.isAndroid && AndroidSafService.isTreeUri(resolvedDirectory);
+  if (!usesSaf && !await _directoryIsWritable(resolvedDirectory)) {
+    // Sandboxed macOS denies the Downloads folder until the user grants
+    // per-app consent (Privacy & Security > Files & Folders). Fall back to
+    // the app container, which is always writable, instead of failing.
+    final supportDir = await getApplicationSupportDirectory();
+    final fallbackDirectory =
+        '${supportDir.path}${Platform.pathSeparator}Downloads';
+    await Directory(fallbackDirectory).create(recursive: true);
+    debugPrint(
+      '[RECEIVE] "$resolvedDirectory" is not writable; '
+      'falling back to "$fallbackDirectory"',
+    );
+    resolvedDirectory = fallbackDirectory;
+  }
+
+  if (usesSaf) {
     final saf = Saf();
 
     final dirStat = await saf.stat(resolvedDirectory);
@@ -2209,7 +2243,23 @@ Future<_OutputTarget> _createOutputTarget({
   return _OutputTarget.regular(
     fileName: fileName,
     filePath: filePath,
+    onWriteError: onWriteError,
   );
+}
+
+/// Verifies [directory] accepts file creation by round-tripping a probe file.
+Future<bool> _directoryIsWritable(String directory) async {
+  final probe = File('$directory/.flashbyte_write_probe');
+  try {
+    final handle = await probe.open(mode: FileMode.write);
+    await handle.close();
+    try {
+      await probe.delete();
+    } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 String _generateUniqueFileName(String directory, String originalFileName) {
