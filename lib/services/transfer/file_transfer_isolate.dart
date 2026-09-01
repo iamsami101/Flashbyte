@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'dart:math';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte_core/flashbyte_core.dart' as core;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -177,7 +178,7 @@ void fileReceiverIsolate(List<Object> args) {
             serverSocket!.listen(
               (socket) {
                 savedClientSocket = socket;
-                _configureSocketForTransfer(savedClientSocket);
+                core.configureSocketForTransfer(savedClientSocket);
                 clientSocket = socket;
                 if (useTLS) {
                   // TLS handshake already verified the client — notify UI immediately
@@ -281,7 +282,7 @@ void fileReceiverIsolate(List<Object> args) {
                     );
                   }
                 }
-                _configureSocketForTransfer(finalSocket);
+                core.configureSocketForTransfer(finalSocket);
                 print('[CLIENT_TLS] connected successfully');
                 clientSocket = finalSocket;
                 toUiSendPort.send({'status': 'connected_to_host'});
@@ -313,7 +314,7 @@ void fileReceiverIsolate(List<Object> args) {
                   command['host'],
                   command['port'],
                 );
-                _configureSocketForTransfer(finalSocket);
+                core.configureSocketForTransfer(finalSocket);
                 final probeMsg = jsonEncode({'type': 'probe', 'tls': false});
                 final probeBytes = utf8.encode(probeMsg);
                 final header = ByteData(8);
@@ -353,7 +354,7 @@ void fileReceiverIsolate(List<Object> args) {
               toUiSendPort.send({
                 'status': 'error',
                 'fatal': 'true',
-                'message': _clientConnectErrorMessage(
+                'message': core.clientConnectErrorMessage(
                   error: e,
                   host: command['host'] as String?,
                   port: command['port'] as int?,
@@ -402,7 +403,7 @@ void fileReceiverIsolate(List<Object> args) {
                   if (role == null) {
                     return;
                   }
-                  await _sendTransferControlFrame(clientSocket, {
+                  await core.sendSocketFrame(clientSocket, {
                     'type': transferControlType(role, 'paused'),
                     'fileId': fileId,
                   });
@@ -427,7 +428,7 @@ void fileReceiverIsolate(List<Object> args) {
                   if (role == null) {
                     return;
                   }
-                  await _sendTransferControlFrame(clientSocket, {
+                  await core.sendSocketFrame(clientSocket, {
                     'type': transferControlType(role, 'paused'),
                     'fileId': fileId,
                   });
@@ -442,7 +443,7 @@ void fileReceiverIsolate(List<Object> args) {
               acceptedTransfers.remove(sendingFileId);
               declinedTransfers.remove(sendingFileId);
             }
-          } on _TransferCancelled {
+          } on core.TransferCancelled {
             sendingFileId = null;
           } finally {
             isSendingFile = false;
@@ -452,7 +453,7 @@ void fileReceiverIsolate(List<Object> args) {
           final role = command['role'] as String? ?? 'receiver';
           if (fileId != null) {
             locallyPausedTransfers[fileId] = role;
-            await _sendTransferControlFrame(clientSocket, {
+            await core.sendSocketFrame(clientSocket, {
               'type': transferControlType(role, 'paused'),
               'fileId': fileId,
             });
@@ -463,7 +464,7 @@ void fileReceiverIsolate(List<Object> args) {
           final role = command['role'] as String? ?? 'receiver';
           if (fileId != null) {
             locallyPausedTransfers.remove(fileId);
-            await _sendTransferControlFrame(clientSocket, {
+            await core.sendSocketFrame(clientSocket, {
               'type': transferControlType(role, 'resumed'),
               'fileId': fileId,
             });
@@ -475,7 +476,7 @@ void fileReceiverIsolate(List<Object> args) {
             locallyCancelledTransfers.add(fileId);
             locallyPausedTransfers.remove(fileId);
             remotelyPausedTransfers.remove(fileId);
-            await _sendTransferControlFrame(clientSocket, {
+            await core.sendSocketFrame(clientSocket, {
               'type': 'file_transfer_cancel',
               'fileId': fileId,
             });
@@ -489,7 +490,7 @@ void fileReceiverIsolate(List<Object> args) {
           if (fileId != null) {
             acceptedTransfers.add(fileId);
             declinedTransfers.remove(fileId);
-            await _sendTransferControlFrame(clientSocket, {
+            await core.sendSocketFrame(clientSocket, {
               'type': 'file_transfer_accept',
               'fileId': fileId,
             });
@@ -503,7 +504,7 @@ void fileReceiverIsolate(List<Object> args) {
           if (fileId != null) {
             declinedTransfers.add(fileId);
             locallyCancelledTransfers.add(fileId);
-            await _sendTransferControlFrame(clientSocket, {
+            await core.sendSocketFrame(clientSocket, {
               'type': 'file_transfer_decline',
               'fileId': fileId,
             });
@@ -572,7 +573,7 @@ void fileReceiverIsolate(List<Object> args) {
       final role = command['role'] as String? ?? 'receiver';
       if (fileId != null) {
         locallyPausedTransfers[fileId] = role;
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': transferControlType(role, 'paused'),
           'fileId': fileId,
         });
@@ -584,7 +585,7 @@ void fileReceiverIsolate(List<Object> args) {
       final role = command['role'] as String? ?? 'receiver';
       if (fileId != null) {
         locallyPausedTransfers.remove(fileId);
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': transferControlType(role, 'resumed'),
           'fileId': fileId,
         });
@@ -597,7 +598,7 @@ void fileReceiverIsolate(List<Object> args) {
         locallyCancelledTransfers.add(fileId);
         locallyPausedTransfers.remove(fileId);
         remotelyPausedTransfers.remove(fileId);
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_transfer_cancel',
           'fileId': fileId,
         });
@@ -609,7 +610,7 @@ void fileReceiverIsolate(List<Object> args) {
       if (fileId != null) {
         acceptedTransfers.add(fileId);
         declinedTransfers.remove(fileId);
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_transfer_accept',
           'fileId': fileId,
         });
@@ -621,7 +622,7 @@ void fileReceiverIsolate(List<Object> args) {
       if (fileId != null) {
         declinedTransfers.add(fileId);
         locallyCancelledTransfers.add(fileId);
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_transfer_decline',
           'fileId': fileId,
         });
@@ -634,7 +635,7 @@ void fileReceiverIsolate(List<Object> args) {
       }
     } else if (command['command'] == 'cancel_outgoing_offer') {
       try {
-        await _sendTransferControlFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_offer_cancelled',
         });
       } finally {
@@ -652,34 +653,6 @@ void fileReceiverIsolate(List<Object> args) {
     commandQueue.add(command);
     processCommandQueue();
   });
-}
-
-class _TransferCancelled implements Exception {
-  const _TransferCancelled();
-}
-
-String _clientConnectErrorMessage({
-  required Object error,
-  required String? host,
-  required int? port,
-  required bool useTLS,
-}) {
-  final details = error.toString();
-  final endpoint = host == null || port == null
-      ? 'the receiver'
-      : '$host:$port';
-
-  if (error is SocketException) {
-    return 'Could not reach $endpoint. Check that the IP address and port are correct, both devices are on the same network, and the receiver server is running.\n\nDetails: $details';
-  }
-
-  if (details.toLowerCase().contains('hostname mismatch')) {
-    return 'Could not verify the receiver TLS certificate name. Refresh discovery and try connecting to the receiver again.\n\nDetails: $details';
-  }
-
-  return useTLS
-      ? 'This device has TLS enabled, but the other device appears to have TLS disabled or an incompatible certificate. Disable TLS on this device, or enable TLS on the other device, then try again.\n\nDetails: $details'
-      : 'This device has TLS disabled, but the other device appears to require TLS. Enable TLS on this device, or disable TLS on the other device, then try again.\n\nDetails: $details';
 }
 
 Future<String?> _sendFileCommand(
@@ -712,7 +685,7 @@ Future<String?> _sendFileCommand(
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': _displayFileName(source.fileName),
+        'name': core.displayFileName(source.fileName),
         'size': source.fileSize,
       };
     } else {
@@ -721,12 +694,12 @@ Future<String?> _sendFileCommand(
 
       fileHeader = {
         'uuid': Uuid().v4(),
-        'name': _displayFileName(filePath),
+        'name': core.displayFileName(filePath),
         'size': fileStats.size,
       };
     }
 
-    await _sendSocketFrame(clientSocket, {
+    await core.sendSocketFrame(clientSocket, {
       'type': 'file_offer',
       'uuid': fileHeader['uuid'],
       'name': fileHeader['name'],
@@ -752,7 +725,7 @@ Future<String?> _sendFileCommand(
     if (shouldCancel() ||
         shouldCancelTransfer(fileId) ||
         shouldDeclineTransfer(fileId)) {
-      throw const _TransferCancelled();
+      throw const core.TransferCancelled();
     }
 
     toUiSendPort.send({
@@ -764,7 +737,7 @@ Future<String?> _sendFileCommand(
       'pendingAcceptance': false,
     });
 
-    await _sendSocketFrame(clientSocket, {
+    await core.sendSocketFrame(clientSocket, {
       'type': 'file_start',
       'uuid': fileHeader['uuid'],
       'name': fileHeader['name'],
@@ -782,7 +755,7 @@ Future<String?> _sendFileCommand(
       shouldCancelTransfer: shouldCancelTransfer,
       onPaused: onPaused,
     );
-    await _sendSocketFrame(clientSocket, {
+    await core.sendSocketFrame(clientSocket, {
       'type': 'file_end',
       'fileId': fileHeader['uuid'],
     });
@@ -795,7 +768,7 @@ Future<String?> _sendFileCommand(
   } catch (e) {
     stopwatch.stop();
     await source?.dispose();
-    if (e is _TransferCancelled ||
+    if (e is core.TransferCancelled ||
         shouldCancel() ||
         (fileHeader != null &&
             shouldCancelTransfer(fileHeader['uuid'] as String))) {
@@ -811,7 +784,7 @@ Future<String?> _sendFileCommand(
           });
           return fileHeader['uuid'] as String;
         }
-        await _sendSocketFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_end',
           'fileId': fileHeader['uuid'],
           'cancelled': true,
@@ -864,7 +837,7 @@ Future<String?> _sendBatchCommand(
             source: source,
             header: {
               'uuid': Uuid().v4(),
-              'name': _displayFileName(source.fileName),
+              'name': core.displayFileName(source.fileName),
               'size': source.fileSize,
             },
             filePath: filePath,
@@ -877,12 +850,12 @@ Future<String?> _sendBatchCommand(
           _FileEntry(
             source: _SendSource(
               file: fileToSend,
-              fileName: _displayFileName(filePath),
+              fileName: core.displayFileName(filePath),
               fileSize: fileStats.size,
             ),
             header: {
               'uuid': Uuid().v4(),
-              'name': _displayFileName(filePath),
+              'name': core.displayFileName(filePath),
               'size': fileStats.size,
             },
             filePath: filePath,
@@ -906,7 +879,7 @@ Future<String?> _sendBatchCommand(
       )
       .toList();
 
-  await _sendSocketFrame(clientSocket, {
+  await core.sendSocketFrame(clientSocket, {
     'type': 'file_batch',
     'files': filesJson,
   });
@@ -934,7 +907,7 @@ Future<String?> _sendBatchCommand(
     if (shouldCancel() ||
         shouldCancelTransfer(firstFileId) ||
         shouldDeclineTransfer(firstFileId)) {
-      throw const _TransferCancelled();
+      throw const core.TransferCancelled();
     }
 
     for (final entry in fileEntries) {
@@ -956,7 +929,7 @@ Future<String?> _sendBatchCommand(
         'isBatch': true,
       });
 
-      await _sendSocketFrame(clientSocket, {
+      await core.sendSocketFrame(clientSocket, {
         'type': 'file_start',
         'uuid': fileId,
         'name': entry.header['name'],
@@ -975,9 +948,9 @@ Future<String?> _sendBatchCommand(
           shouldCancelTransfer: shouldCancelTransfer,
           onPaused: onPaused,
         );
-      } on _TransferCancelled {
+      } on core.TransferCancelled {
         fileCancelled = true;
-        await _sendSocketFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_end',
           'fileId': fileId,
           'cancelled': true,
@@ -992,7 +965,7 @@ Future<String?> _sendBatchCommand(
       }
 
       if (!fileCancelled) {
-        await _sendSocketFrame(clientSocket, {
+        await core.sendSocketFrame(clientSocket, {
           'type': 'file_end',
           'fileId': fileId,
         });
@@ -1002,7 +975,7 @@ Future<String?> _sendBatchCommand(
       await entry.source.dispose();
 
       if (shouldCancel()) {
-        throw const _TransferCancelled();
+        throw const core.TransferCancelled();
       }
     }
 
@@ -1138,22 +1111,6 @@ Future<File> _copySafDocumentToCache(Saf saf, String uri) async {
   return tempFile;
 }
 
-String _displayFileName(String value) {
-  var name = value;
-  try {
-    name = Uri.decodeComponent(name);
-  } on FormatException {
-    // Use the original value when a provider returns malformed escaping.
-  }
-  if (name.startsWith('primary:')) {
-    name = name.substring('primary:'.length);
-  }
-  final forwardSlash = name.lastIndexOf('/');
-  final backSlash = name.lastIndexOf('\\');
-  final separator = forwardSlash > backSlash ? forwardSlash : backSlash;
-  return separator == -1 ? name : name.substring(separator + 1);
-}
-
 Future<void> _sendFileSequentially({
   required String fileId,
   required File file,
@@ -1189,7 +1146,7 @@ Future<void> _sendFileSequentially({
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
-        throw const _TransferCancelled();
+        throw const core.TransferCancelled();
       }
 
       final bytesToRead = min(chunkSize, fileSize - position);
@@ -1199,7 +1156,7 @@ Future<void> _sendFileSequentially({
       }
       final actualChunk = Uint8List.sublistView(buffer, 0, bytesRead);
 
-      await _sendSocketFrame(
+      await core.sendSocketFrame(
         clientSocket,
         {
           'type': 'file_chunk',
@@ -1208,49 +1165,13 @@ Future<void> _sendFileSequentially({
         payloadBytes: actualChunk,
       );
       if (shouldCancel() || shouldCancelTransfer(fileId)) {
-        throw const _TransferCancelled();
+        throw const core.TransferCancelled();
       }
       position += bytesRead;
     }
   } finally {
     await raf.close();
   }
-}
-
-void _configureSocketForTransfer(dynamic socket) {
-  try {
-    socket.setOption(SocketOption.tcpNoDelay, true);
-  } catch (_) {}
-}
-
-Future<void> _sendTransferControlFrame(
-  dynamic socket,
-  Map<String, dynamic> payload,
-) async {
-  await _sendSocketFrame(socket, payload);
-}
-
-Future<void> _sendSocketFrame(
-  dynamic socket,
-  Map<String, dynamic> payload, {
-  Uint8List? payloadBytes,
-}) async {
-  if (socket == null) {
-    return;
-  }
-  try {
-    final header = ByteData(8);
-    final bodyBytes = payloadBytes;
-    final metadataBytes = utf8.encode(jsonEncode(payload));
-    header.setUint32(0, metadataBytes.length, Endian.big);
-    header.setUint32(4, bodyBytes?.length ?? 0, Endian.big);
-    socket.add(header.buffer.asUint8List());
-    socket.add(metadataBytes);
-    if (bodyBytes != null && bodyBytes.isNotEmpty) {
-      socket.add(bodyBytes);
-    }
-    await socket.flush();
-  } catch (_) {}
 }
 
 void _handleSocketConnection(
@@ -1268,7 +1189,7 @@ void _handleSocketConnection(
   void Function(String fileId)? onRemoteTransferDeclined,
   required Map<String, dynamic> localPeerInfo,
 }) {
-  final readBuffer = _SocketReadBuffer();
+  final readBuffer = core.SocketReadBuffer();
   const progressUpdateInterval = Duration(milliseconds: 500);
 
   int? fileBytesLength;
@@ -1279,7 +1200,7 @@ void _handleSocketConnection(
   bool isDiscardingCancelledFile = false;
   DateTime lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
-  _OutputTarget? activeOutputTarget;
+  core.OutputTarget? activeOutputTarget;
   Map<String, dynamic>? activeFileHeader;
 
   final Stopwatch stopwatch = Stopwatch();
@@ -1510,7 +1431,7 @@ void _handleSocketConnection(
           toUiSendPort.send({
             'status': 'start',
             'fileId': fileId,
-            'fileName': _displayFileName(fileName),
+            'fileName': core.displayFileName(fileName),
             'filePath': '',
             'fileSize': fileSize,
             'pendingAcceptance': true,
@@ -1523,7 +1444,7 @@ void _handleSocketConnection(
           final fileList = files.map((f) {
             return <String, dynamic>{
               'fileId': f['uuid'] as String,
-              'fileName': _displayFileName(f['name'] as String),
+              'fileName': core.displayFileName(f['name'] as String),
               'fileSize': f['size'] as int,
             };
           }).toList();
@@ -1605,11 +1526,11 @@ void _handleSocketConnection(
     int fileSize, {
     required bool chunked,
   }) async {
-    _OutputTarget? fileTarget;
+    core.OutputTarget? fileTarget;
     try {
       fileTarget = await _createOutputTarget(
         configuredDownloadDirectory: configuredDownloadDirectory,
-        originalFileName: _displayFileName(headerJson['name'] as String),
+        originalFileName: core.displayFileName(headerJson['name'] as String),
         onWriteError: (e) {
           connectionErrorSent = true;
           toUiSendPort.send({
@@ -2004,190 +1925,39 @@ Future<String> _resolveDownloadDirectory({String? commandDirectory}) async {
   return fallback.path;
 }
 
-class _FrameHeader {
-  const _FrameHeader({
-    required this.headerLength,
-    required this.payloadLength,
-  });
-
-  final int headerLength;
-  final int payloadLength;
+/// SAF-specific output target (platform-dependent, kept in app layer).
+core.OutputTarget _createSafOutputTarget({
+  required String directoryUri,
+  required String fileName,
+  required String mimeType,
+}) {
+  final controller = StreamController<List<int>>();
+  final saf = Saf();
+  final writeFuture = saf.writeFileStream(
+    directoryUri,
+    fileName,
+    mimeType,
+    controller.stream,
+  );
+  return core.OutputTarget.custom(
+    fileName: fileName,
+    filePath: '$directoryUri/$fileName',
+    writeChunk: (data) => controller.add(data),
+    closeWriter: () async {
+      await controller.close();
+      await writeFuture;
+    },
+    deleteFile: () async {
+      await controller.close();
+      try {
+        final entity = await writeFuture;
+        await saf.delete(entity.uri);
+      } catch (_) {}
+    },
+  );
 }
 
-class _SocketReadBuffer {
-  final Queue<Uint8List> _chunks = Queue<Uint8List>();
-  int _headOffset = 0;
-  int _availableBytes = 0;
-
-  int get availableBytes => _availableBytes;
-
-  void add(List<int> bytes) {
-    if (bytes.isEmpty) {
-      return;
-    }
-
-    _chunks.add(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
-    _availableBytes += bytes.length;
-  }
-
-  _FrameHeader? tryPeekFrameHeader() {
-    final bytes = tryPeekBytes(8);
-    if (bytes == null) {
-      return null;
-    }
-
-    final header = ByteData.sublistView(bytes);
-    return _FrameHeader(
-      headerLength: header.getUint32(0, Endian.big),
-      payloadLength: header.getUint32(4, Endian.big),
-    );
-  }
-
-  Uint8List? tryPeekBytes(int byteCount) {
-    if (_availableBytes < byteCount) {
-      return null;
-    }
-
-    final out = Uint8List(byteCount);
-    var outOffset = 0;
-    var remaining = byteCount;
-    var chunkOffset = _headOffset;
-
-    for (final chunk in _chunks) {
-      final readable = chunk.length - chunkOffset;
-      final take = readable < remaining ? readable : remaining;
-      out.setRange(outOffset, outOffset + take, chunk, chunkOffset);
-      outOffset += take;
-      remaining -= take;
-      if (remaining == 0) {
-        break;
-      }
-      chunkOffset = 0;
-    }
-
-    return out;
-  }
-
-  void skipBytes(int byteCount) {
-    if (_availableBytes < byteCount) {
-      throw RangeError.range(byteCount, 0, _availableBytes, 'byteCount');
-    }
-    _consume(byteCount);
-  }
-
-  Uint8List? tryReadBytes(int byteCount) {
-    if (_availableBytes < byteCount) {
-      return null;
-    }
-
-    final out = Uint8List(byteCount);
-    var outOffset = 0;
-    var remaining = byteCount;
-
-    while (remaining > 0) {
-      final head = _chunks.first;
-      final readable = head.length - _headOffset;
-      final take = readable < remaining ? readable : remaining;
-      out.setRange(outOffset, outOffset + take, head, _headOffset);
-      _consume(take);
-      outOffset += take;
-      remaining -= take;
-    }
-
-    return out;
-  }
-
-  void _consume(int byteCount) {
-    _availableBytes -= byteCount;
-    _headOffset += byteCount;
-
-    while (_chunks.isNotEmpty && _headOffset >= _chunks.first.length) {
-      _headOffset -= _chunks.removeFirst().length;
-    }
-
-    if (_chunks.isEmpty) {
-      _headOffset = 0;
-    }
-  }
-}
-
-class _OutputTarget {
-  _OutputTarget._({
-    required this.fileName,
-    required this.filePath,
-    required this.writeChunk,
-    required this.closeWriter,
-    required this.deleteFile,
-  });
-
-  factory _OutputTarget.regular({
-    required String fileName,
-    required String filePath,
-    void Function(Object error)? onWriteError,
-  }) {
-    final file = File(filePath);
-    final sink = file.openWrite();
-    // IOSink.add() failures surface asynchronously through sink.done; without
-    // a listener they escape as unhandled isolate errors and the transfer
-    // silently stalls (e.g. sandboxed macOS denying the Downloads folder).
-    if (onWriteError != null) {
-      unawaited(sink.done.then((_) {}, onError: onWriteError));
-    }
-    return _OutputTarget._(
-      fileName: fileName,
-      filePath: filePath,
-      writeChunk: (data) => sink.add(data),
-      closeWriter: () => sink.close(),
-      deleteFile: () async {
-        await sink.close();
-        try {
-          if (await file.exists()) {
-            await file.delete();
-          }
-        } catch (_) {}
-      },
-    );
-  }
-
-  factory _OutputTarget.saf({
-    required String directoryUri,
-    required String fileName,
-    required String mimeType,
-  }) {
-    final controller = StreamController<List<int>>();
-    final saf = Saf();
-    final writeFuture = saf.writeFileStream(
-      directoryUri,
-      fileName,
-      mimeType,
-      controller.stream,
-    );
-    return _OutputTarget._(
-      fileName: fileName,
-      filePath: '$directoryUri/$fileName',
-      writeChunk: (data) => controller.add(data),
-      closeWriter: () async {
-        await controller.close();
-        await writeFuture;
-      },
-      deleteFile: () async {
-        await controller.close();
-        try {
-          final entity = await writeFuture;
-          await saf.delete(entity.uri);
-        } catch (_) {}
-      },
-    );
-  }
-
-  final String fileName;
-  final String filePath;
-  final void Function(Uint8List) writeChunk;
-  final Future<void> Function() closeWriter;
-  final Future<void> Function() deleteFile;
-}
-
-Future<_OutputTarget> _createOutputTarget({
+Future<core.OutputTarget> _createOutputTarget({
   required String? configuredDownloadDirectory,
   required String originalFileName,
   void Function(Object error)? onWriteError,
@@ -2228,19 +1998,19 @@ Future<_OutputTarget> _createOutputTarget({
       directoryUri: resolvedDirectory,
       originalFileName: originalFileName,
     );
-    return _OutputTarget.saf(
+    return _createSafOutputTarget(
       directoryUri: resolvedDirectory,
       fileName: fileName,
       mimeType: 'application/octet-stream',
     );
   }
 
-  final fileName = _generateUniqueFileName(
+  final fileName = core.generateUniqueFileName(
     resolvedDirectory,
     originalFileName,
   );
   final filePath = "$resolvedDirectory/$fileName";
-  return _OutputTarget.regular(
+  return core.OutputTarget.regular(
     fileName: fileName,
     filePath: filePath,
     onWriteError: onWriteError,
@@ -2259,31 +2029,6 @@ Future<bool> _directoryIsWritable(String directory) async {
     return true;
   } catch (_) {
     return false;
-  }
-}
-
-String _generateUniqueFileName(String directory, String originalFileName) {
-  final originalFile = File("$directory/$originalFileName");
-  if (!originalFile.existsSync()) {
-    return originalFileName;
-  }
-
-  final lastDotIndex = originalFileName.lastIndexOf('.');
-  final name = lastDotIndex > 0
-      ? originalFileName.substring(0, lastDotIndex)
-      : originalFileName;
-  final extension = lastDotIndex > 0
-      ? originalFileName.substring(lastDotIndex)
-      : '';
-
-  int counter = 1;
-  while (true) {
-    final newFileName = '$name ($counter)$extension';
-    final newFile = File("$directory/$newFileName");
-    if (!newFile.existsSync()) {
-      return newFileName;
-    }
-    counter++;
   }
 }
 
