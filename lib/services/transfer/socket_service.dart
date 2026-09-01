@@ -146,10 +146,11 @@ class SocketService {
 
         if (trustedCertificatePem != null &&
             trustedCertificatePem.trim().isNotEmpty) {
-          trustedCertPath = await TlsIdentityService.writeTrustedPeerCertificate(
-            peerId: trustedPeerId ?? host ?? 'peer',
-            certificatePem: trustedCertificatePem,
-          );
+          trustedCertPath =
+              await TlsIdentityService.writeTrustedPeerCertificate(
+                peerId: trustedPeerId ?? host ?? 'peer',
+                certificatePem: trustedCertificatePem,
+              );
         }
       }
     }

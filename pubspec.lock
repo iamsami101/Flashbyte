@@ -281,6 +281,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  flashbyte_core:
+    dependency: "direct main"
+    description:
+      path: "packages/flashbyte_core"
+      relative: true
+    source: path
+    version: "1.0.0"
   flutter:
     dependency: "direct main"
     description: flutter
