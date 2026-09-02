@@ -138,6 +138,4 @@ app.*.symbols
 # Agent & Harness / Testing files
 AGENTS.md
 agent.md
-/test/
-/integration_test/
-/tool/
+

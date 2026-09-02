@@ -59,8 +59,13 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Unit & widget tests
+      - name: Unit & widget tests (app)
         run: flutter test
+
+      - name: Unit tests (flashbyte_core)
+        working-directory: packages/flashbyte_core
+        run: dart test
 
       - name: Transfer integration test
         run: dart run tool/transfer_integration_test.dart
+
