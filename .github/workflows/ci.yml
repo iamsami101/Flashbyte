@@ -23,7 +23,9 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          dart pub get -C packages/flashbyte_core
 
       - name: Analyze
         run: flutter analyze
@@ -47,7 +49,9 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          dart pub get -C packages/flashbyte_core
 
       - name: Format
         run: dart format --output=none --set-exit-if-changed .
