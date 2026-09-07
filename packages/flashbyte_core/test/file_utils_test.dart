@@ -24,6 +24,11 @@ void main() {
     test('returns plain name when no separator', () {
       expect(displayFileName('file.txt'), 'file.txt');
     });
+
+    test('handles accented characters in filename', () {
+      expect(displayFileName('/home/user/Oxygène.flac'), 'Oxygène.flac');
+      expect(displayFileName('Café_concert.mp3'), 'Café_concert.mp3');
+    });
   });
 
   group('generateUniqueFileName', () {

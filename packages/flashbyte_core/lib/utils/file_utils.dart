@@ -5,7 +5,7 @@ String displayFileName(String value) {
   var name = value;
   try {
     name = Uri.decodeComponent(name);
-  } on FormatException {
+  } catch (_) {
     // Use the original value when a provider returns malformed escaping.
   }
   if (name.startsWith('primary:')) {

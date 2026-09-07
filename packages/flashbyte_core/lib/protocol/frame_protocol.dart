@@ -118,6 +118,7 @@ Future<void> sendSocketFrame(
   Uint8List? payloadBytes,
 }) async {
   if (socket == null) {
+    print('[FRAME] sendSocketFrame: socket is null, skipping');
     return;
   }
   try {
@@ -132,17 +133,25 @@ Future<void> sendSocketFrame(
       socket.add(bodyBytes);
     }
     await socket.flush();
-  } catch (_) {}
+  } catch (e, st) {
+    print('[FRAME] sendSocketFrame ERROR: $e');
+    print('[FRAME] sendSocketFrame STACK: $st');
+  }
 }
 
 /// Sends a control frame (zero-payload frame carrying only metadata).
 void sendControlFrame(dynamic socket, Map<String, dynamic> payload) {
-  final payloadBytes = utf8.encode(jsonEncode(payload));
-  final header = ByteData(8);
-  header.setUint32(0, payloadBytes.length, Endian.big);
-  header.setUint32(4, 0, Endian.big);
-  socket.add(header.buffer.asUint8List());
-  socket.add(payloadBytes);
+  try {
+    final payloadBytes = utf8.encode(jsonEncode(payload));
+    final header = ByteData(8);
+    header.setUint32(0, payloadBytes.length, Endian.big);
+    header.setUint32(4, 0, Endian.big);
+    socket.add(header.buffer.asUint8List());
+    socket.add(payloadBytes);
+  } catch (e, st) {
+    print('[FRAME] sendControlFrame ERROR: $e');
+    print('[FRAME] sendControlFrame STACK: $st');
+  }
 }
 
 /// Configures a socket for low-latency file transfer.
