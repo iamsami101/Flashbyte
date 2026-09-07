@@ -1,1 +1,1 @@
-Share files directly between your devices — no cloud, no accounts, no limits.
+A fast cross-platform file sharing app. 
