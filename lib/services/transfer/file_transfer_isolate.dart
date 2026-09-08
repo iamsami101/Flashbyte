@@ -25,6 +25,7 @@ void fileReceiverIsolate(List<Object> args) {
 
   dynamic clientSocket;
   dynamic serverSocket;
+  String? currentDownloadDirectory;
 
   final Queue<Map<String, dynamic>> commandQueue =
       Queue<Map<String, dynamic>>();
@@ -108,11 +109,11 @@ void fileReceiverIsolate(List<Object> args) {
 
     while (commandQueue.isNotEmpty) {
       final command = commandQueue.removeFirst();
-      print('[CMD] processCommandQueue: command=${command['command']}');
 
       try {
         if (command['command'] == 'connect') {
           final useTLS = command['useTLS'] ?? false;
+          currentDownloadDirectory = command['downloadDirectory'] as String?;
           final localPeerInfo = <String, dynamic>{
             'type': 'peer_info',
             'name': command['deviceName'],
@@ -128,21 +129,14 @@ void fileReceiverIsolate(List<Object> args) {
               try {
                 final certPath = command['certPath'] as String?;
                 final keyPath = command['keyPath'] as String?;
-                print('[SERVER_TLS] certPath=$certPath, keyPath=$keyPath');
 
                 if (certPath != null && keyPath != null) {
-                  final certFile = File(certPath);
-                  final keyFile = File(keyPath);
-                  print(
-                    '[SERVER_TLS] cert exists=${certFile.existsSync()}, key exists=${keyFile.existsSync()}',
-                  );
                   securityContext = SecurityContext(withTrustedRoots: false);
                   securityContext.useCertificateChain(certPath);
                   securityContext.usePrivateKey(keyPath);
                 } else {
                   throw Exception('Generated certificate files not found.');
                 }
-                print('[SERVER_TLS] Certificate loaded successfully');
               } catch (e) {
                 toUiSendPort.send({
                   'status': 'error',
@@ -160,7 +154,6 @@ void fileReceiverIsolate(List<Object> args) {
                 securityContext!,
                 shared: true,
               );
-              print('[SERVER_TLS] SecureServerSocket bound successfully');
             } else {
               serverSocket = await ServerSocket.bind(
                 "0.0.0.0",
@@ -193,8 +186,7 @@ void fileReceiverIsolate(List<Object> args) {
                   savedClientSocket,
                   toUiSendPort,
                   waitForProbe: !useTLS,
-                  configuredDownloadDirectory:
-                      command['downloadDirectory'] as String?,
+                  getDownloadDirectory: () => currentDownloadDirectory,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
@@ -207,9 +199,7 @@ void fileReceiverIsolate(List<Object> args) {
                   onRemoteTransferDeclined: handleRemoteTransferDeclined,
                 );
               },
-              onError: (error) {
-                print('[SERVER_TLS] listen error: $error');
-              },
+              onError: (error) {},
             );
           } else if (command['mode'] == 'client') {
             SecurityContext? securityContext;
@@ -226,9 +216,6 @@ void fileReceiverIsolate(List<Object> args) {
                 // expectedCertificateFingerprint.
                 if (trustedCertPath != null &&
                     File(trustedCertPath).existsSync()) {
-                  print(
-                    '[CLIENT_TLS] trusted cert path=$trustedCertPath, exists=true',
-                  );
                   securityContext = SecurityContext(withTrustedRoots: false);
                   securityContext.setTrustedCertificates(trustedCertPath);
                 }
@@ -241,7 +228,6 @@ void fileReceiverIsolate(List<Object> args) {
                   securityContext.usePrivateKey(keyPath);
                 }
               } catch (e) {
-                print('[CLIENT_TLS] cert load error: ${e.toString()}');
                 rethrow;
               }
             }
@@ -284,14 +270,12 @@ void fileReceiverIsolate(List<Object> args) {
                   }
                 }
                 core.configureSocketForTransfer(finalSocket);
-                print('[CLIENT_TLS] connected successfully');
                 clientSocket = finalSocket;
                 toUiSendPort.send({'status': 'connected_to_host'});
                 _handleSocketConnection(
                   clientSocket!,
                   toUiSendPort,
-                  configuredDownloadDirectory:
-                      command['downloadDirectory'] as String?,
+                  getDownloadDirectory: () => currentDownloadDirectory,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
@@ -331,8 +315,7 @@ void fileReceiverIsolate(List<Object> args) {
                   clientSocket!,
                   toUiSendPort,
                   waitForProbe: true,
-                  configuredDownloadDirectory:
-                      command['downloadDirectory'] as String?,
+                  getDownloadDirectory: () => currentDownloadDirectory,
                   shouldSuppressConnectionErrors: () =>
                       localDisconnectRequested,
                   shouldCancelReceivingFile: (fileId) =>
@@ -351,7 +334,6 @@ void fileReceiverIsolate(List<Object> args) {
                 );
               }
             } catch (e) {
-              print('[CLIENT_TLS] connect error: $e');
               toUiSendPort.send({
                 'status': 'error',
                 'fatal': 'true',
@@ -369,7 +351,6 @@ void fileReceiverIsolate(List<Object> args) {
             continue;
           }
           if (clientSocket == null) {
-            print('[SEND] send_file: clientSocket is null, cannot send');
             toUiSendPort.send({
               'status': 'error',
               'fatal': 'true',
@@ -377,7 +358,6 @@ void fileReceiverIsolate(List<Object> args) {
             });
             continue;
           }
-          print('[SEND] send_file command: filePath=${command['filePath']}');
 
           final batch = <Map<String, dynamic>>[command];
           while (commandQueue.isNotEmpty &&
@@ -545,6 +525,9 @@ void fileReceiverIsolate(List<Object> args) {
             await serverSocket?.close();
           } catch (_) {}
           toUiSendPort.send({'command': 'disconnect'});
+        } else if (command['command'] == 'set_download_directory') {
+          final newDir = command['downloadDirectory'] as String?;
+          currentDownloadDirectory = newDir;
         }
       } catch (e) {
         if (localDisconnectRequested) {
@@ -680,18 +663,11 @@ Future<String?> _sendFileCommand(
 
   try {
     if (Platform.isAndroid) {
-      print(
-        '[SEND] _sendFileCommand: Android, opening SAF source for $filePath',
-      );
       source = await _openAndroidSendSource(Saf(), filePath);
       if (source == null) {
-        print('[SEND] _sendFileCommand: _openAndroidSendSource returned null');
         throw Exception('Could not read selected file metadata.');
       }
       fileToSend = source.file;
-      print(
-        '[SEND] _sendFileCommand: source.fileName=${source.fileName}, source.fileSize=${source.fileSize}',
-      );
 
       fileHeader = {
         'uuid': Uuid().v4(),
@@ -708,9 +684,6 @@ Future<String?> _sendFileCommand(
         'size': fileStats.size,
       };
     }
-    print(
-      '[SEND] _sendFileCommand: sending file_offer name=${fileHeader['name']} size=${fileHeader['size']}',
-    );
 
     await core.sendSocketFrame(clientSocket, {
       'type': 'file_offer',
@@ -718,7 +691,6 @@ Future<String?> _sendFileCommand(
       'name': fileHeader['name'],
       'size': fileHeader['size'],
     });
-    print('[SEND] _sendFileCommand: file_offer sent successfully');
 
     toUiSendPort.send({
       'status': 'send_start',
@@ -779,9 +751,7 @@ Future<String?> _sendFileCommand(
 
     await source?.dispose();
     return fileHeader['uuid'] as String;
-  } catch (e, st) {
-    print('[SEND] _sendFileCommand ERROR: $e');
-    print('[SEND] _sendFileCommand STACK: $st');
+  } catch (e) {
     stopwatch.stop();
     await source?.dispose();
     if (e is core.TransferCancelled ||
@@ -1063,27 +1033,20 @@ class _SendSource {
 /// probed first and, when the OS refuses, the document is streamed into a
 /// cache file via [Saf.readFileStream] and that copy is sent instead.
 Future<_SendSource?> _openAndroidSendSource(Saf saf, String uri) async {
-  print('[SEND] _openAndroidSendSource: uri=$uri');
   final fileStats = await saf.stat(uri);
   if (fileStats == null) {
-    print('[SEND] _openAndroidSendSource: saf.stat returned null');
     return null;
   }
   final fileName = fileStats.name;
   final fileSize = fileStats.length;
-  print('[SEND] _openAndroidSendSource: fileName=$fileName fileSize=$fileSize');
 
   int? openedFd;
   try {
     final fdResult = await saf.openFileDescriptor(uri, 'r');
     openedFd = fdResult.fd;
-    print(
-      '[SEND] _openAndroidSendSource: fd=${fdResult.fd} path=${fdResult.path}',
-    );
     final pseudoFile = File(fdResult.path);
     final probe = await pseudoFile.open();
     await probe.close();
-    print('[SEND] _openAndroidSendSource: pseudoFile opened successfully');
     return _SendSource(
       file: pseudoFile,
       fileName: fileName,
@@ -1091,7 +1054,6 @@ Future<_SendSource?> _openAndroidSendSource(Saf saf, String uri) async {
       fd: openedFd,
     );
   } catch (e) {
-    print('[SEND] _openAndroidSendSource: fd open failed: $e');
     if (openedFd != null) {
       try {
         await saf.closeFileDescriptor(openedFd);
@@ -1202,7 +1164,7 @@ void _handleSocketConnection(
   dynamic socket,
   SendPort toUiSendPort, {
   bool waitForProbe = false,
-  String? configuredDownloadDirectory,
+  String? Function()? getDownloadDirectory,
   bool Function()? shouldSuppressConnectionErrors,
   bool Function(String fileId)? shouldCancelReceivingFile,
   void Function(String fileId)? onTransferAcknowledged,
@@ -1213,7 +1175,6 @@ void _handleSocketConnection(
   void Function(String fileId)? onRemoteTransferDeclined,
   required Map<String, dynamic> localPeerInfo,
 }) {
-  print('[CONN] _handleSocketConnection: waitForProbe=$waitForProbe');
   final readBuffer = core.SocketReadBuffer();
   const progressUpdateInterval = Duration(milliseconds: 500);
 
@@ -1283,7 +1244,6 @@ void _handleSocketConnection(
   }
 
   void sendLocalPeerInfo() {
-    print('[RECV] sendLocalPeerInfo: $localPeerInfo');
     sendControlFrame(localPeerInfo);
   }
 
@@ -1360,9 +1320,6 @@ void _handleSocketConnection(
   }
 
   Future<bool> handleControlFrame(Map<String, dynamic> headerJson) async {
-    print(
-      '[RECV] handleControlFrame: type=${headerJson['type']} keys=${headerJson.keys.toList()}',
-    );
     if (!probeHandled) {
       probeHandled = true;
       final ok = headerJson['ok'];
@@ -1556,16 +1513,12 @@ void _handleSocketConnection(
     required bool chunked,
   }) async {
     final fileName = headerJson['name'] as String;
-    print(
-      '[RECV] beginFileFrame: name=$fileName size=$fileSize chunked=$chunked',
-    );
     core.OutputTarget? fileTarget;
     try {
       fileTarget = await _createOutputTarget(
-        configuredDownloadDirectory: configuredDownloadDirectory,
+        configuredDownloadDirectory: getDownloadDirectory?.call(),
         originalFileName: core.displayFileName(fileName),
         onWriteError: (e) {
-          print('[RECV] beginFileFrame onWriteError: $e');
           connectionErrorSent = true;
           toUiSendPort.send({
             'status': 'error',
@@ -1575,11 +1528,7 @@ void _handleSocketConnection(
           closeSocket();
         },
       );
-      print(
-        '[RECV] beginFileFrame: output target created: ${fileTarget.filePath}',
-      );
     } catch (e) {
-      print('[RECV] beginFileFrame ERROR: $e');
       connectionErrorSent = true;
       toUiSendPort.send({
         'status': 'error',
@@ -1667,9 +1616,6 @@ void _handleSocketConnection(
             jsonDecode(utf8.decode(headerBytes)) as Map<String, dynamic>;
 
         final frameType = headerJson['type'] as String?;
-        print(
-          '[RECV] processBufferedFrames: frameType=$frameType headerLen=${frameHeader.headerLength} payloadLen=${frameHeader.payloadLength}',
-        );
         final isControlFrame =
             headerJson.containsKey('type') || headerJson.containsKey('ok');
         if (frameHeader.payloadLength == 0 && isControlFrame) {
@@ -1892,9 +1838,6 @@ void _handleSocketConnection(
       }
     },
     onDone: () {
-      print(
-        '[RECV] socket onDone: gracefulDisconnect=$gracefulDisconnect connectionErrorSent=$connectionErrorSent probeHandled=$probeHandled',
-      );
       unawaited(
         activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
       );
@@ -1918,8 +1861,6 @@ void _handleSocketConnection(
       closeSocket();
     },
     onError: (e, st) {
-      print('[RECV] socket onError: $e');
-      print('[RECV] socket onError STACK: $st');
       unawaited(
         activeOutputTarget == null ? cleanupOpenFile() : discardPartialOutput(),
       );

@@ -21,6 +21,7 @@ import 'package:heroine/heroine.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
 import 'package:motor/motor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 @pragma('vm:entry-point')
 Future<void> onNotificationActionReceived(ReceivedAction receivedAction) async {
@@ -87,6 +88,20 @@ Future<void> main() async {
   }
   await AppAppearanceController.instance.load();
   await AppMotionController.instance.load();
+
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    const minSize = Size(600, 700);
+    const windowOptions = WindowOptions(
+      minimumSize: minSize,
+      size: Size(1280, 720),
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setMinimumSize(minSize);
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
 
   runApp(const MainApp());
 }

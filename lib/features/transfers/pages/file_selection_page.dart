@@ -330,6 +330,64 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
   }
 
+  Future<void> _pickFolder() async {
+    setState(() {
+      isPickingFile = true;
+    });
+
+    try {
+      final pickedFolder = await FastFilePicker.pickFolder(
+        writePermission: false,
+      );
+      if (!mounted || pickedFolder == null) return;
+
+      final folderPath = pickedFolder.path;
+      if (folderPath == null || folderPath.isEmpty) {
+        if (mounted) {
+          showScaffoldSnackbar('Cannot read this folder on this device.');
+        }
+        return;
+      }
+
+      final dir = Directory(folderPath);
+      if (!await dir.exists()) {
+        if (mounted) {
+          showScaffoldSnackbar('Folder not found.');
+        }
+        return;
+      }
+
+      final files = <FastFilePickerPath>[];
+      await for (final entity in dir.list(recursive: true)) {
+        if (entity is File) {
+          files.add(
+            FastFilePickerPath.fromPath(
+              entity.uri.pathSegments.last,
+              entity.path,
+            ),
+          );
+        }
+      }
+
+      if (!mounted) return;
+
+      if (files.isEmpty) {
+        showScaffoldSnackbar('No files found in the selected folder.');
+        return;
+      }
+
+      setState(() {
+        selectedFiles = files;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isPickingFile = false;
+        });
+      }
+    }
+  }
+
   void _handleDroppedFiles(DropDoneDetails details) {
     if (isConnectingToSender) {
       return;
@@ -1956,48 +2014,118 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                   _buildSelectedFileTile(selectedFiles[index]),
             ),
           ),
-        Material(
-          color: selectedFiles.isEmpty
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest,
+        ClipRRect(
           borderRadius: BorderRadius.circular(20),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: isPickingFile || isConnectingToSender ? null : _pickFiles,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 58),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  spacing: 10,
-                  children: [
-                    Icon(
-                      selectedFiles.isEmpty
-                          ? Icons.attach_file_rounded
-                          : Icons.swap_horiz_rounded,
-                      color: selectedFiles.isEmpty
-                          ? colorScheme.onPrimaryContainer
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    Text(
-                      isPickingFile
-                          ? "Opening picker..."
-                          : selectedFiles.isEmpty
-                          ? "Pick files"
-                          : "Change files",
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: selectedFiles.isEmpty
-                            ? colorScheme.onPrimaryContainer
-                            : colorScheme.onSurface,
-                        fontWeight: FontWeight.w700,
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Material(
+                  color: selectedFiles.isEmpty
+                      ? colorScheme.primaryContainer
+                      : colorScheme.surfaceContainerHighest,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(20),
+                  ),
+                  child: InkWell(
+                    onTap: isPickingFile || isConnectingToSender
+                        ? null
+                        : _pickFiles,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 58),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          spacing: 10,
+                          children: [
+                            Icon(
+                              selectedFiles.isEmpty
+                                  ? Icons.attach_file_rounded
+                                  : Icons.swap_horiz_rounded,
+                              color: selectedFiles.isEmpty
+                                  ? colorScheme.onPrimaryContainer
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                            Text(
+                              isPickingFile
+                                  ? "Picking..."
+                                  : selectedFiles.isEmpty
+                                  ? "Pick files"
+                                  : "Change files",
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: selectedFiles.isEmpty
+                                        ? colorScheme.onPrimaryContainer
+                                        : colorScheme.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              Container(
+                width: 1,
+                height: 58,
+                color: selectedFiles.isEmpty
+                    ? colorScheme.onPrimaryContainer.withValues(alpha: 0.15)
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.15),
+              ),
+              Expanded(
+                flex: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 100),
+                  child: Material(
+                    color: selectedFiles.isEmpty
+                        ? colorScheme.primaryContainer
+                        : colorScheme.surfaceContainerHighest,
+                    borderRadius: const BorderRadius.horizontal(
+                      right: Radius.circular(20),
+                    ),
+                    child: InkWell(
+                      onTap: isPickingFile || isConnectingToSender
+                          ? null
+                          : _pickFolder,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 58),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            spacing: 6,
+                            children: [
+                              Icon(
+                                Icons.folder_open_rounded,
+                                size: 20,
+                                color: selectedFiles.isEmpty
+                                    ? colorScheme.onPrimaryContainer
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                              Text(
+                                "Folder",
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: selectedFiles.isEmpty
+                                          ? colorScheme.onPrimaryContainer
+                                          : colorScheme.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

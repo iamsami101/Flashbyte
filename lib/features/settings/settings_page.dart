@@ -5,6 +5,7 @@ import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
 import 'package:flashbyte/app/controllers/app_motion_controller.dart';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/app/app_settings.dart';
+import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -204,6 +205,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       await AppSettings.setDownloadDirectory(pickedDirectory.uri);
+      SocketService.instance.setDownloadDirectory(pickedDirectory.uri);
       _downloadDirectoryController.text =
           AppSettings.formatDownloadDirectoryForDisplay(pickedDirectory.uri);
       return;
@@ -228,6 +230,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     await AppSettings.setDownloadDirectory(folderPath);
+    SocketService.instance.setDownloadDirectory(folderPath);
     _downloadDirectoryController.text =
         AppSettings.formatDownloadDirectoryForDisplay(folderPath);
   }
@@ -239,6 +242,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     final defaultDirectory = await AppSettings.getDefaultDownloadDirectory();
     await AppSettings.setDownloadDirectory(defaultDirectory);
+    SocketService.instance.setDownloadDirectory(defaultDirectory);
     if (!mounted) return;
     setState(() {
       _downloadDirectoryController.text =

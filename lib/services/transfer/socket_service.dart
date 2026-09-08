@@ -306,6 +306,15 @@ class SocketService {
     _sendTransferControl('decline_transfer', fileId);
   }
 
+  void setDownloadDirectory(String? directory) {
+    final sendPort = _toIsolateSendPort;
+    if (sendPort == null) return;
+    sendPort.send({
+      'command': 'set_download_directory',
+      'downloadDirectory': directory,
+    });
+  }
+
   Future<void> cancelOutgoingOffer() async {
     final sendPort = _toIsolateSendPort;
     if (sendPort == null) return;
