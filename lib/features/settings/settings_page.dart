@@ -310,6 +310,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 ListTile(
+                  title: const Text("AMOLED"),
+                  subtitle: const Text(
+                    "Use pure black backgrounds to save battery on OLED displays.",
+                  ),
+                  trailing: _SettingsToggle(
+                    value: _appearanceController.useAmoled,
+                    onChanged: (value) async {
+                      await _appearanceController.setUseAmoled(value);
+                      if (!mounted) return;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                ListTile(
                   title: const Text("Reduce Animations"),
                   subtitle: const Text(
                     "Reduce motion across the app.",
@@ -336,7 +350,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   trailing: _SettingsToggle(
                     value: _appearanceController.useDynamicColors,
-                    onChanged: _toggleDynamicColors,
+                    onChanged: _appearanceController.useAmoled
+                        ? null
+                        : _toggleDynamicColors,
                   ),
                 ),
                 Padding(

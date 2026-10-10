@@ -15,6 +15,7 @@ class AppSettings {
   static const String dynamicColorsEnabledKey = 'dynamicColorsEnabled';
   static const String primaryColorKey = 'primaryColor';
   static const String useDarkModeKey = 'useDarkMode';
+  static const String useAmoledKey = 'useAmoled';
   static const String disableAnimationsKey = 'disableAnimations';
   static const String disableReceiveShapeAnimationKey =
       'disableReceiveShapeAnimation';
@@ -163,6 +164,16 @@ class AppSettings {
   static Future<void> setUseDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(useDarkModeKey, value);
+  }
+
+  static Future<bool> getUseAmoled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(useAmoledKey) ?? false;
+  }
+
+  static Future<void> setUseAmoled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(useAmoledKey, value);
   }
 
   static Future<bool> getDisableAnimations() async {

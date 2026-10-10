@@ -6,3 +6,10 @@ analyzer:
   errors:
     avoid_print: ignore
     deprecated_member_use: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - windows/**
+    - macos/**
+    - linux/**
