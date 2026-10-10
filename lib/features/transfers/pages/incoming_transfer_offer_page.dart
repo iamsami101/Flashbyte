@@ -448,12 +448,9 @@ class _OfferSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -722,7 +719,7 @@ class _ApprovalFileRow extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: colorScheme.surface,
+              color: colorScheme.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -802,7 +799,7 @@ class _DetailPill extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 30),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(

@@ -122,11 +122,11 @@ class AppAppearanceController extends ChangeNotifier {
           inverseSurface: const Color(0xFFE6E6E6),
           onInverseSurface: const Color(0xFF1A1A1A),
           surfaceContainerLowest: const Color(0xFF000000),
-          surfaceContainerLow: const Color(0xFF0A0A0A),
-          surfaceContainer: const Color(0xFF121212),
-          surfaceContainerHigh: const Color(0xFF1A1A1A),
-          surfaceContainerHighest: const Color(0xFF2A2A2A),
-          surfaceBright: const Color(0xFF1E1E1E),
+          surfaceContainerLow: const Color(0xFF111111),
+          surfaceContainer: const Color(0xFF1A1A1A),
+          surfaceContainerHigh: const Color(0xFF242424),
+          surfaceContainerHighest: const Color(0xFF2E2E2E),
+          surfaceBright: const Color(0xFF1A1A1A),
           surfaceDim: const Color(0xFF000000),
         );
 

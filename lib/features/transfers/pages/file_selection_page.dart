@@ -1173,7 +1173,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colorScheme.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
@@ -1329,7 +1328,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
         padding: const EdgeInsets.all(22),
@@ -1439,7 +1437,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       constraints: const BoxConstraints(minHeight: 52),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
@@ -1509,7 +1507,6 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colorScheme.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
@@ -1902,7 +1899,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       elevation: 0,
       color: _isDraggingFilesOverSendCard
           ? colorScheme.primaryContainer.withValues(alpha: 0.58)
-          : colorScheme.surface,
+          : colorScheme.surfaceContainerLow,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: CustomPaint(
@@ -2193,7 +2190,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: colorScheme.surface,
+              color: colorScheme.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -2216,7 +2213,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
             constraints: const BoxConstraints(minHeight: 30),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: colorScheme.surface,
+              color: colorScheme.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(15),
             ),
             alignment: Alignment.center,
