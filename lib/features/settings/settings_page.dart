@@ -297,30 +297,20 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 ListTile(
                   title: const Text("Dark Mode"),
-                  subtitle: const Text(
-                    "Use the app's dark theme instead of the light theme.",
+                  subtitle: Text(
+                    _appearanceController.isAmoled
+                        ? "Always on for the AMOLED theme."
+                        : "Use the app's dark theme instead of the light theme.",
                   ),
                   trailing: _SettingsToggle(
                     value: _appearanceController.useDarkMode,
-                    onChanged: (value) async {
-                      await _appearanceController.setUseDarkMode(value);
-                      if (!mounted) return;
-                      setState(() {});
-                    },
-                  ),
-                ),
-                ListTile(
-                  title: const Text("AMOLED"),
-                  subtitle: const Text(
-                    "Use pure black backgrounds to save battery on OLED displays.",
-                  ),
-                  trailing: _SettingsToggle(
-                    value: _appearanceController.useAmoled,
-                    onChanged: (value) async {
-                      await _appearanceController.setUseAmoled(value);
-                      if (!mounted) return;
-                      setState(() {});
-                    },
+                    onChanged: _appearanceController.isAmoled
+                        ? null
+                        : (value) async {
+                            await _appearanceController.setUseDarkMode(value);
+                            if (!mounted) return;
+                            setState(() {});
+                          },
                   ),
                 ),
                 ListTile(
@@ -350,7 +340,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   trailing: _SettingsToggle(
                     value: _appearanceController.useDynamicColors,
-                    onChanged: _appearanceController.useAmoled
+                    onChanged: _appearanceController.isAmoled
                         ? null
                         : _toggleDynamicColors,
                   ),
@@ -365,16 +355,32 @@ class _SettingsPageState extends State<SettingsPage> {
                     ) {
                       final isSelected =
                           _appearanceController.primaryColorName == entry.key;
+                      final isAmoledEntry = entry.key == 'amoled';
                       return ChoiceChip(
-                        label: Text(_capitalize(entry.key)),
+                        label: Text(
+                          isAmoledEntry ? 'AMOLED' : _capitalize(entry.key),
+                        ),
                         selected: isSelected,
                         onSelected: _appearanceController.useDynamicColors
                             ? null
                             : (_) => _selectPrimaryColor(entry.key),
-                        avatar: CircleAvatar(
-                          backgroundColor: entry.value,
-                          radius: 8,
-                        ),
+                        avatar: isAmoledEntry
+                            ? Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              )
+                            : CircleAvatar(
+                                backgroundColor: entry.value,
+                                radius: 8,
+                              ),
                       );
                     }).toList(),
                   ),
