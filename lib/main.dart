@@ -331,20 +331,23 @@ class _StartPageState extends State<StartPage> {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          top: 16,
-          right: -44,
-          child: RepaintBoundary(
-            child: _maybeAnimate(
-              context,
-              StarWidget(
-                key: ValueKey(
-                  '${primaryColor.value}-${brightness.name}',
+          top: 0,
+          bottom: 0,
+          right: -40,
+          child: Center(
+            child: RepaintBoundary(
+              child: _maybeAnimate(
+                context,
+                StarWidget(
+                  key: ValueKey(
+                    '${primaryColor.value}-${brightness.name}',
+                  ),
+                  size: 180,
                 ),
-                size: 160,
-              ),
-              (child) => child.animate().fadeIn(
-                duration: 450.ms,
-                curve: Curves.easeOutCubic,
+                (child) => child.animate().fadeIn(
+                  duration: 450.ms,
+                  curve: Curves.easeOutCubic,
+                ),
               ),
             ),
           ),
@@ -405,7 +408,7 @@ class _StartPageState extends State<StartPage> {
                       backgroundColor: colorScheme.surfaceContainerHighest,
                       foregroundColor: colorScheme.onSurface,
                       onTap: () => _openSharing(0),
-                      height: 112,
+                      height: 100,
                     ),
                     _HomeActionCard(
                       icon: Icons.south_west_rounded,
@@ -414,7 +417,7 @@ class _StartPageState extends State<StartPage> {
                       backgroundColor: colorScheme.primary,
                       foregroundColor: colorScheme.onPrimary,
                       onTap: () => _openSharing(1),
-                      height: 112,
+                      height: 100,
                     ),
                   ],
                 ),
