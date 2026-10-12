@@ -331,23 +331,20 @@ class _StartPageState extends State<StartPage> {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          top: 0,
-          bottom: 0,
+          top: 40,
           right: -40,
-          child: Center(
-            child: RepaintBoundary(
-              child: _maybeAnimate(
-                context,
-                StarWidget(
-                  key: ValueKey(
-                    '${primaryColor.value}-${brightness.name}',
-                  ),
-                  size: 180,
+          child: RepaintBoundary(
+            child: _maybeAnimate(
+              context,
+              StarWidget(
+                key: ValueKey(
+                  '${primaryColor.value}-${brightness.name}',
                 ),
-                (child) => child.animate().fadeIn(
-                  duration: 450.ms,
-                  curve: Curves.easeOutCubic,
-                ),
+                size: 210,
+              ),
+              (child) => child.animate().fadeIn(
+                duration: 450.ms,
+                curve: Curves.easeOutCubic,
               ),
             ),
           ),
