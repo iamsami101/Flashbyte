@@ -327,148 +327,162 @@ class _StartPageState extends State<StartPage> {
     final primaryColor = colorScheme.primary;
     final brightness = Theme.of(context).brightness;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          top: 16,
-          right: -44,
-          child: RepaintBoundary(
-            child: _maybeAnimate(
-              context,
-              StarWidget(
-                key: ValueKey(
-                  '${primaryColor.value}-${brightness.name}',
-                ),
-                size: 160,
-              ),
-              (child) => child.animate().fadeIn(
-                duration: 450.ms,
-                curve: Curves.easeOutCubic,
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const brandHeight = 74.0;
+                const gap = 20.0;
+                final maxStar = constraints.maxHeight - brandHeight - gap;
+                final starSize = math.max(
+                  0.0,
+                  math.min(220.0, maxStar),
+                );
+
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RepaintBoundary(
+                        child: _maybeAnimate(
+                          context,
+                          StarWidget(
+                            key: ValueKey(
+                              '${primaryColor.value}-${brightness.name}',
+                            ),
+                            size: starSize,
+                          ),
+                          (child) => child.animate().fadeIn(
+                            duration: 450.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: gap),
+                      _maybeAnimate(
+                        context,
+                        Column(
+                          children: [
+                            Text(
+                              'Flashbyte',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.displaySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Local file sharing',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        (child) => child
+                            .animate()
+                            .fadeIn(
+                              delay: 80.ms,
+                              duration: 420.ms,
+                              curve: Curves.easeOutCubic,
+                            )
+                            .slideY(
+                              begin: 0.06,
+                              end: 0,
+                              delay: 80.ms,
+                              duration: 420.ms,
+                              curve: Curves.easeOutCubic,
+                            ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Spacer(flex: 4),
-              _maybeAnimate(
-                context,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Flashbyte',
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Local file sharing',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+          _maybeAnimate(
+            context,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 10,
+              children: [
+                _HomeActionCard(
+                  icon: Icons.north_east_rounded,
+                  title: 'Send files',
+                  subtitle: 'Choose files to share',
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  foregroundColor: colorScheme.onSurface,
+                  onTap: () => _openSharing(0),
+                  height: 100,
                 ),
-                (child) => child
-                    .animate()
-                    .fadeIn(
-                      delay: 80.ms,
-                      duration: 420.ms,
-                      curve: Curves.easeOutCubic,
-                    )
-                    .slideY(
-                      begin: 0.06,
-                      end: 0,
-                      delay: 80.ms,
-                      duration: 420.ms,
-                      curve: Curves.easeOutCubic,
-                    ),
-              ),
-              const Spacer(flex: 5),
-              _maybeAnimate(
-                context,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 12,
-                  children: [
-                    _HomeActionCard(
-                      icon: Icons.north_east_rounded,
-                      title: 'Send files',
-                      subtitle: 'Choose files to share',
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      foregroundColor: colorScheme.onSurface,
-                      onTap: () => _openSharing(0),
-                      height: 112,
-                    ),
-                    _HomeActionCard(
-                      icon: Icons.south_west_rounded,
-                      title: 'Receive files',
-                      subtitle: 'Wait for a sender',
-                      backgroundColor: colorScheme.primary,
-                      foregroundColor: colorScheme.onPrimary,
-                      onTap: () => _openSharing(1),
-                      height: 112,
-                    ),
-                  ],
+                _HomeActionCard(
+                  icon: Icons.south_west_rounded,
+                  title: 'Receive files',
+                  subtitle: 'Wait for a sender',
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
+                  onTap: () => _openSharing(1),
+                  height: 100,
                 ),
-                (child) => child
-                    .animate()
-                    .fadeIn(
-                      delay: 170.ms,
-                      duration: 360.ms,
-                      curve: Curves.easeOutCubic,
-                    )
-                    .slideY(
-                      begin: 0.05,
-                      end: 0,
-                      delay: 170.ms,
-                      duration: 360.ms,
-                      curve: Curves.easeOutCubic,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              _maybeAnimate(
-                context,
-                Center(
-                  child: TextButton.icon(
-                    onPressed: _openSettings,
-                    icon: const Icon(Icons.settings_rounded, size: 20),
-                    label: const Text('Settings'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: colorScheme.onSurfaceVariant,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                    ),
+              ],
+            ),
+            (child) => child
+                .animate()
+                .fadeIn(
+                  delay: 170.ms,
+                  duration: 360.ms,
+                  curve: Curves.easeOutCubic,
+                )
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  delay: 170.ms,
+                  duration: 360.ms,
+                  curve: Curves.easeOutCubic,
+                ),
+          ),
+          const SizedBox(height: 4),
+          _maybeAnimate(
+            context,
+            Center(
+              child: TextButton.icon(
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings_rounded, size: 20),
+                label: const Text('Settings'),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
                   ),
                 ),
-                (child) => child
-                    .animate()
-                    .fadeIn(
-                      delay: 280.ms,
-                      duration: 340.ms,
-                      curve: Curves.easeOutCubic,
-                    )
-                    .slideY(
-                      begin: 0.04,
-                      end: 0,
-                      delay: 280.ms,
-                      duration: 340.ms,
-                      curve: Curves.easeOutCubic,
-                    ),
               ),
-            ],
+            ),
+            (child) => child
+                .animate()
+                .fadeIn(
+                  delay: 280.ms,
+                  duration: 340.ms,
+                  curve: Curves.easeOutCubic,
+                )
+                .slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 280.ms,
+                  duration: 340.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
