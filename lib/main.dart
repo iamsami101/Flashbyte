@@ -323,190 +323,149 @@ class _StartPageState extends State<StartPage> {
   }
 
   Widget _buildMobileHome() {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final colorScheme = Theme.of(context).colorScheme;
+    final primaryColor = colorScheme.primary;
     final brightness = Theme.of(context).brightness;
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: Transform.translate(
-            offset: Offset(50, 0),
-            child: RepaintBoundary(
-              child: _maybeAnimate(
-                context,
-                StarWidget(
-                  key: ValueKey(
-                    '${primaryColor.value}-${brightness.name}',
-                  ),
+        Positioned(
+          top: 16,
+          right: -44,
+          child: RepaintBoundary(
+            child: _maybeAnimate(
+              context,
+              StarWidget(
+                key: ValueKey(
+                  '${primaryColor.value}-${brightness.name}',
                 ),
-                (child) => child.animate().fadeIn(
-                  duration: 450.ms,
-                  curve: Curves.easeOutCubic,
-                ),
+                size: 160,
+              ),
+              (child) => child.animate().fadeIn(
+                duration: 450.ms,
+                curve: Curves.easeOutCubic,
               ),
             ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: SizedBox(
-            height: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Spacer(),
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Spacer(flex: 4),
+              _maybeAnimate(
+                context,
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _maybeAnimate(
-                      context,
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Flash\nByte",
-                            style: TextStyle(
-                              fontSize: 50,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryFixed,
-                            ),
-                          ),
-                          SizedBox(
-                            height: 10,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 5),
-                            child: Text(
-                              "Local file sharing",
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.secondary,
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'Flashbyte',
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
                       ),
-                      (child) => child
-                          .animate()
-                          .fadeIn(
-                            delay: 80.ms,
-                            duration: 420.ms,
-                            curve: Curves.easeOutCubic,
-                          )
-                          .slideY(
-                            begin: 0.06,
-                            end: 0,
-                            delay: 80.ms,
-                            duration: 420.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
                     ),
-                    SizedBox(
-                      height: 200,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Local file sharing',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
-                Spacer(),
+                (child) => child
+                    .animate()
+                    .fadeIn(
+                      delay: 80.ms,
+                      duration: 420.ms,
+                      curve: Curves.easeOutCubic,
+                    )
+                    .slideY(
+                      begin: 0.06,
+                      end: 0,
+                      delay: 80.ms,
+                      duration: 420.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
+              ),
+              const Spacer(flex: 5),
+              _maybeAnimate(
+                context,
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: 12,
                   children: [
-                    _maybeAnimate(
-                      context,
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonal(
-                          style: ButtonStyle(
-                            padding: WidgetStatePropertyAll(
-                              EdgeInsets.symmetric(vertical: 22),
-                            ),
-                          ),
-                          onPressed: () => _openSharing(0),
-                          child: const Text("Send"),
-                        ),
-                      ),
-                      (child) => child
-                          .animate()
-                          .fadeIn(
-                            delay: 170.ms,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          )
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            delay: 170.ms,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
+                    _HomeActionCard(
+                      icon: Icons.north_east_rounded,
+                      title: 'Send files',
+                      subtitle: 'Choose files to share',
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      foregroundColor: colorScheme.onSurface,
+                      onTap: () => _openSharing(0),
+                      height: 112,
                     ),
-                    _maybeAnimate(
-                      context,
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          style: ButtonStyle(
-                            padding: WidgetStatePropertyAll(
-                              EdgeInsets.symmetric(vertical: 22),
-                            ),
-                          ),
-                          onPressed: () => _openSharing(1),
-                          child: const Text("Receive"),
-                        ),
-                      ),
-                      (child) => child
-                          .animate()
-                          .fadeIn(
-                            delay: 240.ms,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          )
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            delay: 240.ms,
-                            duration: 360.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
-                    ),
-                    _maybeAnimate(
-                      context,
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonalIcon(
-                          style: const ButtonStyle(
-                            padding: WidgetStatePropertyAll(
-                              EdgeInsets.symmetric(vertical: 20),
-                            ),
-                          ),
-                          onPressed: _openSettings,
-                          icon: const Icon(Icons.settings_rounded),
-                          label: const Text("Settings"),
-                        ),
-                      ),
-                      (child) => child
-                          .animate()
-                          .fadeIn(
-                            delay: 300.ms,
-                            duration: 340.ms,
-                            curve: Curves.easeOutCubic,
-                          )
-                          .slideY(
-                            begin: 0.05,
-                            end: 0,
-                            delay: 300.ms,
-                            duration: 340.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
+                    _HomeActionCard(
+                      icon: Icons.south_west_rounded,
+                      title: 'Receive files',
+                      subtitle: 'Wait for a sender',
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      onTap: () => _openSharing(1),
+                      height: 112,
                     ),
                   ],
                 ),
-              ],
-            ),
+                (child) => child
+                    .animate()
+                    .fadeIn(
+                      delay: 170.ms,
+                      duration: 360.ms,
+                      curve: Curves.easeOutCubic,
+                    )
+                    .slideY(
+                      begin: 0.05,
+                      end: 0,
+                      delay: 170.ms,
+                      duration: 360.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              _maybeAnimate(
+                context,
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _openSettings,
+                    icon: const Icon(Icons.settings_rounded, size: 20),
+                    label: const Text('Settings'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: colorScheme.onSurfaceVariant,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                (child) => child
+                    .animate()
+                    .fadeIn(
+                      delay: 280.ms,
+                      duration: 340.ms,
+                      curve: Curves.easeOutCubic,
+                    )
+                    .slideY(
+                      begin: 0.04,
+                      end: 0,
+                      delay: 280.ms,
+                      duration: 340.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
+              ),
+            ],
           ),
         ),
       ],
@@ -867,6 +826,7 @@ class _HomeActionCard extends StatefulWidget {
     required this.backgroundColor,
     required this.foregroundColor,
     required this.onTap,
+    this.height = 148,
   });
 
   final IconData icon;
@@ -875,6 +835,7 @@ class _HomeActionCard extends StatefulWidget {
   final Color backgroundColor;
   final Color foregroundColor;
   final VoidCallback onTap;
+  final double height;
 
   @override
   State<_HomeActionCard> createState() => _HomeActionCardState();
@@ -906,7 +867,7 @@ class _HomeActionCardState extends State<_HomeActionCard> {
           },
           onTap: widget.onTap,
           child: SizedBox(
-            height: 148,
+            height: widget.height,
             child: Padding(
               padding: const EdgeInsets.all(22),
               child: Column(

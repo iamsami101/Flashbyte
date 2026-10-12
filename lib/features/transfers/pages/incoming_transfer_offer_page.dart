@@ -719,8 +719,11 @@ class _ApprovalFileRow extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHigh,
+              color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
             child: Icon(
               _fileIcon(extension),
@@ -799,8 +802,11 @@ class _DetailPill extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 30),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
