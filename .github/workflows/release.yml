@@ -24,7 +24,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.44.2'
+          flutter-version: "3.47.7"
           cache: true
 
       - name: Move source to F-Droid build path
@@ -106,7 +106,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.44.2'
+          flutter-version: "3.47.7"
           cache: true
 
       - name: Enable Linux desktop
@@ -140,7 +140,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.44.2'
+          flutter-version: "3.47.7"
           cache: true
 
       - name: Enable Windows desktop
@@ -230,7 +230,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.44.2'
+          flutter-version: "3.47.7"
           cache: true
 
       - name: Enable macOS desktop
