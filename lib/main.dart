@@ -408,7 +408,6 @@ class _StartPageState extends State<StartPage> {
                       backgroundColor: colorScheme.surfaceContainerHighest,
                       foregroundColor: colorScheme.onSurface,
                       onTap: () => _openSharing(0),
-                      height: 100,
                     ),
                     _HomeActionCard(
                       icon: Icons.south_west_rounded,
@@ -417,7 +416,6 @@ class _StartPageState extends State<StartPage> {
                       backgroundColor: colorScheme.primary,
                       foregroundColor: colorScheme.onPrimary,
                       onTap: () => _openSharing(1),
-                      height: 100,
                     ),
                   ],
                 ),
@@ -829,7 +827,6 @@ class _HomeActionCard extends StatefulWidget {
     required this.backgroundColor,
     required this.foregroundColor,
     required this.onTap,
-    this.height = 148,
   });
 
   final IconData icon;
@@ -838,7 +835,6 @@ class _HomeActionCard extends StatefulWidget {
   final Color backgroundColor;
   final Color foregroundColor;
   final VoidCallback onTap;
-  final double height;
 
   @override
   State<_HomeActionCard> createState() => _HomeActionCardState();
@@ -869,34 +865,32 @@ class _HomeActionCardState extends State<_HomeActionCard> {
             });
           },
           onTap: widget.onTap,
-          child: SizedBox(
-            height: widget.height,
-            child: Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(widget.icon, color: widget.foregroundColor, size: 28),
-                  const Spacer(),
-                  Text(
-                    widget.title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: widget.foregroundColor,
-                      fontWeight: FontWeight.w600,
-                    ),
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, color: widget.foregroundColor, size: 28),
+                const SizedBox(height: 14),
+                Text(
+                  widget.title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: widget.foregroundColor,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    widget.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: widget.foregroundColor.withValues(alpha: 0.72),
-                      height: 1.3,
-                    ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  widget.subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: widget.foregroundColor.withValues(alpha: 0.72),
+                    height: 1.3,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
