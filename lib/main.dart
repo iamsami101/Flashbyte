@@ -14,6 +14,7 @@ import 'package:flashbyte/app/controllers/app_motion_controller.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
 import 'package:flashbyte/features/settings/settings_page.dart';
 import 'package:flashbyte/features/transfers/pages/file_selection_page.dart';
+import 'package:flashbyte/src/rust/frb_generated.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,7 @@ Future<void> onNotificationDismissed(ReceivedAction receivedAction) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await RustLib.init();
 
   await AwesomeNotifications().initialize(
     'resource://drawable/ic_notification',

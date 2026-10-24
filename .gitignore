@@ -139,3 +139,6 @@ app.*.symbols
 AGENTS.md
 agent.md
 
+# Rust
+rust/target/
+

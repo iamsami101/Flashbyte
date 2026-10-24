@@ -1,11 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
-import 'package:flutter/services.dart';
 import 'package:flashbyte/app/app_settings.dart';
-import 'package:flashbyte/services/security/tls_identity_service.dart';
-import 'package:flashbyte/services/transfer/file_transfer_isolate.dart';
+import 'package:flashbyte/src/rust/api/transfer.dart' as rust_transfer;
 
 typedef IsolateMessage = Map<String, dynamic>;
 
@@ -20,11 +17,7 @@ class SocketService {
   SocketService._privateConstructor();
   static final SocketService instance = SocketService._privateConstructor();
 
-  Isolate? _receiverIsolate;
-  SendPort? _toIsolateSendPort;
-
-  ReceivePort? _uiReceivePort = ReceivePort();
-  StreamSubscription? _streamSubscription;
+  StreamSubscription<rust_transfer.TransferMessage>? _rustSubscription;
   bool _disconnectRequested = false;
   int _connectionGeneration = 0;
   Completer<void>? _disconnectCompleter;
@@ -36,19 +29,22 @@ class SocketService {
   final Map<String, IsolateMessage> _transferStartMessages = {};
   final Map<String, IsolateMessage> _transferLatestMessages = {};
   IsolateMessage? _connectedPeerInfo;
+
   Stream<IsolateMessage> get messageStream => _messageStreamController.stream;
   Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
-  bool get isRunning => _receiverIsolate != null;
-  bool get isHosting => _hostIsListening;
-  bool get isSecureHosting => _hostIsListening && _hostUsesTls;
-  bool get hasEstablishedConnection => _hasEstablishedConnection;
+  bool get isRunning => _rustSubscription != null || rust_transfer.isRunning();
+  bool get isHosting =>
+      _hostIsListening ||
+      (_rustSubscription != null && rust_transfer.isHosting());
+  bool get isSecureHosting => false; // TLS not yet supported in Rust backend
+  bool get hasEstablishedConnection =>
+      _hasEstablishedConnection || rust_transfer.hasEstablishedConnection();
   IsolateMessage? get connectedPeerInfo => _connectedPeerInfo == null
       ? null
       : Map<String, dynamic>.from(_connectedPeerInfo!);
 
   bool _hasEstablishedConnection = false;
   bool _hostIsListening = false;
-  bool _hostUsesTls = false;
 
   Future<void> startHost(
     String host, {
@@ -56,7 +52,7 @@ class SocketService {
     bool useTLS = false,
   }) async {
     await _runLifecycleOperation(
-      () => _startIsolate(
+      () => _startRustTransfer(
         mode: 'host',
         host: host,
         port: port,
@@ -74,14 +70,11 @@ class SocketService {
     String? trustedPeerId,
   }) async {
     await _runLifecycleOperation(
-      () => _startIsolate(
+      () => _startRustTransfer(
         mode: 'client',
         host: host,
         port: port,
         useTLS: useTLS,
-        trustedCertificatePem: trustedCertificatePem,
-        expectedCertificateFingerprint: expectedCertificateFingerprint,
-        trustedPeerId: trustedPeerId,
       ),
     );
   }
@@ -97,7 +90,6 @@ class SocketService {
       } catch (_) {
         // A failed previous startup should not poison the next lifecycle action.
       }
-
       return await operation();
     } finally {
       if (!operationCompleter.isCompleted) {
@@ -106,220 +98,243 @@ class SocketService {
     }
   }
 
-  Future<void> _startIsolate({
+  Future<void> _startRustTransfer({
     required String mode,
     String? host,
     required int port,
     bool useTLS = false,
-    String? trustedCertificatePem,
-    String? expectedCertificateFingerprint,
-    String? trustedPeerId,
   }) async {
     await _stopConnectionGracefully();
     final generation = _connectionGeneration;
-    _hostUsesTls = mode == 'host' && useTLS;
     _disconnectRequested = false;
+    _hostIsListening = false;
     _transferStartMessages.clear();
     _transferLatestMessages.clear();
     _connectedPeerInfo = null;
     _setConnectionEstablished(false);
 
-    String? certPath;
-    String? keyPath;
-    String? certificateFingerprint;
-    String? trustedCertPath;
+    if (useTLS) {
+      _emitError(
+        'TLS is not yet supported by the Rust transfer backend. Disable TLS on both devices and try again.',
+      );
+      return;
+    }
+
     final downloadDirectory = await AppSettings.getDownloadDirectory();
     final deviceName = await AppSettings.getDeviceName();
-    if (useTLS) {
-      final identity = await TlsIdentityService.getOrCreateIdentity();
-      certPath = identity.certificatePath;
-      keyPath = identity.privateKeyPath;
-      certificateFingerprint = identity.fingerprint;
+    final deviceType = Platform.isAndroid || Platform.isIOS
+        ? 'phone'
+        : 'laptop';
 
-      if (mode == 'client') {
-        if (expectedCertificateFingerprint == null ||
-            expectedCertificateFingerprint.trim().isEmpty) {
-          throw Exception(
-            'TLS requires a discovered receiver certificate. Select the receiver from discovery and try again.',
-          );
-        }
-
-        if (trustedCertificatePem != null &&
-            trustedCertificatePem.trim().isNotEmpty) {
-          trustedCertPath =
-              await TlsIdentityService.writeTrustedPeerCertificate(
-                peerId: trustedPeerId ?? host ?? 'peer',
-                certificatePem: trustedCertificatePem,
-              );
-        }
-      }
-    }
-
-    final completer = Completer<SendPort>();
     final hostingCompleter = Completer<void>();
 
-    final uiReceivePort = ReceivePort();
-    _uiReceivePort = uiReceivePort;
-    final RootIsolateToken? rootToken = RootIsolateToken.instance;
+    final rustStream = mode == 'host'
+        ? rust_transfer.startHost(
+            port: port,
+            downloadDirectory: downloadDirectory,
+            deviceName: deviceName,
+            deviceType: deviceType,
+          )
+        : rust_transfer.connectToHost(
+            host: host!,
+            port: port,
+            downloadDirectory: downloadDirectory,
+            deviceName: deviceName,
+            deviceType: deviceType,
+          );
 
-    if (rootToken == null) {
-      throw Exception('Fatal: RootIsolateToken is null!');
-    }
-
-    _streamSubscription = uiReceivePort.listen(
-      (message) async {
-        if (message is SendPort) {
-          if (!completer.isCompleted) {
-            completer.complete(message);
-          }
-          return;
-        }
+    _rustSubscription = rustStream.listen(
+      (message) {
         if (generation != _connectionGeneration) {
           return;
         }
-
-        final typedMessage = message as IsolateMessage;
-        final status = typedMessage['status'] ?? typedMessage['command'];
-        if (status == 'hosting' && !hostingCompleter.isCompleted) {
-          _hostIsListening = true;
-          hostingCompleter.complete();
-        } else if (mode == 'host' &&
-            status == 'error' &&
-            !hostingCompleter.isCompleted) {
-          hostingCompleter.completeError(
-            Exception(typedMessage['message'] ?? 'Failed to start server'),
-          );
-        }
-        if (status == 'client_connected' || status == 'connected_to_host') {
-          _disconnectRequested = false;
-          _setConnectionEstablished(true);
-        } else if (status == 'disconnect' || status == 'error') {
-          _setConnectionEstablished(false);
-          if (status == 'disconnect') {
-            _completeDisconnectWaiter();
-          }
-        }
-        if (status == 'outgoing_offer_cancelled') {
-          final completer = _outgoingOfferCancelCompleter;
-          if (completer != null && !completer.isCompleted) {
-            completer.complete();
-          }
-          _outgoingOfferCancelCompleter = null;
-        }
-        if (status == 'error' && _disconnectRequested) {
+        _handleRustMessage(message, mode, hostingCompleter);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (generation != _connectionGeneration) {
           return;
         }
-        _publishMessage(typedMessage);
-        if (status == 'disconnect') {
-          Future.microtask(() => _stopConnectionIfCurrent(generation));
+        _setConnectionEstablished(false);
+        if (mode == 'host' && !hostingCompleter.isCompleted) {
+          hostingCompleter.completeError(
+            Exception(error.toString()),
+          );
         }
+        _messageStreamController.add({
+          'status': 'error',
+          'fatal': true,
+          'message': error.toString(),
+        });
+      },
+      onDone: () {
+        if (generation != _connectionGeneration) {
+          return;
+        }
+        _setConnectionEstablished(false);
+        _rustSubscription = null;
+        _hostIsListening = false;
       },
     );
-
-    final receiverIsolate = await Isolate.spawn(
-      fileReceiverIsolate,
-      [
-        uiReceivePort.sendPort,
-        rootToken,
-      ],
-    );
-    if (generation != _connectionGeneration) {
-      receiverIsolate.kill(priority: Isolate.immediate);
-      throw const SocketStartupCancelled();
-    }
-    _receiverIsolate = receiverIsolate;
-
-    _toIsolateSendPort = await completer.future;
-    if (generation != _connectionGeneration) {
-      throw const SocketStartupCancelled();
-    }
-
-    _toIsolateSendPort!.send({
-      'command': 'connect',
-      'mode': mode,
-      'host': host,
-      'port': port,
-      'useTLS': useTLS,
-      'certPath': certPath,
-      'keyPath': keyPath,
-      'certificateFingerprint': certificateFingerprint,
-      'trustedCertPath': trustedCertPath,
-      'expectedCertificateFingerprint': expectedCertificateFingerprint,
-      'downloadDirectory': downloadDirectory,
-      'deviceName': deviceName,
-      'deviceType': Platform.isAndroid || Platform.isIOS ? 'phone' : 'laptop',
-      'listeningPort': port,
-    });
 
     if (mode == 'host') {
       await hostingCompleter.future.timeout(const Duration(seconds: 10));
     }
   }
 
-  void sendFile(String filePath) {
-    if (_toIsolateSendPort == null) {
+  void _handleRustMessage(
+    rust_transfer.TransferMessage message,
+    String mode,
+    Completer<void> hostingCompleter,
+  ) {
+    final typedMessage = _rustMessageToMap(message);
+    final status = typedMessage['status'] ?? typedMessage['command'];
+
+    if (status == 'hosting') {
+      _hostIsListening = true;
+      if (!hostingCompleter.isCompleted) {
+        hostingCompleter.complete();
+      }
+    } else if (mode == 'host' &&
+        status == 'error' &&
+        !hostingCompleter.isCompleted) {
+      hostingCompleter.completeError(
+        Exception(typedMessage['message'] ?? 'Failed to start server'),
+      );
+    }
+
+    if (status == 'client_connected' || status == 'connected_to_host') {
+      _disconnectRequested = false;
+      _setConnectionEstablished(true);
+    } else if (status == 'disconnect' || status == 'error') {
+      _setConnectionEstablished(false);
+      if (status == 'disconnect') {
+        _completeDisconnectWaiter();
+      }
+    }
+
+    if (status == 'outgoing_offer_cancelled') {
+      final completer = _outgoingOfferCancelCompleter;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
+      }
+      _outgoingOfferCancelCompleter = null;
+    }
+
+    if (status == 'error' && _disconnectRequested) {
       return;
     }
 
-    _toIsolateSendPort!.send({
-      'command': 'send_file',
-      'filePath': filePath,
-    });
+    _publishMessage(typedMessage);
+
+    if (status == 'disconnect') {
+      Future.microtask(() => _stopConnectionIfCurrent(_connectionGeneration));
+    }
+  }
+
+  IsolateMessage _rustMessageToMap(rust_transfer.TransferMessage message) {
+    final map = <String, dynamic>{};
+
+    void put(String key, Object? value) {
+      if (value != null) {
+        map[key] = value;
+      }
+    }
+
+    put('status', message.status.isEmpty ? null : message.status);
+    put('command', message.command);
+    put('fatal', message.fatal);
+    put('message', message.message);
+    put('address', message.address);
+    put('fileId', message.fileId);
+    put('fileName', message.fileName);
+    put('filePath', message.filePath);
+    put('fileSize', message.fileSize);
+    put('progress', message.progress);
+    put('timeTaken', message.timeTaken);
+    put('treeUri', message.treeUri);
+    put('sourceFilePath', message.sourceFilePath);
+    put('name', message.peerName);
+    put('deviceType', message.peerDeviceType);
+    put('pausedBy', message.pausedBy);
+    put('canResume', message.canResume);
+
+    return map;
+  }
+
+  void sendFile(String filePath) {
+    if (!isRunning) {
+      return;
+    }
+    unawaited(
+      rust_transfer.sendFile(filePath: filePath).catchError((Object error) {
+        _emitError('File send error: ${error.toString()}', fatal: false);
+      }),
+    );
   }
 
   void sendFiles(List<String> filePaths) {
-    if (_toIsolateSendPort == null || filePaths.isEmpty) {
+    if (!isRunning || filePaths.isEmpty) {
       return;
     }
-
-    _toIsolateSendPort!.send({
-      'command': 'send_files',
-      'filePaths': filePaths,
-    });
+    unawaited(
+      rust_transfer.sendFiles(filePaths: filePaths).catchError((Object error) {
+        _emitError('File send error: ${error.toString()}', fatal: false);
+      }),
+    );
   }
 
   void pauseTransfer(String fileId, {required bool isReceiver}) {
-    _sendTransferControl(
-      'pause_transfer',
-      fileId,
-      role: isReceiver ? 'receiver' : 'sender',
+    final role = isReceiver ? 'receiver' : 'sender';
+    unawaited(
+      rust_transfer
+          .pauseTransfer(fileId: fileId, role: role)
+          .catchError((_) {}),
     );
   }
 
   void resumeTransfer(String fileId, {required bool isReceiver}) {
-    _sendTransferControl(
-      'resume_transfer',
-      fileId,
-      role: isReceiver ? 'receiver' : 'sender',
+    final role = isReceiver ? 'receiver' : 'sender';
+    unawaited(
+      rust_transfer
+          .resumeTransfer(fileId: fileId, role: role)
+          .catchError((_) {}),
     );
   }
 
   void cancelTransfer(String fileId) {
-    _sendTransferControl('cancel_transfer', fileId);
+    unawaited(
+      rust_transfer.cancelTransfer(fileId: fileId).catchError((_) {}),
+    );
   }
 
   void acceptTransfer(String fileId) {
-    _sendTransferControl('accept_transfer', fileId);
+    unawaited(
+      rust_transfer.acceptTransfer(fileId: fileId).catchError((_) {}),
+    );
   }
 
   void declineTransfer(String fileId) {
-    _sendTransferControl('decline_transfer', fileId);
+    unawaited(
+      rust_transfer.declineTransfer(fileId: fileId).catchError((_) {}),
+    );
   }
 
   void setDownloadDirectory(String? directory) {
-    final sendPort = _toIsolateSendPort;
-    if (sendPort == null) return;
-    sendPort.send({
-      'command': 'set_download_directory',
-      'downloadDirectory': directory,
-    });
+    unawaited(
+      rust_transfer
+          .setDownloadDirectory(directory: directory)
+          .catchError((_) {}),
+    );
   }
 
   Future<void> cancelOutgoingOffer() async {
-    final sendPort = _toIsolateSendPort;
-    if (sendPort == null) return;
+    if (!isRunning) return;
     final completer = _outgoingOfferCancelCompleter ??= Completer<void>();
-    sendPort.send({'command': 'cancel_outgoing_offer'});
+    unawaited(
+      rust_transfer.cancelOutgoingOffer().catchError((_) {
+        // Silently ignore – the completer timeout handles cleanup.
+      }),
+    );
     try {
       await completer.future.timeout(const Duration(seconds: 1));
     } on TimeoutException {
@@ -329,14 +344,6 @@ class SocketService {
         _outgoingOfferCancelCompleter = null;
       }
     }
-  }
-
-  void _sendTransferControl(String command, String fileId, {String? role}) {
-    _toIsolateSendPort?.send({
-      'command': command,
-      'fileId': fileId,
-      'role': role,
-    });
   }
 
   void replayTransferState() {
@@ -352,21 +359,18 @@ class SocketService {
   }
 
   Future<void> disconnect() {
-    final sendPort = _toIsolateSendPort;
-    if (_uiReceivePort == null || sendPort == null) {
+    if (!isRunning) {
       stopConnection();
       return Future.value();
     }
     _disconnectRequested = true;
     _setConnectionEstablished(false);
     final completer = _disconnectCompleter ??= Completer<void>();
-    try {
-      sendPort.send({
-        'command': 'disconnect',
-      });
-    } catch (_) {
-      stopConnection();
-    }
+    unawaited(
+      rust_transfer.disconnect().catchError((_) {
+        stopConnection();
+      }),
+    );
     return completer.future;
   }
 
@@ -381,7 +385,7 @@ class SocketService {
   Future<void> _stopConnectionGracefully({
     Duration timeout = const Duration(seconds: 4),
   }) async {
-    if (_receiverIsolate == null && _toIsolateSendPort == null) {
+    if (!isRunning) {
       stopConnection();
       return;
     }
@@ -398,17 +402,11 @@ class SocketService {
     _connectionGeneration++;
     _setConnectionEstablished(false);
     _completeDisconnectWaiter();
-    _streamSubscription?.cancel();
-    _uiReceivePort?.close();
-    _receiverIsolate?.kill(priority: Isolate.immediate);
-
-    _receiverIsolate = null;
-    _toIsolateSendPort = null;
-    _streamSubscription = null;
-    _uiReceivePort = null;
+    _rustSubscription?.cancel();
+    _rustSubscription = null;
     _hostIsListening = false;
-    _hostUsesTls = false;
     _disconnectRequested = false;
+    unawaited(rust_transfer.disconnect().catchError((_) {}));
   }
 
   void _completeDisconnectWaiter() {
@@ -434,9 +432,16 @@ class SocketService {
     if (_hasEstablishedConnection == value) {
       return;
     }
-
     _hasEstablishedConnection = value;
     _connectionStatusController.add(value);
+  }
+
+  void _emitError(String message, {bool fatal = true}) {
+    _messageStreamController.add({
+      'status': 'error',
+      'fatal': fatal,
+      'message': message,
+    });
   }
 
   Map<String, bool> getActiveTransferIsReceived() {
