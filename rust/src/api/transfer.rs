@@ -551,7 +551,9 @@ fn handle_connection(
         let header: Value = serde_json::from_slice(&header_bytes).map_err(|e| e.to_string())?;
 
         if is_control_frame(&header, payload_len) {
-            if !probe_handled {
+            let is_probe_frame = header.get("type").and_then(Value::as_str) == Some("probe")
+                || header.get("ok").is_some();
+            if !probe_handled && is_probe_frame {
                 probe_handled = true;
                 handle_probe_frame(&header, &sink, &shared_writer, &connected)?;
                 continue;
