@@ -5,7 +5,7 @@ use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -437,6 +437,8 @@ fn handle_connection(
     registry: Arc<TransferRegistry>,
     wait_for_probe: bool,
 ) -> Result<(), String> {
+    // Set a read timeout so the loop can check stop_requested periodically
+    stream.set_read_timeout(Some(Duration::from_millis(500))).map_err(|e| e.to_string())?;
     let mut reader = BufReader::with_capacity(TRANSFER_BUFFER_SIZE, stream.try_clone().map_err(|e| e.to_string())?);
     let mut probe_handled = !wait_for_probe;
     let mut current_download_dir = download_directory;
@@ -452,8 +454,22 @@ fn handle_connection(
         match reader.read_exact(&mut frame_header) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut => {
-                thread::sleep(Duration::from_millis(10));
                 continue;
+            }
+            Err(error) if error.kind() == ErrorKind::ConnectionReset || error.kind() == ErrorKind::UnexpectedEof => {
+                connected.store(false, Ordering::SeqCst);
+                clear_writer(&shared_writer);
+                if probe_handled {
+                    emit_disconnect(&sink);
+                } else {
+                    emit_error(
+                        &sink,
+                        true,
+                        "Connection closed before the link was established.".to_string(),
+                    );
+                }
+                clear_engine();
+                return Ok(());
             }
             Err(error) => {
                 connected.store(false, Ordering::SeqCst);
@@ -1168,7 +1184,14 @@ fn spawn_command_loop(
                     stop_requested.store(true, Ordering::SeqCst);
                     connected.store(false, Ordering::SeqCst);
                     let _ = write_control(&shared_writer, json!({"type": "disconnect"}));
+                    // Shutdown the socket so the peer detects disconnection
+                    if let Ok(guard) = _shared_socket.lock() {
+                        if let Some(stream) = guard.as_ref() {
+                            let _ = stream.shutdown(Shutdown::Both);
+                        }
+                    }
                     clear_writer(&shared_writer);
+                    clear_socket_handle(&_shared_socket);
                     emit_disconnect(&sink);
                     clear_engine();
                     break;
@@ -1297,6 +1320,12 @@ fn current_writer(shared_writer: &SharedWriter) -> Result<Arc<Mutex<TcpStream>>,
 fn clear_writer(shared_writer: &SharedWriter) {
     if let Ok(mut writer) = shared_writer.lock() {
         *writer = None;
+    }
+}
+
+fn clear_socket_handle(shared_socket: &SharedSocketHandle) {
+    if let Ok(mut socket) = shared_socket.lock() {
+        *socket = None;
     }
 }
 
