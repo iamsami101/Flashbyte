@@ -443,6 +443,11 @@ fn handle_connection(
     let mut probe_handled = !wait_for_probe;
     let mut current_download_dir = download_directory;
 
+    // Persistent buffer for the 8-byte frame header, with offset tracking
+    // so partial reads across timeouts don't lose bytes.
+    let mut frame_header = [0_u8; 8];
+    let mut header_offset: usize = 0;
+
     loop {
         if stop_requested.load(Ordering::SeqCst) {
             clear_writer(&shared_writer);
@@ -450,54 +455,99 @@ fn handle_connection(
             return Ok(());
         }
 
-        let mut frame_header = [0_u8; 8];
-        match reader.read_exact(&mut frame_header) {
-            Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut => {
-                continue;
-            }
-            Err(error) if error.kind() == ErrorKind::ConnectionReset || error.kind() == ErrorKind::UnexpectedEof => {
-                connected.store(false, Ordering::SeqCst);
-                clear_writer(&shared_writer);
-                if probe_handled {
-                    emit_disconnect(&sink);
-                } else {
-                    emit_error(
-                        &sink,
-                        true,
-                        "Connection closed before the link was established.".to_string(),
-                    );
+        // Read frame header bytes incrementally, preserving offset across timeouts
+        while header_offset < 8 {
+            match reader.read(&mut frame_header[header_offset..]) {
+                Ok(0) => {
+                    // Connection closed by peer
+                    connected.store(false, Ordering::SeqCst);
+                    clear_writer(&shared_writer);
+                    if probe_handled {
+                        emit_disconnect(&sink);
+                    } else {
+                        emit_error(
+                            &sink,
+                            true,
+                            "Connection closed before the link was established.".to_string(),
+                        );
+                    }
+                    clear_engine();
+                    return Ok(());
                 }
-                clear_engine();
-                return Ok(());
-            }
-            Err(error) => {
-                connected.store(false, Ordering::SeqCst);
-                clear_writer(&shared_writer);
-                if probe_handled {
-                    emit_error(
-                        &sink,
-                        true,
-                        format!("Connection lost. The other device disconnected unexpectedly. {error}"),
-                    );
-                } else {
-                    emit_error(
-                        &sink,
-                        true,
-                        "Connection closed before the link was established. Check the TLS setting on both devices.".to_string(),
-                    );
+                Ok(n) => {
+                    header_offset += n;
                 }
-                clear_engine();
-                return Ok(());
+                Err(error)
+                    if error.kind() == ErrorKind::WouldBlock
+                        || error.kind() == ErrorKind::TimedOut =>
+                {
+                    // Check stop_requested during idle waits
+                    if stop_requested.load(Ordering::SeqCst) {
+                        clear_writer(&shared_writer);
+                        clear_engine();
+                        return Ok(());
+                    }
+                    // Don't reset header_offset — keep partial read
+                    continue;
+                }
+                Err(error) if error.kind() == ErrorKind::ConnectionReset => {
+                    connected.store(false, Ordering::SeqCst);
+                    clear_writer(&shared_writer);
+                    if probe_handled {
+                        emit_disconnect(&sink);
+                    } else {
+                        emit_error(
+                            &sink,
+                            true,
+                            "Connection closed before the link was established.".to_string(),
+                        );
+                    }
+                    clear_engine();
+                    return Ok(());
+                }
+                Err(error) => {
+                    connected.store(false, Ordering::SeqCst);
+                    clear_writer(&shared_writer);
+                    if probe_handled {
+                        emit_error(
+                            &sink,
+                            true,
+                            format!("Connection lost. The other device disconnected unexpectedly. {error}"),
+                        );
+                    } else {
+                        emit_error(
+                            &sink,
+                            true,
+                            "Connection closed before the link was established. Check the TLS setting on both devices.".to_string(),
+                        );
+                    }
+                    clear_engine();
+                    return Ok(());
+                }
             }
         }
+        header_offset = 0;
 
         let header_len = u32::from_be_bytes(frame_header[0..4].try_into().unwrap()) as usize;
         let payload_len = u32::from_be_bytes(frame_header[4..8].try_into().unwrap()) as u64;
+
+        // Sanity check to prevent huge allocations from corrupted headers
+        if header_len > 1024 * 1024 {
+            return Err(format!("Invalid frame header length: {header_len}"));
+        }
+
         let mut header_bytes = vec![0_u8; header_len];
-        reader
-            .read_exact(&mut header_bytes)
-            .map_err(|e| e.to_string())?;
+        if let Err(error) = read_exact_resumable(&mut reader, &mut header_bytes, &stop_requested) {
+            connected.store(false, Ordering::SeqCst);
+            clear_writer(&shared_writer);
+            if error == "stop" {
+                clear_engine();
+                return Ok(());
+            }
+            emit_error(&sink, true, format!("Failed to read frame metadata: {error}"));
+            clear_engine();
+            return Ok(());
+        }
         let header: Value = serde_json::from_slice(&header_bytes).map_err(|e| e.to_string())?;
 
         if is_control_frame(&header, payload_len) {
@@ -1048,6 +1098,33 @@ fn skip_bytes(reader: &mut BufReader<TcpStream>, count: u64) -> Result<(), Strin
             return Err("Connection closed while skipping bytes.".to_string());
         }
         remaining -= read as u64;
+    }
+    Ok(())
+}
+
+/// Reads exactly `buf.len()` bytes, tolerating read timeouts by retrying.
+/// Returns Err("stop") if stop_requested is set, or Err(msg) on real errors.
+fn read_exact_resumable(
+    reader: &mut BufReader<TcpStream>,
+    buf: &mut [u8],
+    stop_requested: &AtomicBool,
+) -> Result<(), String> {
+    let mut offset = 0;
+    while offset < buf.len() {
+        if stop_requested.load(Ordering::SeqCst) {
+            return Err("stop".to_string());
+        }
+        match reader.read(&mut buf[offset..]) {
+            Ok(0) => return Err("Connection closed".to_string()),
+            Ok(n) => offset += n,
+            Err(error)
+                if error.kind() == ErrorKind::WouldBlock
+                    || error.kind() == ErrorKind::TimedOut =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error.to_string()),
+        }
     }
     Ok(())
 }
