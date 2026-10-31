@@ -14,3 +14,4 @@
 - New "Trusted devices" section in Settings showing trusted device names with option to remove them
 - Trusted device names auto-update when a device is discovered or connects with a renamed profile
 - Device certificate fingerprint is now always exchanged on connection (previously only with TLS enabled)
+- Fixed crash when trusting the first device on the list (unmodifiable empty list)

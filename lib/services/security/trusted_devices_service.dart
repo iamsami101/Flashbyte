@@ -54,14 +54,14 @@ class TrustedDevicesService {
   Future<List<TrustedDevice>> _read() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
-    if (raw == null || raw.isEmpty) return const [];
+    if (raw == null || raw.isEmpty) return <TrustedDevice>[];
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
       return decoded
           .map((e) => TrustedDevice.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (_) {
-      return const [];
+      return <TrustedDevice>[];
     }
   }
 
