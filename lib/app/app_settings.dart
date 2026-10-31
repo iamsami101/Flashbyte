@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/utils/two_random_words.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +52,36 @@ class AppSettings {
   static Future<void> setPort(int port) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(portKey, port);
+  }
+
+  static Future<String> getDeviceModelName() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        final model = androidInfo.model.trim();
+        if (model.isNotEmpty && !_isModelCode(model)) return model;
+        final brand = androidInfo.brand.trim();
+        if (brand.isNotEmpty) return brand;
+        final manufacturer = androidInfo.manufacturer.trim();
+        if (manufacturer.isNotEmpty) return manufacturer;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        final model = iosInfo.utsname.machine.trim();
+        if (model.isNotEmpty) return model;
+      }
+    } catch (_) {
+      // Fall through to hostname fallback.
+    }
+    final hostname = Platform.localHostname.trim();
+    if (hostname.isNotEmpty && hostname != 'localhost') return hostname;
+    return 'Unknown Device';
+  }
+
+  /// Internal model codes like "2201117TG" or "SM-G991B" — all-caps
+  /// alphanumeric without spaces — aren't user-facing names.
+  static bool _isModelCode(String value) {
+    return RegExp(r'^[A-Z0-9\-/]+$').hasMatch(value);
   }
 
   static Future<String> getDeviceName() async {
