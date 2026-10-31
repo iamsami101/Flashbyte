@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FileSelectionPage extends StatefulWidget {
   final int initialTabIndex;
@@ -62,6 +63,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   int selectedTabIndex = 0;
 
   String? deviceName;
+  String? _deviceModelName;
   String? _deviceId;
   DiscoveredDevice? _selectedReceiverPreview;
   bool _selectedSenderUsesTls = false;
@@ -277,7 +279,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   Future<void> _initializeNetworking() async {
-    final name = await AppSettings.getDeviceName();
+    final modelName = await AppSettings.getDeviceModelName();
+    _deviceModelName = modelName;
+
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = prefs.getString(AppSettings.deviceNameKey);
+    final name = (savedName != null && savedName.isNotEmpty)
+        ? savedName
+        : modelName;
+
     final id = await AppSettings.getDeviceId();
     if (!mounted) return;
     setState(() {
@@ -583,6 +593,20 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       _deviceNameController.text = name;
     });
     await _refreshAdvertisement();
+  }
+
+  Future<void> _resetDeviceName() async {
+    _nameSaveDebounce?.cancel();
+    final modelName =
+        _deviceModelName ?? await AppSettings.getDeviceModelName();
+    await AppSettings.setDeviceName(modelName);
+    if (!mounted) return;
+    setState(() {
+      deviceName = modelName;
+      _deviceNameController.text = modelName;
+    });
+    await _refreshAdvertisement();
+    DeviceDiscoveryService.instance.requestRefresh();
   }
 
   Future<void> _connectToReceiver(
@@ -1750,6 +1774,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
         );
   }
 
+  bool _isCustomDeviceName() {
+    final modelName = _deviceModelName;
+    if (modelName == null) return false;
+    return deviceName != null && deviceName != modelName;
+  }
+
   Widget _buildReceiverIdentityCard() {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -1816,6 +1846,16 @@ class _FileSelectionPageState extends State<FileSelectionPage>
                 ],
               ),
             ),
+            if (_isCustomDeviceName())
+              IconButton(
+                tooltip: "Reset to device name",
+                onPressed: _settingsLocked ? null : _resetDeviceName,
+                icon: const Icon(Icons.close_rounded),
+                color: colorScheme.onPrimaryContainer,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size.square(44),
+                ),
+              ),
             IconButton(
               tooltip: "Generate a new name",
               onPressed: _settingsLocked ? null : _generateDeviceName,
