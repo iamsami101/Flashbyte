@@ -11,6 +11,7 @@ import 'package:flashbyte/models/discovered_device.dart';
 import 'package:flashbyte/services/discovery/device_discovery_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/models/user_facing_error.dart';
 import 'package:flashbyte/features/settings/settings_page.dart';
 import 'package:flashbyte/features/transfers/pages/incoming_transfer_offer_page.dart';
@@ -100,6 +101,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _discoverySubscription = DeviceDiscoveryService.instance.devicesStream
         .listen((devices) {
           if (!mounted) return;
+          _syncTrustedNames(devices);
           setState(() {
             discoveredDevices = devices;
             isDiscovering = false;
@@ -304,8 +306,10 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       );
       DeviceDiscoveryService.instance.requestRefresh();
       if (!mounted) return;
+      final knownDevices = DeviceDiscoveryService.instance.devices;
+      _syncTrustedNames(knownDevices);
       setState(() {
-        discoveredDevices = DeviceDiscoveryService.instance.devices;
+        discoveredDevices = knownDevices;
       });
     } catch (_) {
       if (!mounted) return;
@@ -316,6 +320,19 @@ class _FileSelectionPageState extends State<FileSelectionPage>
 
     if (mounted) {
       await _ensureReceiveReady();
+    }
+  }
+
+  void _syncTrustedNames(List<DiscoveredDevice> devices) {
+    final entries = <({String fingerprint, String name})>[];
+    for (final device in devices) {
+      final fingerprint = device.certificateFingerprint;
+      if (fingerprint != null && fingerprint.isNotEmpty) {
+        entries.add((fingerprint: fingerprint, name: device.name));
+      }
+    }
+    if (entries.isNotEmpty) {
+      unawaited(TrustedDevicesService.instance.syncFromDiscovery(entries));
     }
   }
 
@@ -475,16 +492,14 @@ class _FileSelectionPageState extends State<FileSelectionPage>
       final name = deviceName ?? await AppSettings.getDeviceName();
       final id = _deviceId ?? await AppSettings.getDeviceId();
       TlsIdentity? tlsIdentity;
-      if (useTLS) {
-        try {
-          tlsIdentity = await TlsIdentityService.getOrCreateIdentity();
-          debugPrint(
-            '[RECEIVE] identity ready (fingerprint=${tlsIdentity.fingerprint.substring(0, 12)}…)',
-          );
-        } catch (e) {
-          debugPrint('[RECEIVE] identity load FAILED: $e');
-          rethrow;
-        }
+      try {
+        tlsIdentity = await TlsIdentityService.getOrCreateIdentity();
+        debugPrint(
+          '[RECEIVE] identity ready (fingerprint=${tlsIdentity.fingerprint.substring(0, 12)}…)',
+        );
+      } catch (e) {
+        debugPrint('[RECEIVE] identity load FAILED: $e');
+        if (useTLS) rethrow;
       }
       await DeviceDiscoveryService.instance.startAdvertising(
         deviceId: id,
@@ -539,9 +554,12 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final id = _deviceId ?? await AppSettings.getDeviceId();
     final port = await AppSettings.getPort();
     final useTLS = await AppSettings.getUseTls();
-    final tlsIdentity = useTLS
-        ? await TlsIdentityService.getOrCreateIdentity()
-        : null;
+    TlsIdentity? tlsIdentity;
+    try {
+      tlsIdentity = await TlsIdentityService.getOrCreateIdentity();
+    } catch (e) {
+      debugPrint('[ADVERTISE] identity load failed: $e');
+    }
     await DeviceDiscoveryService.instance.startAdvertising(
       deviceId: id,
       name: name,
@@ -807,12 +825,37 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     final firstFileId = files.first['fileId'] as String;
 
     _incomingOfferOpen = true;
+    unawaited(_presentIncomingOffer(files, firstFileId));
+  }
+
+  Future<void> _presentIncomingOffer(
+    List<Map<String, dynamic>> files,
+    String firstFileId,
+  ) async {
+    final sender = SocketService.instance.connectedPeerInfo;
+    final senderFingerprint = sender?['certFingerprint'] as String?;
+
+    await TrustedDevicesService.instance.load();
+    if (TrustedDevicesService.instance.isTrusted(senderFingerprint)) {
+      // Trusted sender — accept automatically without showing the approval UI.
+      SocketService.instance.acceptTransfer(firstFileId);
+      if (!mounted) return;
+      _openChatIfNeeded(initialFiles: const [], initialBatchFiles: files);
+      _incomingOfferOpen = false;
+      return;
+    }
+
+    if (!mounted) {
+      _incomingOfferOpen = false;
+      return;
+    }
+
     Navigator.of(context)
         .push(
           _buildApprovalRoute(
             IncomingTransferOfferPage(
               files: files,
-              sender: SocketService.instance.connectedPeerInfo,
+              sender: sender,
               receiverName: deviceName ?? _deviceNameController.text,
               receiverType: _localDeviceType,
               receiverUsesTls: SocketService.instance.isSecureHosting,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flashbyte/models/user_facing_error.dart';
 import 'package:flashbyte/features/transfers/widgets/transfer_widget.dart';
@@ -82,6 +83,16 @@ class _TcpChatPageState extends State<TcpChatPage> {
             if (fileId == null) break;
 
             if (message['pendingAcceptance'] == true) {
+              final senderFingerprint =
+                  SocketService.instance.connectedPeerInfo?['certFingerprint']
+                      as String?;
+              if (TrustedDevicesService.instance.isTrusted(senderFingerprint)) {
+                // Trusted sender — accept automatically; the transfer card
+                // appears when the file data starts arriving, exactly as if
+                // the user had tapped Accept.
+                SocketService.instance.acceptTransfer(fileId);
+                break;
+              }
               setState(() {
                 isSharingInProgress = true;
               });

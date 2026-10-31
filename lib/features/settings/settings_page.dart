@@ -5,6 +5,7 @@ import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
 import 'package:flashbyte/app/controllers/app_motion_controller.dart';
 import 'package:flashbyte/services/platform/android_saf_service.dart';
 import 'package:flashbyte/app/app_settings.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,6 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _portFocusNode = FocusNode();
     _portFocusNode.addListener(_handlePortFocusChange);
     _loadSettings();
+    unawaited(TrustedDevicesService.instance.load());
   }
 
   @override
@@ -466,6 +468,61 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Text(
+                    "Trusted devices",
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: Text(
+                    "Senders marked as trusted are automatically accepted when they send files.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                ValueListenableBuilder<List<TrustedDevice>>(
+                  valueListenable:
+                      TrustedDevicesService.instance.devicesNotifier,
+                  builder: (context, trustedDevices, _) {
+                    if (trustedDevices.isEmpty) {
+                      return const ListTile(
+                        leading: Icon(Icons.shield_outlined),
+                        title: Text("No trusted devices"),
+                        subtitle: Text(
+                          "Check “Always accept files from…” on the incoming files screen to trust a sender.",
+                        ),
+                      );
+                    }
+                    return Column(
+                      children: [
+                        for (final device in trustedDevices)
+                          ListTile(
+                            leading: const Icon(Icons.verified_user_rounded),
+                            title: Text(device.name),
+                            subtitle: Text(
+                              device.fingerprint.length > 16
+                                  ? '${device.fingerprint.substring(0, 16)}…'
+                                  : device.fingerprint,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Remove from trusted devices',
+                              onPressed: () => unawaited(
+                                TrustedDevicesService.instance.removeTrusted(
+                                  device.fingerprint,
+                                ),
+                              ),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
