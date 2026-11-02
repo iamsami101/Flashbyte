@@ -15,3 +15,7 @@
 - Trusted device names auto-update when a device is discovered or connects with a renamed profile
 - Device certificate fingerprint is now always exchanged on connection (previously only with TLS enabled)
 - Fixed crash when trusting the first device on the list (unmodifiable empty list)
+- Added support for receiving files shared to Flashbyte from other apps via the Android share menu (single and multiple files)
+- Shared text and URLs are converted into a `.txt` file so they can be sent like any other file
+- Opening a shared file lands on the send tab with the files pre-selected; shares arriving while the app is open are added to the current selection with a confirmation snackbar
+- Added `receive_sharing_intent` dependency for share intent handling
