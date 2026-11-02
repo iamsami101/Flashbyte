@@ -12,6 +12,7 @@ import 'package:flashbyte/app/app_settings.dart';
 import 'package:flashbyte/app/controllers/app_appearance_controller.dart';
 import 'package:flashbyte/app/controllers/app_motion_controller.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/features/settings/settings_page.dart';
 import 'package:flashbyte/features/transfers/pages/file_selection_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -169,6 +170,7 @@ class _StartupEffectsState extends State<StartupEffects> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(AndroidConnectionNotificationService.instance.initialize());
+      unawaited(TrustedDevicesService.instance.load());
       unawaited(_showBatteryOptimizationPromptIfNeeded());
       unawaited(_requestNotificationPermissionIfNeeded());
     });

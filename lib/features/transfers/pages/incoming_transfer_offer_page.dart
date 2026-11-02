@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flashbyte/models/discovered_device.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -34,6 +35,7 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
   StreamSubscription<Map<String, dynamic>>? _subscription;
   _IncomingOfferOutcome? _outcome;
   bool _isClosing = false;
+  bool _trustSender = false;
 
   @override
   void initState() {
@@ -72,6 +74,18 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
   void _accept() {
     if (_isClosing) return;
     _isClosing = true;
+    final fingerprint = widget.sender?['certFingerprint'] as String?;
+    if (_trustSender && fingerprint != null && fingerprint.isNotEmpty) {
+      final senderName = widget.sender?['name'] as String?;
+      unawaited(
+        TrustedDevicesService.instance.addTrusted(
+          fingerprint: fingerprint,
+          name: (senderName != null && senderName.isNotEmpty)
+              ? senderName
+              : 'Unknown device',
+        ),
+      );
+    }
     widget.onAccept();
   }
 
@@ -279,6 +293,31 @@ class _IncomingTransferOfferPageState extends State<IncomingTransferOfferPage> {
                 ),
               ),
             ),
+            if (senderFingerprint != null && senderFingerprint.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: CheckboxListTile(
+                  value: _trustSender,
+                  onChanged: _isClosing || _outcome != null
+                      ? null
+                      : (value) =>
+                            setState(() => _trustSender = value ?? false),
+                  title: Text(
+                    'Always accept files from $senderName',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  subtitle: const Text(
+                    'Skip this approval screen for this device.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  checkboxShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
             _OfferActions(onAccept: _accept, onDecline: _decline),
           ],
         );

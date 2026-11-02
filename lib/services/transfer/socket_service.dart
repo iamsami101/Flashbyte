@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:flutter/services.dart';
 import 'package:flashbyte/app/app_settings.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
+import 'package:flashbyte/services/security/trusted_devices_service.dart';
 import 'package:flashbyte/services/transfer/file_transfer_isolate.dart';
 
 typedef IsolateMessage = Map<String, dynamic>;
@@ -130,27 +131,33 @@ class SocketService {
     String? trustedCertPath;
     final downloadDirectory = await AppSettings.getDownloadDirectory();
     final deviceName = await AppSettings.getDeviceName();
-    if (useTLS) {
+
+    // Always load the device identity so peer_info carries this device's
+    // certificate fingerprint — it's the stable identifier used by the
+    // trusted devices list, independent of whether TLS is enabled.
+    {
       final identity = await TlsIdentityService.getOrCreateIdentity();
-      certPath = identity.certificatePath;
-      keyPath = identity.privateKeyPath;
       certificateFingerprint = identity.fingerprint;
+      if (useTLS) {
+        certPath = identity.certificatePath;
+        keyPath = identity.privateKeyPath;
 
-      if (mode == 'client') {
-        if (expectedCertificateFingerprint == null ||
-            expectedCertificateFingerprint.trim().isEmpty) {
-          throw Exception(
-            'TLS requires a discovered receiver certificate. Select the receiver from discovery and try again.',
-          );
-        }
+        if (mode == 'client') {
+          if (expectedCertificateFingerprint == null ||
+              expectedCertificateFingerprint.trim().isEmpty) {
+            throw Exception(
+              'TLS requires a discovered receiver certificate. Select the receiver from discovery and try again.',
+            );
+          }
 
-        if (trustedCertificatePem != null &&
-            trustedCertificatePem.trim().isNotEmpty) {
-          trustedCertPath =
-              await TlsIdentityService.writeTrustedPeerCertificate(
-                peerId: trustedPeerId ?? host ?? 'peer',
-                certificatePem: trustedCertificatePem,
-              );
+          if (trustedCertificatePem != null &&
+              trustedCertificatePem.trim().isNotEmpty) {
+            trustedCertPath =
+                await TlsIdentityService.writeTrustedPeerCertificate(
+                  peerId: trustedPeerId ?? host ?? 'peer',
+                  certificatePem: trustedCertificatePem,
+                );
+          }
         }
       }
     }
@@ -456,6 +463,12 @@ class SocketService {
     final status = message['status'] ?? message['command'];
     if (status == 'peer_info') {
       _connectedPeerInfo = Map<String, dynamic>.from(message);
+      unawaited(
+        TrustedDevicesService.instance.updateNameIfTrusted(
+          message['certFingerprint'] as String?,
+          message['name'] as String?,
+        ),
+      );
     }
     final fileId = message['fileId'] as String?;
     if (fileId != null) {
