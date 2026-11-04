@@ -19,3 +19,4 @@
 - Shared text and URLs are converted into a `.txt` file so they can be sent like any other file
 - Opening a shared file lands on the send tab with the files pre-selected; shares arriving while the app is open are added to the current selection with a confirmation snackbar
 - Added `receive_sharing_intent` dependency for share intent handling
+- Fixed "connection ended before the receiver responded" error when sending files received via the share menu: Android now only uses SAF for `content://` URIs and reads plain filesystem paths directly
