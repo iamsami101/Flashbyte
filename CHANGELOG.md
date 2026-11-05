@@ -20,3 +20,4 @@
 - Opening a shared file lands on the send tab with the files pre-selected; shares arriving while the app is open are added to the current selection with a confirmation snackbar
 - Added `receive_sharing_intent` dependency for share intent handling
 - Fixed "connection ended before the receiver responded" error when sending files received via the share menu: Android now only uses SAF for `content://` URIs and reads plain filesystem paths directly
+- Sharing a file while a transfer session is active now sends it directly to the connected device instead of adding it to the file selection list

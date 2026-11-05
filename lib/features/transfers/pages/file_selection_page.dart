@@ -348,7 +348,9 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   }
 
   void _appendSharedFiles(List<FastFilePickerPath> batch) {
-    if (!mounted || batch.isEmpty) {
+    // An active session handles shares itself (TcpChatPage sends them
+    // straight to the connected peer).
+    if (!mounted || batch.isEmpty || chatOpened) {
       return;
     }
     var added = 0;
