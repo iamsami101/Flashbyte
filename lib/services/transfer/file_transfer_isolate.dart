@@ -662,7 +662,7 @@ Future<String?> _sendFileCommand(
   var fileStarted = false;
 
   try {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid && filePath.startsWith('content://')) {
       source = await _openAndroidSendSource(Saf(), filePath);
       if (source == null) {
         throw Exception('Could not read selected file metadata.');
@@ -813,7 +813,7 @@ Future<String?> _sendBatchCommand(
     final filePath = command['filePath'] as String;
 
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid && filePath.startsWith('content://')) {
         final source = await _openAndroidSendSource(Saf(), filePath);
         if (source == null) {
           continue;

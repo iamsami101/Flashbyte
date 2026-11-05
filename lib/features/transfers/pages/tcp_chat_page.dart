@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:fast_file_picker/fast_file_picker.dart';
 import 'package:flashbyte/services/security/trusted_devices_service.dart';
+import 'package:flashbyte/services/sharing/incoming_share_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flashbyte/models/user_facing_error.dart';
 import 'package:flashbyte/features/transfers/widgets/transfer_widget.dart';
@@ -48,11 +49,33 @@ class _TcpChatPageState extends State<TcpChatPage> {
   Map<String, dynamic>? _peerInfo;
 
   StreamSubscription? _streamSubscription;
+  StreamSubscription<List<FastFilePickerPath>>? _sharedFilesSubscription;
 
   @override
   void initState() {
     super.initState();
     _peerInfo = SocketService.instance.connectedPeerInfo;
+
+    _sharedFilesSubscription = IncomingShareService.instance.sharedFilesStream
+        .listen((batch) {
+          if (!mounted || batch.isEmpty) {
+            return;
+          }
+          if (isDisconnected.value) {
+            showScaffoldSnackbar(
+              "Connection lost — couldn't send shared files",
+            );
+            return;
+          }
+          for (final file in batch) {
+            _sendPickedFile(file);
+          }
+          showScaffoldSnackbar(
+            batch.length == 1
+                ? "Sending shared file to ${_peerName()}"
+                : "Sending ${batch.length} shared files to ${_peerName()}",
+          );
+        });
 
     if (widget.initialBatchFiles != null &&
         widget.initialBatchFiles!.isNotEmpty) {
@@ -246,6 +269,7 @@ class _TcpChatPageState extends State<TcpChatPage> {
   @override
   void dispose() {
     _streamSubscription?.cancel();
+    _sharedFilesSubscription?.cancel();
     for (final notifier in _transferProgress.values) {
       notifier.dispose();
     }
@@ -695,6 +719,11 @@ class _TcpChatPageState extends State<TcpChatPage> {
     for (final file in widget.initialFiles) {
       _sendPickedFile(file);
     }
+  }
+
+  String _peerName() {
+    final name = _peerInfo?['name'] as String?;
+    return (name == null || name.isEmpty) ? 'peer' : name;
   }
 
   void _sendPickedFile(FastFilePickerPath pickedFile) {

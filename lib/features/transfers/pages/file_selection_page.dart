@@ -12,6 +12,7 @@ import 'package:flashbyte/services/discovery/device_discovery_service.dart';
 import 'package:flashbyte/services/transfer/socket_service.dart';
 import 'package:flashbyte/services/security/tls_identity_service.dart';
 import 'package:flashbyte/services/security/trusted_devices_service.dart';
+import 'package:flashbyte/services/sharing/incoming_share_service.dart';
 import 'package:flashbyte/models/user_facing_error.dart';
 import 'package:flashbyte/features/settings/settings_page.dart';
 import 'package:flashbyte/features/transfers/pages/incoming_transfer_offer_page.dart';
@@ -26,8 +27,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class FileSelectionPage extends StatefulWidget {
   final int initialTabIndex;
+  final List<FastFilePickerPath> initialFiles;
 
-  const FileSelectionPage({super.key, this.initialTabIndex = 0});
+  const FileSelectionPage({
+    super.key,
+    this.initialTabIndex = 0,
+    this.initialFiles = const [],
+  });
 
   @override
   State<FileSelectionPage> createState() => _FileSelectionPageState();
@@ -72,6 +78,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   StreamSubscription? _socketSubscription;
   StreamSubscription<List<DiscoveredDevice>>? _discoverySubscription;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<List<FastFilePickerPath>>? _sharedFilesSubscription;
   Timer? _nameSaveDebounce;
   Timer? _networkRefreshTimer;
   int _serverRestartGeneration = 0;
@@ -84,12 +91,15 @@ class _FileSelectionPageState extends State<FileSelectionPage>
   void initState() {
     super.initState();
     selectedTabIndex = widget.initialTabIndex;
+    selectedFiles = List.of(widget.initialFiles);
     _tabController = TabController(
       length: 2,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
     _tabController.addListener(_handleTabChanged);
+    _sharedFilesSubscription = IncomingShareService.instance.sharedFilesStream
+        .listen(_appendSharedFiles);
     _discoveryRefreshController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -133,6 +143,7 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     _socketSubscription?.cancel();
     _discoverySubscription?.cancel();
     _connectivitySubscription?.cancel();
+    _sharedFilesSubscription?.cancel();
     _nameSaveDebounce?.cancel();
     _networkRefreshTimer?.cancel();
     _deviceNameController.dispose();
@@ -333,6 +344,43 @@ class _FileSelectionPageState extends State<FileSelectionPage>
     }
     if (entries.isNotEmpty) {
       unawaited(TrustedDevicesService.instance.syncFromDiscovery(entries));
+    }
+  }
+
+  void _appendSharedFiles(List<FastFilePickerPath> batch) {
+    // An active session handles shares itself (TcpChatPage sends them
+    // straight to the connected peer).
+    if (!mounted || batch.isEmpty || chatOpened) {
+      return;
+    }
+    var added = 0;
+    setState(() {
+      for (final file in batch) {
+        final alreadyPresent = selectedFiles.any(
+          (existing) =>
+              (file.path != null && existing.path == file.path) ||
+              (file.uri != null && existing.uri == file.uri),
+        );
+        if (!alreadyPresent) {
+          selectedFiles.add(file);
+          added++;
+        }
+      }
+      if (added > 0) {
+        selectedTabIndex = 0;
+        if (_tabController.index != 0) {
+          _tabController.index = 0;
+        }
+      }
+    });
+    if (added > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            added == 1 ? '1 shared file added' : '$added shared files added',
+          ),
+        ),
+      );
     }
   }
 
