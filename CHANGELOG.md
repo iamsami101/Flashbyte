@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 3.1.4 - 2026-11-10
+
 - Receive tab device name field now shows "Creating your name..." hint when the field is empty
 - Device name now defaults to the device's model name on first launch instead of a random two-word name
 - Added a "reset" (cross) icon next to the name-refresh button in the receive tab; it appears when the name differs from the device model name and restores the model name when tapped
