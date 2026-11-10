@@ -294,7 +294,136 @@ jobs:
           version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
           versionName="${version%%+*}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "versionName=${versionName}" >> "$GITHUB_OUTPUT"
           echo "tag=v${versionName}" >> "$GITHUB_OUTPUT"
+
+      - name: Update changelog and prepare release notes
+        env:
+          VERSION_NAME: ${{ steps.app-version.outputs.versionName }}
+          RELEASE_TAG: ${{ steps.app-version.outputs.tag }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import datetime
+          import os
+          import re
+          import subprocess
+
+          version = os.environ["VERSION_NAME"]
+          tag = os.environ["RELEASE_TAG"]
+          sha = os.environ["COMMIT_SHA"]
+          today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+          def git(*args):
+              return subprocess.run(
+                  ["git", *args],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              ).stdout
+
+          def section_bullets(lines, start):
+              end = len(lines)
+              for j in range(start + 1, len(lines)):
+                  if lines[j].startswith("## "):
+                      end = j
+                      break
+              return [
+                  line.strip()
+                  for line in lines[start + 1:end]
+                  if line.strip().startswith("-")
+              ]
+
+          def git_log_bullets():
+              tags = [
+                  t
+                  for t in git("tag", "--list", "v*", "--sort=-v:refname").split()
+                  if t != tag
+              ]
+              rng = f"{tags[0]}..HEAD" if tags else "HEAD"
+              subjects = git(
+                  "log", "--no-merges", "--pretty=%s", "--max-count=200", rng
+              ).splitlines()
+              bullets = []
+              for subject in subjects:
+                  subject = subject.strip()
+                  if not subject:
+                      continue
+                  if "[skip ci]" in subject:
+                      continue
+                  if re.match(r"^(merge:|ci:|chore:)", subject, re.I):
+                      continue
+                  if subject.lower().startswith("docs: update release"):
+                      continue
+                  bullets.append(f"- {subject}")
+              return bullets
+
+          path = Path("CHANGELOG.md")
+          lines = path.read_text().splitlines()
+
+          version_idx = next(
+              (i for i, line in enumerate(lines) if line.startswith(f"## {version}")),
+              None,
+          )
+          unreleased_idx = next(
+              (
+                  i
+                  for i, line in enumerate(lines)
+                  if re.match(r"^##\s+Unreleased\s*$", line, re.I)
+              ),
+              None,
+          )
+
+          if version_idx is not None:
+              # Heading already present (workflow rerun): reuse its entries.
+              bullets = section_bullets(lines, version_idx) or git_log_bullets()
+          else:
+              if unreleased_idx is None:
+                  raise SystemExit("CHANGELOG.md has no '## Unreleased' section")
+              bullets = section_bullets(lines, unreleased_idx) or git_log_bullets()
+              header = lines[:unreleased_idx]
+              rest = lines[
+                  next(
+                      (
+                          j
+                          for j in range(unreleased_idx + 1, len(lines))
+                          if lines[j].startswith("## ")
+                      ),
+                      len(lines),
+                  ):
+              ]
+              new_lines = (
+                  header
+                  + ["## Unreleased", "", f"## {version} - {today}", ""]
+                  + bullets
+                  + [""]
+                  + rest
+              )
+              text = re.sub(r"\n{3,}", "\n\n", "\n".join(new_lines))
+              if not text.endswith("\n"):
+                  text += "\n"
+              path.write_text(text)
+
+          changes = "\n".join(bullets) if bullets else "_No changelog entries._"
+          body = f"""\
+          {tag}
+
+          ## Changes
+
+          {changes}
+
+          Commit: `{sha}`.
+
+          Artifacts:
+          - Android APK and AAB
+          - Linux x64 bundle
+          - Windows x64 installer (self-signed) and portable ZIP
+          - macOS DMG
+          - unsigned iOS Runner.app bundle
+          """
+          Path("release-body.md").write_text(body + "\n")
+          PY
 
       - name: Remove existing release artifacts
         env:
@@ -328,22 +457,12 @@ jobs:
         with:
           tag_name: ${{ steps.app-version.outputs.tag }}
           name: ${{ steps.app-version.outputs.tag }}
-          body: |
-            ${{ steps.app-version.outputs.tag }}
-
-            Commit: `${{ github.sha }}`.
-
-            Artifacts:
-            - Android APK and AAB
-            - Linux x64 bundle
-            - Windows x64 installer (self-signed) and portable ZIP
-            - macOS DMG
-            - unsigned iOS Runner.app bundle
+          body_path: release-body.md
           files: release-assets/**/*
           fail_on_unmatched_files: true
           make_latest: true
 
-      - name: Commit README release links
+      - name: Commit README release links and changelog
         if: github.ref == 'refs/heads/main'
         env:
           RELEASE_TAG: ${{ steps.app-version.outputs.tag }}
@@ -351,6 +470,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git diff --quiet CHANGELOG.md; then
+            git add CHANGELOG.md
+            git commit -m "docs: add ${RELEASE_TAG} to changelog [skip ci]"
+          fi
 
           for attempt in 1 2 3; do
             git fetch origin "${GITHUB_REF_NAME}"
@@ -387,19 +511,25 @@ jobs:
           readme.write_text(before + section + after)
           PY
 
-            if git diff --quiet README.md; then
-              exit 0
+            readme_created=0
+            if ! git diff --quiet README.md; then
+              git add README.md
+              git commit -m "docs: update release downloads [skip ci]"
+              readme_created=1
             fi
 
-            git add README.md
-            git commit -m "docs: update release downloads [skip ci]"
+            if [ "$(git rev-list --count "origin/${GITHUB_REF_NAME}..HEAD")" -eq 0 ]; then
+              exit 0
+            fi
 
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
               exit 0
             fi
 
-            git reset --hard HEAD~1
+            if [ "$readme_created" -eq 1 ]; then
+              git reset --hard HEAD~1
+            fi
           done
 
-          echo "Could not push README release links after 3 attempts."
+          echo "Could not push release docs after 3 attempts."
           exit 1

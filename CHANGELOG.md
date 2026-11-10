@@ -21,3 +21,5 @@
 - Added `receive_sharing_intent` dependency for share intent handling
 - Fixed "connection ended before the receiver responded" error when sending files received via the share menu: Android now only uses SAF for `content://` URIs and reads plain filesystem paths directly
 - Sharing a file while a transfer session is active now sends it directly to the connected device instead of adding it to the file selection list
+- Bumped version to 3.1.4
+- Release workflow now moves "Unreleased" changelog entries under a dated version heading and publishes them as the GitHub release description, then commits the changelog back to main
